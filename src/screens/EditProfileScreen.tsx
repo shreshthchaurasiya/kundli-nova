@@ -5,6 +5,7 @@ import {
   User, Calendar, Clock, MapPin, Globe, Compass, Smartphone, Mail
 } from 'lucide-react';
 import { Screen } from '../types';
+import { profileStorage } from '../services/storage/profileStorage';
 
 // Mock Data
 const COUNTRIES = [
@@ -87,23 +88,18 @@ export default function EditProfileScreen({ onNavigate }: EditProfileScreenProps
   // Load existing profile data on mount
   useEffect(() => {
     const loadProfile = () => {
-      const data = localStorage.getItem('kundli_nova_profile');
-      if (data) {
-        try {
-          const parsed = JSON.parse(data);
-          setFullName(parsed.name || parsed.fullName || '');
-          setPhone(parsed.phone || '');
-          setEmail(parsed.email || '');
-          setGender(parsed.gender || '');
-          setDob(parsed.dob || '');
-          setTob(parsed.tob || parsed.birthTime || '');
-          setCountry(parsed.country || 'India');
-          setState(parsed.state || '');
-          setDistrict(parsed.district || '');
-          setCity(parsed.city || '');
-        } catch (e) {
-          console.error(e);
-        }
+      const profile = profileStorage.getProfile();
+      if (profile) {
+        setFullName(profile.name || profile.fullName || '');
+        setPhone(profile.phone || '');
+        setEmail(profile.email || '');
+        setGender(profile.gender || '');
+        setDob(profile.dob || '');
+        setTob(profile.tob || profile.birthTime || '');
+        setCountry(profile.country || 'India');
+        setState(profile.state || '');
+        setDistrict(profile.district || '');
+        setCity(profile.city || '');
       }
     };
 
@@ -169,7 +165,7 @@ export default function EditProfileScreen({ onNavigate }: EditProfileScreenProps
       email: email.trim()
     };
 
-    localStorage.setItem('kundli_nova_profile', JSON.stringify(updatedProfile));
+    profileStorage.saveProfile(updatedProfile);
 
     // Show success message and navigate back to ProfileScreen after short delay
     triggerToast('Profile updated successfully.');

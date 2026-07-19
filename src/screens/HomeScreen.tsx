@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Wallet, Search, Menu, X, ChevronRight, Phone, MessageCircle, Star, Sparkles, BookHeart, BookOpen, Compass, Sun, Map, ShieldCheck, HelpCircle, FileText, Share2, LogOut, Heart, Clock, SlidersHorizontal, SunMoon, LayoutGrid, Hash, Grid3x3, Languages, Plus, Zap, Briefcase, Palette, TrendingUp, Quote } from 'lucide-react';
 import { ASTROLOGERS } from '../data';
 import { Screen, Astrologer } from '../types';
-import { walletService } from '../services/astrologyServices';
+import { profileStorage } from '../services/storage/profileStorage';
+import { walletStorage } from '../services/storage/walletStorage';
 
 interface HomeScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
@@ -32,18 +33,16 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
   const [onlineCount, setOnlineCount] = useState<number>(327);
 
   useEffect(() => {
-    const data = localStorage.getItem('kundli_nova_profile');
-    if (data) {
-      try {
-        setProfileData(JSON.parse(data));
-      } catch (e) {}
-    }
+    const profile = profileStorage.getProfile();
+    setProfileData(profile);
 
-    const loadWallet = async () => {
-      const bal = await walletService.getBalance();
-      setWalletBalance(bal);
-    };
-    loadWallet();
+    // Sync initial state
+    setWalletBalance(walletStorage.getBalance());
+
+    // Subscribe to updates reactively
+    const unsubscribe = walletStorage.subscribe((state) => {
+      setWalletBalance(state.balance);
+    });
 
     const interval = setInterval(() => {
       setCurrentBanner((prev) => (prev + 1) % BANNERS.length);
@@ -84,6 +83,7 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
       clearInterval(interval);
       clearInterval(countInterval);
       clearInterval(timerInterval);
+      unsubscribe();
     };
   }, []);
 

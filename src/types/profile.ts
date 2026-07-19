@@ -8,9 +8,12 @@ export interface BirthDetails {
   city: string;
 }
 
-export interface UserProfile {
+export interface UserProfile extends Partial<BirthDetails> {
   name: string;
+  fullName?: string; // legacy support
   phone?: string;
   email?: string;
   avatarUrl?: string;
+  country?: string;
+  birthTime?: string; // legacy support
 }

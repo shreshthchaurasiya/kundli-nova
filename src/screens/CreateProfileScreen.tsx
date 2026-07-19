@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, ChevronDown, Search, Check, ShieldCheck } from 'lucide-react';
 import { Screen } from '../types';
+import { profileStorage } from '../services/storage/profileStorage';
 
 // Indian States
 const INDIAN_STATES = [
@@ -213,9 +214,9 @@ export default function CreateProfileScreen({ onNavigate }: CreateProfileScreenP
                     return;
                   }
                   
-                  // Save profile to local storage simulating React Native AsyncStorage
+                  // Save profile using profileStorage
                   const profileData = { name, gender, dob, tob, state, district, city };
-                  localStorage.setItem('kundli_nova_profile', JSON.stringify(profileData));
+                  profileStorage.saveProfile(profileData);
                   
                   onNavigate('welcome-gift');
                 }}

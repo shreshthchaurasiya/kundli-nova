@@ -1,14 +1,14 @@
 import { KEYS } from './storageKeys';
 import { storageAdapter } from './storageAdapter';
-import { BirthDetails } from '../../types/profile';
+import { UserProfile } from '../../types/profile';
 import { IProfileRepository } from './index';
 
 export const profileStorage: IProfileRepository = {
-  getProfile(): BirthDetails | null {
-    return storageAdapter.getItem<BirthDetails | null>(KEYS.PROFILE, null);
+  getProfile(): UserProfile | null {
+    return storageAdapter.getItem<UserProfile | null>(KEYS.PROFILE, null);
   },
 
-  saveProfile(profile: BirthDetails): void {
+  saveProfile(profile: UserProfile): void {
     storageAdapter.setItem(KEYS.PROFILE, profile);
   },
 

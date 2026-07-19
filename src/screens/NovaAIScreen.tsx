@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { Screen } from '../types';
 import { walletStorage } from '../services/storage/walletStorage';
+import { profileStorage } from '../services/storage/profileStorage';
 
 interface NovaAIScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
@@ -54,15 +55,10 @@ export default function NovaAIScreen({ onNavigate, onOpenDrawer }: NovaAIScreenP
     });
 
     const loadProfile = () => {
-      const profile = localStorage.getItem('kundli_nova_profile');
-      if (profile) {
-        try {
-          const parsed = JSON.parse(profile);
-          if (parsed.name) {
-            const firstName = parsed.name.trim().split(' ')[0];
-            setUserName(firstName);
-          }
-        } catch (e) {}
+      const profile = profileStorage.getProfile();
+      if (profile && profile.name) {
+        const firstName = profile.name.trim().split(' ')[0];
+        setUserName(firstName);
       }
     };
 

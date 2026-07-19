@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Menu, Search, Wallet, X, ChevronRight, Phone, BookHeart, BookOpen, Share2, Star, Heart, HelpCircle, FileText, LogOut } from 'lucide-react';
 import { Screen } from '../types';
+import { profileStorage } from '../services/storage/profileStorage';
 
 interface CategoryScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
@@ -52,12 +53,8 @@ export default function CategoryScreen({ onNavigate }: CategoryScreenProps) {
   const [profileData, setProfileData] = useState<any>(null);
 
   useEffect(() => {
-    const data = localStorage.getItem('kundli_nova_profile');
-    if (data) {
-      try {
-        setProfileData(JSON.parse(data));
-      } catch (e) {}
-    }
+    const profile = profileStorage.getProfile();
+    setProfileData(profile);
   }, []);
 
   const userName = profileData?.name || 'Guest User';
@@ -200,7 +197,7 @@ export default function CategoryScreen({ onNavigate }: CategoryScreenProps) {
                 <DrawerItem icon={<FileText size={20} />} label="Privacy Policy" />
                 
                 <div className="h-[1px] bg-[#F3F4F6] my-[8px] mx-[24px]" />
-                <DrawerItem icon={<LogOut size={20} />} label="Logout" isDanger onClick={() => { localStorage.removeItem('kundli_nova_profile'); onNavigate('splash'); }} />
+                <DrawerItem icon={<LogOut size={20} />} label="Logout" isDanger onClick={() => { profileStorage.removeProfile(); onNavigate('splash'); }} />
               </div>
             </motion.div>
           </>

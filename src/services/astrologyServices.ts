@@ -239,28 +239,13 @@ export const consultationService = {
 export const kundliService = {
   async getUserProfile(userId: string): Promise<any> {
     await delay(100);
-    const saved = localStorage.getItem('kundli_nova_profile');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return null;
-      }
-    }
-    return null;
+    return profileStorage.getProfile();
   },
 
   async getUserKundli(userId: string): Promise<DemoConsultationKundliData | null> {
     await delay(300);
-    const saved = localStorage.getItem(`kundli_nova_user_kundli_${userId}`);
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return null;
-      }
-    }
-    // Automatically generate if not existing
+    const saved = kundliProfileStorage.getUserKundli(userId);
+    if (saved) return saved;
     return this.generateDemoKundli(userId);
   },
 
@@ -293,7 +278,7 @@ export const kundliService = {
         'Mars', 'Jupiter', 'Rahu', 'Ketu', 'Venus', 'Mercury'
       ]
     };
-    localStorage.setItem(`kundli_nova_user_kundli_${userId}`, JSON.stringify(demo));
+    kundliProfileStorage.saveUserKundli(userId, demo);
     return demo;
   },
 

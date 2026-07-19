@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { ArrowLeft, Sparkles, Compass, Shield, User, Calendar, Clock, MapPin, Eye, Info, ListFilter, AlertCircle } from 'lucide-react';
 import { Screen } from '../types';
+import { profileStorage } from '../services/storage/profileStorage';
 
 interface ViewKundliScreenProps {
   onNavigate: (screen: Screen) => void;
@@ -23,14 +24,8 @@ export default function ViewKundliScreen({ onNavigate }: ViewKundliScreenProps) 
   const [profile, setProfile] = useState<ProfileData | null>(null);
 
   useEffect(() => {
-    const data = localStorage.getItem('kundli_nova_profile');
-    if (data) {
-      try {
-        setProfile(JSON.parse(data));
-      } catch (e) {
-        console.error("Error loading profile data:", e);
-      }
-    }
+    const profile = profileStorage.getProfile();
+    setProfile(profile);
   }, []);
 
   const fullName = profile?.fullName || profile?.name || 'Guest User';

@@ -1,7 +1,7 @@
 import { WalletState, WalletTransaction } from '../../types/wallet';
 import { ConsultationSession, ConsultationState } from '../../types/consultation';
 import { Message, ChatState, AiChatThread } from '../../types/chat';
-import { BirthDetails } from '../../types/profile';
+import { BirthDetails, UserProfile } from '../../types/profile';
 import { KundliProfile, KundliData } from '../../types/kundli';
 
 export interface IWalletRepository {
@@ -39,8 +39,8 @@ export interface IChatRepository {
 }
 
 export interface IProfileRepository {
-  getProfile(): BirthDetails | null;
-  saveProfile(profile: BirthDetails): void;
+  getProfile(): UserProfile | null;
+  saveProfile(profile: UserProfile): void;
   removeProfile(): void;
 }
 

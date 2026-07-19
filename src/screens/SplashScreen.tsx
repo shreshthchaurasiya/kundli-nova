@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { motion } from 'motion/react';
 import { LOGO_URL } from '../data';
 import { Screen } from '../types';
+import { profileStorage } from '../services/storage/profileStorage';
 
 interface SplashScreenProps {
   onFinish: (screen: Screen) => void;
@@ -10,7 +11,7 @@ interface SplashScreenProps {
 export default function SplashScreen({ onFinish }: SplashScreenProps) {
   useEffect(() => {
     const timer = setTimeout(() => {
-      const profile = localStorage.getItem('kundli_nova_profile');
+      const profile = profileStorage.getProfile();
       if (profile) {
         onFinish('home');
       } else {

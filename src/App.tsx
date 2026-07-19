@@ -24,7 +24,7 @@ import NovaKundliScreen from './screens/NovaKundliScreen';
 import BottomNav from './components/BottomNav';
 import { Screen, Tab } from './types';
 import { AnimatePresence, motion } from 'motion/react';
-import { runMigrations, walletStorage } from './services/storage';
+import { runMigrations, walletStorage, profileStorage } from './services/storage';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>('splash');
@@ -41,18 +41,16 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const profile = localStorage.getItem('kundli_nova_profile');
+    const profile = profileStorage.getProfile();
     if (profile) {
       setCurrentScreen('home');
     }
   }, []);
 
   useEffect(() => {
-    const data = localStorage.getItem('kundli_nova_profile');
-    if (data) {
-      try {
-        setProfileData(JSON.parse(data));
-      } catch (e) {}
+    const profile = profileStorage.getProfile();
+    if (profile) {
+      setProfileData(profile);
     } else {
       setProfileData(null);
     }
@@ -124,7 +122,7 @@ export default function App() {
         setToast({ message: 'Connecting with Customer Support...' });
         break;
       case 'logout':
-        localStorage.removeItem('kundli_nova_profile');
+        profileStorage.removeProfile();
         navigate('splash');
         break;
       default:
