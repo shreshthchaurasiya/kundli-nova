@@ -99,47 +99,46 @@ The project has been refactored into a highly modular layout to avoid single-fil
 
 ---
 
-## 4. Local Storage & Storage Audit
+## 4. Local Storage & Storage Audit (Unified Storage Architecture)
 
-The application acts as an offline-first container utilizing standard client-side storage technologies. 
+The application utilizes an offline-first storage architecture governed by strict, atomic repositories. All direct local storage keys and conflicting behaviors have been resolved.
 
-### Database Stores & Keys
+### Centralized Repository Mappings
 
-#### 1. IndexedDB Database
-- **DB Name:** `KundliNovaChatDB` (Version `1`)
-- **Object Store:** `images`
-- **Primary Key:** `id` (e.g. `chat-img-123456789`)
-- **Purpose:** Stores base64 binary content of images uploaded in consultation chats to prevent exceeding `localStorage` 5MB quota constraints. Returns resource reference strings with prefix `idb://`.
+All reads and writes are directed through specific repositories implementing TypeScript interfaces, shielding the UI components from direct local storage keys:
 
-#### 2. LocalStorage Key Catalog
+1. **`walletStorage` (`IWalletRepository`):**
+   - Governing key: `kundli_nova_wallet`
+   - Unified mathematical operations for balance tracking (`getBalance`, `recharge`, `debit`, `refund`) and transaction list updates.
+   - Reactive Pub/Sub model supporting multi-tab state syncing via `subscribe`.
 
-| Storage Key | Purpose | Data Type | Written In | Read In | Future Supabase Table |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `kundli_nova_profile` | Saved profile birth coordinates of current active session | `JSON String` | `CreateProfileScreen.tsx`, `EditProfileScreen.tsx` | `App.tsx`, `HomeScreen.tsx`, `ViewKundliScreen.tsx`, `astrologyServices.ts`, `kundliStorage.ts` | `profiles` |
-| `kundli_nova_wallet` | Primary UI wallet storage tracking current balance and transaction logs | `JSON Object` | `WalletScreen.tsx`, `App.tsx` | `WalletScreen.tsx`, `NovaAIScreen.tsx`, `ProfileScreen.tsx`, `App.tsx` | `wallet_accounts` / `wallet_transactions` |
-| `kundli_nova_wallet_balance` | Separate digital fiat currency variable used in background consultation flow simulations | `string` | `astrologyServices.ts` | `astrologyServices.ts` | `wallet_accounts.balance` |
-| `kundli_nova_transactions` | Dedicated background transaction ledger logging consultation session per-minute charges | `JSON Array` | `astrologyServices.ts` | `astrologyServices.ts` | `wallet_transactions` |
-| `kundli_nova_session_history` | Historic consultation logs containing elapsed durations, expert ids, and total charged sums | `JSON Array` | `astrologyServices.ts`, `ChatHistoryScreen.tsx` | `astrologyServices.ts`, `ChatHistoryScreen.tsx` | `consultations` |
-| `kundli_nova_session_history_seeded_v1` | Seed data generation latch to avoid redundant transaction seeding on app launch | `string` | `ChatHistoryScreen.tsx` | `ChatHistoryScreen.tsx` | N/A (Admin/Migration) |
-| `kundli_nova_active_request` | Ongoing consultation queue data structure to protect active connections during refresh | `JSON String` | `astrologyServices.ts`, `ConsultationChatScreen.tsx` | `astrologyServices.ts`, `ConsultationChatScreen.tsx` | `consultation_requests` |
-| `kundli_nova_active_request_time` | Timestamp of last session sync to handle timeout checks | `string` | `ConsultationChatScreen.tsx` | `ConsultationChatScreen.tsx` | N/A (Cache) |
-| `kundli_nova_chat_messages_${sessionId}` | Cumulative chat dialogue arrays exchanged between user and expert | `JSON Array` | `astrologyServices.ts` | `astrologyServices.ts`, `ConsultationChatScreen.tsx` | `messages` |
-| `kundli_nova_chat_state_${sessionId}` | Connection parameters holding active rates, timers, and states | `JSON String` | `astrologyServices.ts` | `astrologyServices.ts` | `consultations` |
-| `kundli_nova_ai_history` | Past chat conversation indexes for Gemini chat threads | `JSON Array` | `NovaAIChatScreen.tsx`, `NovaAIScreen.tsx` | `NovaAIScreen.tsx`, `NovaAIChatScreen.tsx` | `conversations` |
-| `kundli_nova_saved_kundli_${nameKey}` | Manually generated local Kundli profiles using calculation engine | `JSON String` | `kundliStorage.ts` | `kundliStorage.ts` | `kundli_profiles` |
-| `kundli_nova_user_kundli_${userId}` | Cached mock/calculated details generated for a simulated session user | `JSON String` | `astrologyServices.ts` | `astrologyServices.ts` | `kundli_reports` |
-| `kundli_nova_offer_countdown` | Global offer countdown target timestamp | `string` | `HomeScreen.tsx` | `HomeScreen.tsx` | N/A (Session) |
+2. **`consultationStorage` (`IConsultationRepository`):**
+   - Governing keys: `kundli_nova_active_request`, `kundli_nova_active_request_time`, `kundli_nova_session_history`
+   - Encapsulates connection lifecycle states and historic records.
+   - Restores sessions safely on app reloads.
 
-### Entities Relationship Map:
-1. **User Profile (`kundli_nova_profile`)** defines the central metadata (Name, DOB, TOB, Location).
-2. **Wallet Balance (`kundli_nova_wallet_balance` vs `kundli_nova_wallet`)** acts as the core gateway check. If balance is below $(Price Per Minute × 5), the consultation queue blocks and prompts recharge.
-3. **Consultation Requests (`kundli_nova_active_request`)** are instantiated when requesting an expert, transitioning from checking wallet validation to prepared chart structures, and waiting states.
-4. **Active Session & Chat Messages (`kundli_nova_chat_messages_${id}`)** capture the live interaction.
-5. On termination, the active request is converted into a historic record, appended to **Session History (`kundli_nova_session_history`)**, and cleared from the active request pointer.
+3. **`chatStorage` (`IChatRepository`):**
+   - Governing keys: `kundli_nova_chat_messages_${sessionId}`, `kundli_nova_chat_state_${sessionId}`
+   - Manages live chat messages and saves images securely to IndexedDB under the prefix `idb://` to respect local storage constraints.
 
-### Crucial Storage Inconsistencies & Technical Debt:
-- **Wallet State Mismatch (Split Storage):** The frontend screens (`WalletScreen.tsx`, `ProfileScreen.tsx`, etc.) and `App.tsx` operate on `kundli_nova_wallet` which holds an object structure: `{ balance: number, transactions: Transaction[] }`. However, the consultation debit/credit engine inside `astrologyServices.ts` reads and writes to two completely separate keys: `kundli_nova_wallet_balance` (as a plain number string) and `kundli_nova_transactions` (as a flat array of transaction records). As a result, recharges done on `WalletScreen` do not credit the active consultation wallet, and consultation debits do not register in the standard UI wallet balance. During Supabase migration, these two pipelines **MUST be unified** under a single `wallet_accounts` and `wallet_transactions` query structure.
-- **Diverging Kundli Report Models:** Locally saved profiles are written to `kundli_nova_saved_kundli_${nameKey}` with fields matching the premium Vedic engine, whereas the background chat/consultation helper caches and queries reports under `kundli_nova_user_kundli_${userId}` with an entirely different layout.
+4. **`profileStorage` (`IProfileRepository`):**
+   - Governing key: `kundli_nova_profile`
+   - Handles the active session's user account details and birth coordinates.
+
+5. **`kundliProfileStorage` (`IKundliProfileRepository`):**
+   - Governing key: `kundli_nova_profiles_list`
+   - Tracks a saved list of distinct user Kundlis mapped by unique IDs (UUIDs).
+
+---
+
+### Migration & Corruption Strategy (Centralized Storage Adapter)
+
+A safe `storageAdapter` wraps all localStorage access with try-catch checks:
+- **One-Time Idempotent Migrations (`migrations.ts`):** Upgrades version numbers. Migrates legacy wallet keys (`kundli_nova_wallet_balance`, `kundli_nova_transactions`) into the unified canonical `kundli_nova_wallet` key.
+- **Deduplication:** Filters out duplicate legacy transactions using cryptographic fingerprints (`type_amount_timestamp_title`).
+- **Corruption Fail-safe:** If standard parsing fails due to corrupted JSON strings, the system backups the corrupt data to `kundli_nova_corrupt_backup_*` and safely falls back/restores from legacy keys or initial defaults.
+
+---
 
 ---
 
