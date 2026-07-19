@@ -1,0 +1,6 @@
+{
+  "name": "Kundli Nova",
+  "description": "Premium astrology application UI showcasing a clean, modern, and professional design.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
