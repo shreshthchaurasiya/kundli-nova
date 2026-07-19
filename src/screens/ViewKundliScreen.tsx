@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { ArrowLeft, Sparkles, Compass, Shield, User, Calendar, Clock, MapPin, Eye, Info, ListFilter, AlertCircle } from 'lucide-react';
 import { Screen } from '../types';
-import { profileStorage } from '../services/storage/profileStorage';
+import { useProfile } from '../contexts/ProfileContext';
 
 interface ViewKundliScreenProps {
   onNavigate: (screen: Screen) => void;
@@ -21,12 +21,7 @@ interface ProfileData {
 }
 
 export default function ViewKundliScreen({ onNavigate }: ViewKundliScreenProps) {
-  const [profile, setProfile] = useState<ProfileData | null>(null);
-
-  useEffect(() => {
-    const profile = profileStorage.getProfile();
-    setProfile(profile);
-  }, []);
+  const { profile } = useProfile();
 
   const fullName = profile?.fullName || profile?.name || 'Guest User';
   const dob = profile?.dob || 'Not Provided';

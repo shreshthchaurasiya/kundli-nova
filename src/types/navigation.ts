@@ -1,6 +1,8 @@
 export type Screen = 
   | 'splash' 
   | 'login' 
+  | 'signup'
+  | 'forgot-password'
   | 'otp' 
   | 'create-profile' 
   | 'edit-profile'

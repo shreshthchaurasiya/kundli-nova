@@ -10,7 +10,7 @@ import { walletStorage } from './storage/walletStorage';
 import { consultationStorage } from './storage/consultationStorage';
 import { chatStorage } from './storage/chatStorage';
 import { kundliProfileStorage } from './storage/kundliProfileStorage';
-import { profileStorage } from './storage/profileStorage';
+
 
 export type { ConsultationState, Message };
 export type KundliData = DemoConsultationKundliData;
@@ -239,7 +239,7 @@ export const consultationService = {
 export const kundliService = {
   async getUserProfile(userId: string): Promise<any> {
     await delay(100);
-    return profileStorage.getProfile();
+    return { name: 'Shreshth', gender: 'male', dob: '1995-10-15', tob: '10:30', state: 'Uttar Pradesh', district: 'Varanasi', city: 'Varanasi' };
   },
 
   async getUserKundli(userId: string): Promise<DemoConsultationKundliData | null> {

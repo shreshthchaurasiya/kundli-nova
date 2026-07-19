@@ -27,9 +27,15 @@ const InputWrapper = ({ label, children, delay = 0 }: any) => (
   </motion.div>
 );
 
+import { useAuth } from '../auth';
+
 export default function CreateProfileScreen({ onNavigate }: CreateProfileScreenProps) {
   const repositories = useRepositories();
-  const [name, setName] = useState('');
+  const { user } = useAuth();
+  
+  const [name, setName] = useState(user?.user_metadata?.name || user?.user_metadata?.full_name || '');
+  const [email] = useState(user?.email || '');
+  const [phone, setPhone] = useState('');
   const [gender, setGender] = useState('');
   const [dob, setDob] = useState('');
   const [tob, setTob] = useState('');
@@ -43,7 +49,6 @@ export default function CreateProfileScreen({ onNavigate }: CreateProfileScreenP
   
   // Sheet state
   const [activeSheet, setActiveSheet] = useState<'state' | null>(null);
-
 
   const handleStateSelect = (s: string) => {
     setState(s); setActiveSheet(null); setError('');
@@ -108,6 +113,37 @@ export default function CreateProfileScreen({ onNavigate }: CreateProfileScreenP
                   value={name}
                   onChange={(e) => {setName(e.target.value); setError('');}}
                   placeholder="Enter your full name" 
+                  className="flex-1 bg-transparent border-none focus:outline-none text-[#111827] text-[16px] placeholder:text-[#9CA3AF] font-medium" 
+                />
+              </div>
+            </InputWrapper>
+
+            {/* Email (Read Only) */}
+            <InputWrapper label="Email Address" delay={0.11}>
+              <div className="relative h-[56px] w-full bg-[#F9FAFB] rounded-[16px] border border-[#E5E7EB] flex items-center px-[16px] shadow-sm opacity-80 cursor-not-allowed">
+                <input 
+                  type="email" 
+                  value={email}
+                  readOnly
+                  placeholder="Email" 
+                  className="flex-1 bg-transparent border-none focus:outline-none text-[#6B7280] text-[16px] font-medium pointer-events-none" 
+                />
+              </div>
+            </InputWrapper>
+
+            {/* Phone Number */}
+            <InputWrapper label="Phone Number" delay={0.12}>
+              <div className="relative h-[56px] w-full bg-[#FFFFFF] rounded-[16px] border border-[#E5E7EB] flex items-center px-[16px] focus-within:border-[#FF8A00] focus-within:ring-1 focus-within:ring-[#FF8A00]/20 transition-all duration-200 shadow-sm">
+                <div className="flex items-center space-x-[8px] border-r border-[#E5E7EB] pr-[12px] mr-[12px]">
+                  <span className="text-[18px] leading-none">🇮🇳</span>
+                  <span className="text-[#111827] font-medium text-[15px]">+91</span>
+                </div>
+                <input 
+                  type="tel"
+                  maxLength={10}
+                  value={phone}
+                  onChange={(e) => {setPhone(e.target.value.replace(/\D/g, '')); setError('');}}
+                  placeholder="Enter 10-digit number" 
                   className="flex-1 bg-transparent border-none focus:outline-none text-[#111827] text-[16px] placeholder:text-[#9CA3AF] font-medium" 
                 />
               </div>
@@ -222,6 +258,8 @@ export default function CreateProfileScreen({ onNavigate }: CreateProfileScreenP
                   try {
                     await repositories.profile.saveProfile({
                       name,
+                      email,
+                      phone,
                       gender,
                       dob,
                       tob,

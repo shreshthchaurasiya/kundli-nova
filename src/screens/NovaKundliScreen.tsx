@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   ArrowLeft, 
@@ -27,7 +27,8 @@ import {
   ChevronUp
 } from 'lucide-react';
 import { Screen } from '../types';
-import { KundliData, getSavedProfile } from '../services/kundliStorage';
+import { KundliData } from '../services/kundliStorage';
+import { useRepositories } from '../repositories/repositoryProvider';
 import { generateKundli } from '../services/kundliService';
 import { generateKundliPdf } from '../services/kundliPdfService';
 
@@ -40,28 +41,37 @@ interface NovaKundliScreenProps {
 }
 
 export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundliScreenProps) {
+  const repositories = useRepositories();
   const fromScreen = routeParams?.fromScreen || 'nova-ai-chat';
 
-  // Try to load from route params, fallback to active profile generation
-  const [kundliData, setKundliData] = useState<KundliData>(() => {
+  const [kundliData, setKundliData] = useState<KundliData | null>(routeParams?.kundliData || null);
+  const [loadingKundli, setLoadingKundli] = useState(!routeParams?.kundliData);
+
+  useEffect(() => {
     if (routeParams?.kundliData) {
-      return routeParams.kundliData;
+      setLoadingKundli(false);
+      return;
     }
-    const profile = getSavedProfile();
-    if (profile) {
-      return generateKundli(profile);
-    }
-    // Hardcoded default fallback just in case
-    return generateKundli({
-      name: 'Shreshth',
-      gender: 'male',
-      dob: '1995-10-15',
-      tob: '10:30',
-      state: 'Uttar Pradesh',
-      district: 'Varanasi',
-      city: 'Varanasi'
-    });
-  });
+
+    const fetchProfileAndGenerate = async () => {
+      const profile = await repositories.profile.getProfile();
+      if (profile) {
+        setKundliData(generateKundli(profile));
+      } else {
+        setKundliData(generateKundli({
+          name: 'Shreshth',
+          gender: 'male',
+          dob: '1995-10-15',
+          tob: '10:30',
+          state: 'Uttar Pradesh',
+          district: 'Varanasi',
+          city: 'Varanasi'
+        }));
+      }
+      setLoadingKundli(false);
+    };
+    fetchProfileAndGenerate();
+  }, [routeParams, repositories.profile]);
 
   const [activeTab, setActiveTab] = useState<'charts' | 'planets' | 'dasha' | 'insights' | 'basic'>('charts');
 
@@ -87,6 +97,14 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
   // PDF modal state
   const [pdfModalState, setPdfModalState] = useState<'idle' | 'generating' | 'ready'>('idle');
   const [pdfUrls, setPdfUrls] = useState<{ blobUrl: string; base64: string } | null>(null);
+
+  if (loadingKundli || !kundliData) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-[#FCFBF8]">
+        <div className="w-[40px] h-[40px] border-[3px] border-[#FF8A00]/20 border-t-[#FF8A00] rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   const handleDownloadPdf = async () => {
     setPdfModalState('generating');

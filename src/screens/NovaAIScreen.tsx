@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { Screen } from '../types';
 import { walletStorage } from '../services/storage/walletStorage';
-import { profileStorage } from '../services/storage/profileStorage';
+import { useProfile } from '../contexts/ProfileContext';
 
 interface NovaAIScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
@@ -37,6 +37,7 @@ interface SavedConversation {
 }
 
 export default function NovaAIScreen({ onNavigate, onOpenDrawer }: NovaAIScreenProps) {
+  const { profile } = useProfile();
   const [walletBalance, setWalletBalance] = useState<number>(0);
   const [userName, setUserName] = useState<string>('Shreshth');
   const [inputVal, setInputVal] = useState<string>('');
@@ -55,7 +56,7 @@ export default function NovaAIScreen({ onNavigate, onOpenDrawer }: NovaAIScreenP
     });
 
     const loadProfile = () => {
-      const profile = profileStorage.getProfile();
+      // profile is accessed from useProfile
       if (profile && profile.name) {
         const firstName = profile.name.trim().split(' ')[0];
         setUserName(firstName);

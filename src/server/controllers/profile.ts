@@ -76,13 +76,11 @@ export const updateProfile = async (
     const userId = req.user!.id;
     const rawUpdates = { ...req.body };
 
-    // Security: never allow client to set id or phone
+    // Security: never allow client to set id
     delete rawUpdates.id;
-    delete rawUpdates.phone;
 
     // Map frontend field names → DB column names
     const updates = toDbFields(rawUpdates);
-    updates.updated_at = new Date().toISOString();
 
     const { data: profile, error } = await supabaseAdmin
       .from('profiles')
@@ -91,7 +89,8 @@ export const updateProfile = async (
       .single();
 
     if (error) {
-      throw new ApiError(500, 'Failed to update profile');
+      console.error('Supabase upsert error details:', JSON.stringify(error, null, 2));
+      throw new ApiError(500, `Failed to update profile: ${error.message || 'Unknown error'}`);
     }
 
     res.json({

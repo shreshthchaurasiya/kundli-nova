@@ -10,6 +10,7 @@ const envSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   ALLOWED_ORIGINS: z.string().default('*'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  VITE_AUTH_MODE: z.string().optional(),
 });
 
 const _env = envSchema.safeParse(process.env);

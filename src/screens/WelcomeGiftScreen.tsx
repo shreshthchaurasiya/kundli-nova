@@ -105,10 +105,10 @@ export default function WelcomeGiftScreen({ onNavigate }: WelcomeGiftScreenProps
             className="w-full flex flex-col items-center mt-auto sm:mt-0"
           >
             <button 
-              onClick={() => onNavigate('chat')}
+              onClick={() => onNavigate('nova-ai-chat')}
               className="w-full h-[56px] bg-[#FF8A00] rounded-[16px] text-[#FFFFFF] flex items-center justify-center active:scale-[0.98] transition-all hover:bg-[#E97700] shadow-[0_4px_14px_rgba(255,138,0,0.25)] shrink-0 mb-[16px]"
             >
-              <span className="font-semibold text-[17px] tracking-wide mr-[8px]">Continue to Free Chat</span>
+              <span className="font-semibold text-[17px] tracking-wide mr-[8px]">Continue to AI Free Chat</span>
               <ArrowRight size={20} strokeWidth={2.5} />
             </button>
             

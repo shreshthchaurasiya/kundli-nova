@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { MessageCircle, User, Wallet, Bell, Settings, HelpCircle, LogOut, ChevronRight, Sparkles, Pencil } from 'lucide-react';
 import SplashScreen from './screens/SplashScreen';
 import LoginScreen from './screens/LoginScreen';
+import SignupScreen from './screens/SignupScreen';
+import ForgotPasswordScreen from './screens/ForgotPasswordScreen';
 import OtpScreen from './screens/OtpScreen';
 import CreateProfileScreen from './screens/CreateProfileScreen';
 import WelcomeGiftScreen from './screens/WelcomeGiftScreen';
@@ -26,14 +28,17 @@ import { Screen, Tab } from './types';
 import { AnimatePresence, motion } from 'motion/react';
 import { runMigrations, walletStorage } from './services/storage';
 import { useAuth } from './auth';
+import { useRepositories } from './repositories/repositoryProvider';
+import { useProfile } from './contexts/ProfileContext';
 
 // Auth screens that should never show the bottom nav
-const AUTH_SCREENS: Screen[] = ['splash', 'login', 'otp', 'create-profile', 'welcome-gift'];
+const AUTH_SCREENS: Screen[] = ['splash', 'login', 'signup', 'forgot-password', 'otp', 'create-profile', 'welcome-gift'];
 // Screens that show bottom nav
 const NAV_SCREENS: Screen[] = ['home', 'chat-list', 'chat-history', 'nova-ai', 'services', 'profile', 'astrologers'];
 
 export default function App() {
   const { isAuthenticated, isLoading, user, signOut } = useAuth();
+  const repositories = useRepositories();
 
   const [currentScreen, setCurrentScreen] = useState<Screen>('splash');
   const [currentTab, setCurrentTab] = useState<Tab>('home');
@@ -42,27 +47,65 @@ export default function App() {
   const [toast, setToast] = useState<{ message: string } | null>(null);
   const [walletBalance, setWalletBalance] = useState<number>(0);
 
+  // Track if profile check is loading and if profile is complete
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [isProfileComplete, setIsProfileComplete] = useState(false);
+
   // Initialize storage migrations once at startup
   useEffect(() => {
     runMigrations();
   }, []);
 
-  // Route based on auth state
+  // Fetch and verify profile completeness on authentication or screen change
   useEffect(() => {
-    if (isLoading) return; // Wait for session to resolve
+    const checkProfileCompleteness = async () => {
+      if (isAuthenticated && user) {
+        setProfileLoading(true);
+        try {
+          const profile = await repositories.profile.getProfile();
+          // Profile is complete if it exists and has a date of birth (since Guest trigger profile doesn't have dob)
+          if (profile && profile.dob) {
+            setIsProfileComplete(true);
+          } else {
+            setIsProfileComplete(false);
+          }
+        } catch (err) {
+          console.error('Failed to verify profile completeness:', err);
+          setIsProfileComplete(false);
+        } finally {
+          setProfileLoading(false);
+        }
+      } else {
+        setIsProfileComplete(false);
+      }
+    };
+
+    checkProfileCompleteness();
+  }, [isAuthenticated, user, repositories.profile, currentScreen]);
+
+  // Route based on auth state and profile completeness
+  useEffect(() => {
+    if (isLoading || profileLoading) return; // Wait for session and profile check to resolve
 
     if (isAuthenticated) {
-      // Only redirect to home from auth screens; don't disrupt already-in-app navigation
+      // Only redirect from initial auth flow screens
       if (AUTH_SCREENS.includes(currentScreen)) {
-        setCurrentScreen('home');
+        if (isProfileComplete) {
+          if (currentScreen !== 'welcome-gift') {
+            setCurrentScreen('home');
+          }
+        } else {
+          // If they haven't filled their details, direct them to Create Profile
+          setCurrentScreen('create-profile');
+        }
       }
     } else {
-      // Not authenticated — send to login (or keep on splash while loading)
+      // Not authenticated — send to login (unless already on splash/login/otp)
       if (!AUTH_SCREENS.includes(currentScreen)) {
         setCurrentScreen('login');
       }
     }
-  }, [isAuthenticated, isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, isLoading, profileLoading, isProfileComplete]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Subscribe to wallet state changes reactively
   useEffect(() => {
@@ -100,7 +143,8 @@ export default function App() {
   };
 
   // Derive display name + phone from the authenticated Supabase user
-  const userName = user?.user_metadata?.name || user?.user_metadata?.full_name || 'User';
+  const { profile } = useProfile();
+  const userName = profile?.name || user?.user_metadata?.name || user?.user_metadata?.full_name || 'User';
   const userPhone = user?.phone
     ? user.phone.replace(/^\+91(\d{5})(\d{5})$/, '+91 $1 $2')
     : '';
@@ -145,15 +189,17 @@ export default function App() {
     switch (currentScreen) {
       case 'splash': return <SplashScreen onFinish={(s) => navigate(s)} />;
       case 'login': return <LoginScreen onNavigate={navigate} />;
+      case 'signup': return <SignupScreen onNavigate={navigate} />;
+      case 'forgot-password': return <ForgotPasswordScreen onNavigate={navigate} />;
       case 'otp': return <OtpScreen onNavigate={navigate} routeParams={routeParams} />;
       case 'create-profile': return <CreateProfileScreen onNavigate={navigate} />;
       case 'edit-profile': return <EditProfileScreen onNavigate={navigate} />;
       case 'view-kundli': return <NovaKundliScreen onNavigate={navigate} routeParams={{ fromScreen: 'profile' }} />;
       case 'consultation-chat': return (
-        <ConsultationChatScreen 
-          astrologerId={routeParams?.astrologerId} 
-          readOnlySessionId={routeParams?.readOnlySessionId} 
-          onNavigate={navigate} 
+        <ConsultationChatScreen
+          astrologerId={routeParams?.astrologerId}
+          readOnlySessionId={routeParams?.readOnlySessionId}
+          onNavigate={navigate}
         />
       );
       case 'welcome-gift': return <WelcomeGiftScreen onNavigate={navigate} />;
@@ -193,7 +239,7 @@ export default function App() {
             {renderScreen()}
           </motion.div>
         </AnimatePresence>
-        
+
         {showBottomNav && !isDrawerOpen && (
           <BottomNav currentTab={currentTab} onTabChange={handleTabChange} />
         )}
@@ -224,7 +270,7 @@ export default function App() {
                     {getGreeting()}
                   </p>
 
-                  <motion.div 
+                  <motion.div
                     whileTap={{ scale: 0.96 }}
                     onClick={() => {
                       setIsDrawerOpen(false);
@@ -256,7 +302,7 @@ export default function App() {
                       {item.isLogout && (
                         <div className="h-[1px] bg-neutral-100/60 mx-[24px] my-[12px]" />
                       )}
-                      
+
                       <motion.button
                         whileTap={{ scale: 0.985 }}
                         onClick={() => handleMenuClick(item.id)}
@@ -270,7 +316,7 @@ export default function App() {
                             {item.label}
                           </span>
                         </div>
-                        
+
                         <div className="flex items-center space-x-[10px]">
                           {item.id === 'wallet' && (
                             <span className="text-[11.5px] font-[700] text-neutral-600 bg-neutral-100/60 px-2.5 py-0.5 rounded-full border border-neutral-100/50 tracking-tight">

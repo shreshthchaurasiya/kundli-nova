@@ -72,23 +72,39 @@ export async function verifyOtp(
       return { error: { code: 'VERIFY_OTP_FAILED', message: 'Invalid test OTP (use 123456)' } };
     }
 
-    // Email-based trick to create a REAL session for ANY phone number in dev mode
-    const email = `${phone.replace('+', '')}@kundlinova.test`;
-    const password = 'dev-password-123';
-
-    let { error } = await supabase.auth.signInWithPassword({ email, password });
-
-    if (error && error.message.includes('Invalid login credentials')) {
-      // User doesn't exist yet, sign them up
-      const res = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { phone } // Store phone in metadata
-        }
+    // Phone-based trick to create a REAL session for ANY phone number in dev mode
+    const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:3000/api/v1';
+    try {
+      const response = await fetch(`${API_BASE}/auth/dev-login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone })
       });
-      error = res.error;
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        return {
+          error: {
+            code: 'VERIFY_OTP_FAILED',
+            message: errData.message || 'Failed to register dev phone number on backend.'
+          }
+        };
+      }
+    } catch (err: any) {
+      return {
+        error: {
+          code: 'VERIFY_OTP_FAILED',
+          message: err.message || 'Network error connecting to backend auth proxy.'
+        }
+      };
     }
+
+    // Now that the backend has created/confirmed the user and set their password,
+    // sign in directly with the phone and password to establish a real Supabase Auth session.
+    const { error } = await supabase.auth.signInWithPassword({
+      phone,
+      password: 'dev-password-123',
+    });
 
     if (error) {
       return { error: { code: 'VERIFY_OTP_FAILED', message: error.message } };

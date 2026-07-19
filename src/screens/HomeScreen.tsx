@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Wallet, Search, Menu, X, ChevronRight, Phone, MessageCircle, Star, Sparkles, BookHeart, BookOpen, Compass, Sun, Map, ShieldCheck, HelpCircle, FileText, Share2, LogOut, Heart, Clock, SlidersHorizontal, SunMoon, LayoutGrid, Hash, Grid3x3, Languages, Plus, Zap, Briefcase, Palette, TrendingUp, Quote } from 'lucide-react';
 import { ASTROLOGERS } from '../data';
 import { Screen, Astrologer } from '../types';
-import { profileStorage } from '../services/storage/profileStorage';
+import { useProfile } from '../contexts/ProfileContext';
 import { walletStorage } from '../services/storage/walletStorage';
 
 interface HomeScreenProps {
@@ -25,16 +25,17 @@ const BANNERS = [
 ];
 
 export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps) {
+  const { profile } = useProfile();
   const [currentBanner, setCurrentBanner] = useState(0);
-  const [profileData, setProfileData] = useState<any>(null);
+  // profileData removed
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [walletBalance, setWalletBalance] = useState<number>(0);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [onlineCount, setOnlineCount] = useState<number>(327);
 
   useEffect(() => {
-    const profile = profileStorage.getProfile();
-    setProfileData(profile);
+    // profile is accessed from useProfile
+    // setProfileData removed
 
     // Sync initial state
     setWalletBalance(walletStorage.getBalance());
@@ -100,8 +101,8 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
     ].join(':');
   };
 
-  const userName = profileData?.name || 'Guest User';
-  const userPhone = profileData?.phone || '+91 - Not provided';
+  const userName = profile?.name || 'Guest User';
+  const userPhone = profile?.phone || '+91 - Not provided';
 
   // Stagger animation container
   const containerVariants = {

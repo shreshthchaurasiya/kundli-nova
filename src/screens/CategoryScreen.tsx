@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Menu, Search, Wallet, X, ChevronRight, Phone, BookHeart, BookOpen, Share2, Star, Heart, HelpCircle, FileText, LogOut } from 'lucide-react';
 import { Screen } from '../types';
-import { profileStorage } from '../services/storage/profileStorage';
+import { useProfile } from '../contexts/ProfileContext';
 
 interface CategoryScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
@@ -49,11 +49,12 @@ const LANGUAGES = [
 ];
 
 export default function CategoryScreen({ onNavigate }: CategoryScreenProps) {
+  const { profile } = useProfile();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [profileData, setProfileData] = useState<any>(null);
 
   useEffect(() => {
-    const profile = profileStorage.getProfile();
+    // profile is accessed from useProfile
     setProfileData(profile);
   }, []);
 
@@ -197,7 +198,7 @@ export default function CategoryScreen({ onNavigate }: CategoryScreenProps) {
                 <DrawerItem icon={<FileText size={20} />} label="Privacy Policy" />
                 
                 <div className="h-[1px] bg-[#F3F4F6] my-[8px] mx-[24px]" />
-                <DrawerItem icon={<LogOut size={20} />} label="Logout" isDanger onClick={() => { profileStorage.removeProfile(); onNavigate('splash'); }} />
+                <DrawerItem icon={<LogOut size={20} />} label="Logout" isDanger onClick={() => { onNavigate('splash'); }} />
               </div>
             </motion.div>
           </>

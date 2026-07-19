@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Phone, Video, Paperclip, Send, Clock, ShieldCheck, MoreVertical, Lock } from 'lucide-react';
 import { Screen } from '../types';
-import { profileStorage } from '../services/storage/profileStorage';
+import { useProfile } from '../contexts/ProfileContext';
 
 interface ChatScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
@@ -20,6 +20,7 @@ interface Message {
 }
 
 export default function ChatScreen({ onNavigate, routeParams }: ChatScreenProps) {
+  const { profile } = useProfile();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [timeLeft, setTimeLeft] = useState(120); // 2 minutes in seconds
@@ -34,7 +35,7 @@ export default function ChatScreen({ onNavigate, routeParams }: ChatScreenProps)
     let isMounted = true;
 
     const runGreetingSequence = async () => {
-      const profile = profileStorage.getProfile();
+      // profile is accessed from useProfile
       let pData = null;
       let name = 'User';
       

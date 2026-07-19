@@ -14,11 +14,12 @@ import {
 } from 'lucide-react';
 import { Screen } from '../types';
 import { 
-  getSavedProfile, 
   getSavedKundli, 
   saveKundliData, 
   KundliData 
 } from '../services/kundliStorage';
+import { useRepositories } from '../repositories/repositoryProvider';
+import { UserProfile } from '../types/profile';
 import { generateKundli } from '../services/kundliService';
 import { generateKundliPdf } from '../services/kundliPdfService';
 import KundliPreviewMessage from '../components/KundliPreviewMessage';
@@ -51,6 +52,8 @@ interface SavedConversation {
 }
 
 export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChatScreenProps) {
+  const repositories = useRepositories();
+  const [profileData, setProfileData] = useState<UserProfile | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -65,7 +68,7 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
 
   const handleDownloadPdf = async () => {
     // Look for active generated Kundli
-    const profile = getSavedProfile();
+    const profile = profileData as any;
     const activeKundli = getSavedKundli(profile?.name || 'Shreshth') || generateKundli(profile || {
       name: 'Shreshth',
       gender: 'male',
@@ -94,15 +97,17 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
 
   // Load profile data and initialize chat
   useEffect(() => {
-    // 1. Get user first name
-    const profile = getSavedProfile();
-    let firstName = 'Shreshth';
-    if (profile) {
-      firstName = profile.name.trim().split(' ')[0];
-      setUserName(firstName);
-    }
+    const loadAndInit = async () => {
+      // 1. Get user first name
+      const profile = await repositories.profile.getProfile();
+      setProfileData(profile);
+      let firstName = 'Shreshth';
+      if (profile) {
+        firstName = profile.name.trim().split(' ')[0];
+        setUserName(firstName);
+      }
 
-    // 2. Determine if loading existing conversation or creating new
+      // 2. Determine if loading existing conversation or creating new
     const savedHistoryStr = localStorage.getItem('kundli_nova_ai_history');
     let historyList: SavedConversation[] = [];
     if (savedHistoryStr) {
@@ -165,9 +170,9 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
         saveToHistory(newId, topic, finalMsgs);
         setIsTyping(false);
       } else {
-        // Get actual profile data
-        const profileData = getSavedProfile();
-        const profileName = profileData?.name || 'Shreshth';
+        // Get actual profile data (already fetched)
+        const activeProfileData = profile;
+        const profileName = activeProfileData?.name || 'Shreshth';
 
         setIsTyping(true);
         await new Promise(resolve => setTimeout(resolve, 800));
@@ -241,7 +246,7 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
           await new Promise(resolve => setTimeout(resolve, 800));
 
           // Generate real Kundli using saved profile
-          const activeProfile = profileData || {
+          const activeProfile = activeProfileData || {
             name: 'Shreshth',
             gender: 'male',
             dob: '1995-10-15',
@@ -274,7 +279,9 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
     };
 
     initializeNewChat();
-  }, [routeParams]);
+    };
+    loadAndInit();
+  }, [routeParams, repositories.profile]);
 
   // Scroll to bottom whenever messages list updates
   useEffect(() => {
