@@ -5,6 +5,8 @@ import {
   ChevronRight, Sparkles, Share2, CheckCircle2, X, Camera, Info, Shield
 } from 'lucide-react';
 import { Screen } from '../types';
+import { walletStorage } from '../services/storage/walletStorage';
+import { profileStorage } from '../services/storage/profileStorage';
 
 interface ProfileScreenProps {
   onNavigate: (screen: Screen) => void;
@@ -28,34 +30,22 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
 
   // Load profile details and simulate high-fidelity loading state
   useEffect(() => {
-    const loadProfile = () => {
-      const data = localStorage.getItem('kundli_nova_profile');
-      if (data) {
-        try {
-          setProfileData(JSON.parse(data));
-        } catch (e) {
-          setProfileData(null);
-        }
-      } else {
-        setProfileData(null);
-      }
+    const profile = profileStorage.getProfile();
+    setProfileData(profile);
 
-      const walletData = localStorage.getItem('kundli_nova_wallet');
-      if (walletData) {
-        try {
-          const parsed = JSON.parse(walletData);
-          setWalletBalance(parsed.balance ?? 0);
-        } catch (e) {}
-      }
-    };
-
-    loadProfile();
+    setWalletBalance(walletStorage.getBalance());
+    const unsubscribe = walletStorage.subscribe((state) => {
+      setWalletBalance(state.balance);
+    });
 
     const timer = setTimeout(() => {
       setLoading(false);
     }, 450);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      unsubscribe();
+    };
   }, []);
 
   // Helper to show premium feedback toasts

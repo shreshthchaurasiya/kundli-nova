@@ -21,6 +21,7 @@ import {
   Star
 } from 'lucide-react';
 import { Screen } from '../types';
+import { walletStorage } from '../services/storage/walletStorage';
 
 interface NovaAIScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
@@ -44,15 +45,13 @@ export default function NovaAIScreen({ onNavigate, onOpenDrawer }: NovaAIScreenP
 
   // Load wallet balance & user profile
   useEffect(() => {
-    const loadWallet = () => {
-      const data = localStorage.getItem('kundli_nova_wallet');
-      if (data) {
-        try {
-          const parsed = JSON.parse(data);
-          setWalletBalance(parsed.balance ?? 0);
-        } catch (e) {}
-      }
-    };
+    // Sync initial state
+    setWalletBalance(walletStorage.getBalance());
+
+    // Subscribe to updates reactively
+    const unsubscribe = walletStorage.subscribe((state) => {
+      setWalletBalance(state.balance);
+    });
 
     const loadProfile = () => {
       const profile = localStorage.getItem('kundli_nova_profile');
@@ -76,9 +75,10 @@ export default function NovaAIScreen({ onNavigate, onOpenDrawer }: NovaAIScreenP
       }
     };
 
-    loadWallet();
     loadProfile();
     loadHistory();
+
+    return unsubscribe;
   }, []);
 
   const getGreeting = () => {

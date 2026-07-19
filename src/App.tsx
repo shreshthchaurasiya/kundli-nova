@@ -24,6 +24,7 @@ import NovaKundliScreen from './screens/NovaKundliScreen';
 import BottomNav from './components/BottomNav';
 import { Screen, Tab } from './types';
 import { AnimatePresence, motion } from 'motion/react';
+import { runMigrations, walletStorage } from './services/storage';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>('splash');
@@ -33,6 +34,11 @@ export default function App() {
   const [profileData, setProfileData] = useState<any>(null);
   const [toast, setToast] = useState<{ message: string } | null>(null);
   const [walletBalance, setWalletBalance] = useState<number>(0);
+
+  // Initialize storage migrations once at startup
+  useEffect(() => {
+    runMigrations();
+  }, []);
 
   useEffect(() => {
     const profile = localStorage.getItem('kundli_nova_profile');
@@ -52,21 +58,13 @@ export default function App() {
     }
   }, [currentScreen, isDrawerOpen]);
 
+  // Subscribe to wallet state changes reactively
   useEffect(() => {
-    const getWalletData = () => {
-      const data = localStorage.getItem('kundli_nova_wallet');
-      if (data) {
-        try {
-          const parsed = JSON.parse(data);
-          setWalletBalance(parsed.balance ?? 0);
-        } catch (e) {}
-      } else {
-        const initialWallet = { balance: 0, transactions: [] };
-        localStorage.setItem('kundli_nova_wallet', JSON.stringify(initialWallet));
-        setWalletBalance(0);
-      }
-    };
-    getWalletData();
+    setWalletBalance(walletStorage.getBalance());
+    const unsubscribe = walletStorage.subscribe((state) => {
+      setWalletBalance(state.balance);
+    });
+    return unsubscribe;
   }, [isDrawerOpen, currentScreen]);
 
   useEffect(() => {

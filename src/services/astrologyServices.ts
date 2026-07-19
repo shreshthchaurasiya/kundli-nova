@@ -1,42 +1,21 @@
-import { Astrologer } from '../types';
+import { 
+  Astrologer, 
+  WalletTransaction, 
+  ConsultationSession as ConsultationRequest, 
+  ConsultationState, 
+  Message 
+} from '../types';
 import { ASTROLOGERS } from '../data';
+import { walletStorage } from './storage/walletStorage';
+import { consultationStorage } from './storage/consultationStorage';
+import { chatStorage } from './storage/chatStorage';
+import { kundliProfileStorage } from './storage/kundliProfileStorage';
+import { profileStorage } from './storage/profileStorage';
 
-// --- Types ---
-export type ConsultationState =
-  | 'CHECKING_WALLET'
-  | 'INSUFFICIENT_BALANCE'
-  | 'PREPARING_KUNDLI'
-  | 'WAITING_FOR_ASTROLOGER'
-  | 'REJECTED'
-  | 'EXPIRED'
-  | 'ACTIVE'
-  | 'LOW_BALANCE'
-  | 'RECHARGING'
-  | 'ENDED';
+export type { ConsultationState, Message };
+export type KundliData = DemoConsultationKundliData;
 
-export interface WalletTransaction {
-  id: string;
-  type: 'credit' | 'debit';
-  amount: number;
-  description: string;
-  timestamp: string;
-}
-
-export interface ConsultationRequest {
-  id: string;
-  astrologerId: string;
-  userId: string;
-  status: ConsultationState;
-  createdAt: string;
-  acceptedAt?: string;
-  endedAt?: string;
-  elapsedSeconds: number;
-  billingMode: 'wallet' | 'subscription';
-  ratePerMin: number;
-  totalCharged: number;
-}
-
-export interface KundliData {
+export interface DemoConsultationKundliData {
   lagna: string;
   moonSign: string;
   sunSign: string;
@@ -51,19 +30,6 @@ export interface KundliData {
   }>;
   northIndianChart: string[]; // House configurations
   navamsaChart: string[];
-}
-
-export interface Message {
-  id: string;
-  text?: string;
-  sender: 'astrologer' | 'user' | 'system';
-  time: string;
-  type: 'text' | 'image' | 'pdf' | 'voice' | 'system';
-  attachmentUrl?: string; // For IndexedDB, could be an "idb://<key>" string
-  attachmentName?: string;
-  attachmentSize?: string;
-  duration?: string;
-  status?: 'sent' | 'delivered' | 'read' | 'failed';
 }
 
 // Helper to delay simulation (making it asynchronous like real networks)
@@ -138,64 +104,24 @@ export async function retrieveImageFromIndexedDB(idbUrl: string): Promise<string
 export const walletService = {
   async getBalance(): Promise<number> {
     await delay(300);
-    const saved = localStorage.getItem('kundli_nova_wallet_balance');
-    if (saved !== null) {
-      const parsed = parseFloat(saved);
-      return isNaN(parsed) ? 150 : parsed;
-    }
-    localStorage.setItem('kundli_nova_wallet_balance', '150');
-    return 150;
+    return walletStorage.getBalance();
   },
 
   async recharge(amount: number): Promise<number> {
     await delay(400);
-    const current = await this.getBalance();
-    const updated = current + amount;
-    localStorage.setItem('kundli_nova_wallet_balance', updated.toString());
-
-    // Record transaction
-    const txs = await this.getTransactions();
-    const newTx: WalletTransaction = {
-      id: `tx-${Date.now()}`,
-      type: 'credit',
-      amount,
-      description: 'Wallet Recharge (Demo)',
-      timestamp: new Date().toLocaleString()
-    };
-    localStorage.setItem('kundli_nova_transactions', JSON.stringify([newTx, ...txs]));
-    return updated;
+    const updatedState = walletStorage.recharge(amount, 'Wallet Recharge (Demo)');
+    return updatedState.balance;
   },
 
   async debit(amount: number): Promise<number> {
     await delay(200);
-    const current = await this.getBalance();
-    const updated = Math.max(0, current - amount);
-    localStorage.setItem('kundli_nova_wallet_balance', updated.toString());
-
-    // Record transaction
-    const txs = await this.getTransactions();
-    const newTx: WalletTransaction = {
-      id: `tx-${Date.now()}`,
-      type: 'debit',
-      amount,
-      description: 'Consultation Session Charge',
-      timestamp: new Date().toLocaleString()
-    };
-    localStorage.setItem('kundli_nova_transactions', JSON.stringify([newTx, ...txs]));
-    return updated;
+    const updatedState = walletStorage.debit(amount, 'Consultation Session Charge');
+    return updatedState.balance;
   },
 
   async getTransactions(): Promise<WalletTransaction[]> {
     await delay(200);
-    const saved = localStorage.getItem('kundli_nova_transactions');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return [];
-      }
-    }
-    return [];
+    return walletStorage.getTransactions();
   }
 };
 
@@ -204,16 +130,20 @@ export const consultationService = {
   async createRequest(astrologerId: string, userId: string): Promise<ConsultationRequest> {
     await delay(300);
     const astro = ASTROLOGERS.find(a => a.id === astrologerId) || ASTROLOGERS[0];
+    const nowStr = new Date().toISOString();
     const newReq: ConsultationRequest = {
       id: `session-kn-${Date.now()}`,
       astrologerId,
       userId,
       status: 'CHECKING_WALLET',
-      createdAt: new Date().toISOString(),
+      createdAt: nowStr,
+      requestedAt: nowStr,
       elapsedSeconds: 0,
       billingMode: 'wallet',
       ratePerMin: astro.pricePerMinute || 25,
-      totalCharged: 0
+      ratePerMinute: astro.pricePerMinute || 25,
+      totalCharged: 0,
+      billedMinutes: 0
     };
     localStorage.setItem('kundli_nova_active_request', JSON.stringify(newReq));
     return newReq;
@@ -332,7 +262,7 @@ export const kundliService = {
     return null;
   },
 
-  async getUserKundli(userId: string): Promise<KundliData | null> {
+  async getUserKundli(userId: string): Promise<DemoConsultationKundliData | null> {
     await delay(300);
     const saved = localStorage.getItem(`kundli_nova_user_kundli_${userId}`);
     if (saved) {
@@ -346,9 +276,9 @@ export const kundliService = {
     return this.generateDemoKundli(userId);
   },
 
-  async generateDemoKundli(userId: string): Promise<KundliData> {
+  async generateDemoKundli(userId: string): Promise<DemoConsultationKundliData> {
     await delay(500);
-    const demo: KundliData = {
+    const demo: DemoConsultationKundliData = {
       lagna: 'Mesh (Aries)',
       moonSign: 'Kanya (Virgo)',
       sunSign: 'Kark (Cancer)',

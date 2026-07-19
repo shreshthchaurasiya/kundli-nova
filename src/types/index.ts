@@ -3,3 +3,4 @@ export * from './consultation';
 export * from './chat';
 export * from './profile';
 export * from './kundli';
+export * from './navigation';

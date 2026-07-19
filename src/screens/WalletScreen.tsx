@@ -1,25 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Wallet as WalletIcon, CreditCard, Clock, Gift, X, CheckCircle2 } from 'lucide-react';
-import { Screen } from '../types';
+import { Screen, WalletTransaction } from '../types';
+import { walletStorage } from '../services/storage/walletStorage';
 
 interface WalletScreenProps {
   onNavigate: (screen: Screen) => void;
 }
 
-interface Transaction {
-  id: string;
-  type: 'credit' | 'debit';
-  title: string;
-  date: string;
-  amt: string;
-  status: 'completed' | 'failed' | 'pending';
-  timestamp: number;
-}
-
 export default function WalletScreen({ onNavigate }: WalletScreenProps) {
   const [balance, setBalance] = useState<number>(0);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   const [customAmount, setCustomAmount] = useState('');
   const [successToast, setSuccessToast] = useState<string | null>(null);
@@ -45,73 +36,34 @@ export default function WalletScreen({ onNavigate }: WalletScreenProps) {
     }
   };
 
-  // Initialize and load the wallet data from LocalStorage on component mount
+  // Initialize and load the wallet data from WalletRepository on component mount
   useEffect(() => {
-    const loadWallet = () => {
-      const data = localStorage.getItem('kundli_nova_wallet');
-      if (data) {
-        try {
-          const parsed = JSON.parse(data);
-          setBalance(parsed.balance ?? 0);
-          setTransactions(parsed.transactions ?? []);
-        } catch (e) {
-          initializeEmptyWallet();
-        }
-      } else {
-        initializeEmptyWallet();
-      }
-    };
+    const walletState = walletStorage.getWalletState();
+    setBalance(walletState.balance);
+    setTransactions(walletState.transactions);
 
-    const initializeEmptyWallet = () => {
-      const initialWallet = { balance: 0, transactions: [] };
-      localStorage.setItem('kundli_nova_wallet', JSON.stringify(initialWallet));
-      setBalance(0);
-      setTransactions([]);
-    };
+    const unsubscribe = walletStorage.subscribe((newState) => {
+      setBalance(newState.balance);
+      setTransactions(newState.transactions);
+    });
 
-    loadWallet();
+    return unsubscribe;
   }, []);
 
-  // Recharge Logic - Scalable function that updates state and LocalStorage
+  // Recharge Logic - Scalable function that updates state via Repository
   const executeRecharge = (amount: number) => {
     if (isNaN(amount) || amount <= 0) return;
-    
-    const currentData = localStorage.getItem('kundli_nova_wallet');
-    let currentWallet = { balance: 0, transactions: [] as Transaction[] };
-    
-    if (currentData) {
-      try {
-        currentWallet = JSON.parse(currentData);
-      } catch (e) {}
+    try {
+      walletStorage.recharge(amount, 'Wallet Recharge');
+      
+      // Show success banner
+      setSuccessToast(`₹${amount} added successfully!`);
+      setTimeout(() => {
+        setSuccessToast(null);
+      }, 2800);
+    } catch (e) {
+      console.error('[WalletScreen] Recharge failed', e);
     }
-    
-    const newBalance = (currentWallet.balance ?? 0) + amount;
-    
-    const newTx: Transaction = {
-      id: 'tx-' + Date.now(),
-      type: 'credit',
-      title: 'Wallet Recharge',
-      date: formatTxDate(new Date()),
-      amt: `+₹${amount}`,
-      status: 'completed',
-      timestamp: Date.now()
-    };
-    
-    const updatedWallet = {
-      balance: newBalance,
-      transactions: [newTx, ...(currentWallet.transactions ?? []).slice(0, 49)] // Keep history manageable
-    };
-    
-    localStorage.setItem('kundli_nova_wallet', JSON.stringify(updatedWallet));
-    
-    setBalance(newBalance);
-    setTransactions(updatedWallet.transactions);
-    
-    // Show success banner
-    setSuccessToast(`₹${amount} added to your wallet successfully.`);
-    setTimeout(() => {
-      setSuccessToast(null);
-    }, 2800);
   };
 
   const handleQuickRechargeClick = (amtStr: string) => {
@@ -205,10 +157,12 @@ export default function WalletScreen({ onNavigate }: WalletScreenProps) {
                   </div>
                   <div className="flex-1">
                     <h4 className="font-semibold text-sm text-gray-900">{tx.title}</h4>
-                    <p className="text-xs text-gray-500">{tx.date}</p>
+                    <p className="text-xs text-gray-500">
+                      {tx.createdAt ? formatTxDate(new Date(tx.createdAt)) : (tx.description || '')}
+                    </p>
                   </div>
                   <span className={`font-bold ${tx.type === 'credit' ? 'text-green-600' : 'text-gray-900'}`}>
-                    {tx.amt}
+                    {tx.type === 'credit' ? `+₹${tx.amount}` : `-₹${tx.amount}`}
                   </span>
                 </div>
               ))
