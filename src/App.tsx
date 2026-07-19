@@ -24,14 +24,21 @@ import NovaKundliScreen from './screens/NovaKundliScreen';
 import BottomNav from './components/BottomNav';
 import { Screen, Tab } from './types';
 import { AnimatePresence, motion } from 'motion/react';
-import { runMigrations, walletStorage, profileStorage } from './services/storage';
+import { runMigrations, walletStorage } from './services/storage';
+import { useAuth } from './auth';
+
+// Auth screens that should never show the bottom nav
+const AUTH_SCREENS: Screen[] = ['splash', 'login', 'otp', 'create-profile', 'welcome-gift'];
+// Screens that show bottom nav
+const NAV_SCREENS: Screen[] = ['home', 'chat-list', 'chat-history', 'nova-ai', 'services', 'profile', 'astrologers'];
 
 export default function App() {
+  const { isAuthenticated, isLoading, user, signOut } = useAuth();
+
   const [currentScreen, setCurrentScreen] = useState<Screen>('splash');
   const [currentTab, setCurrentTab] = useState<Tab>('home');
   const [routeParams, setRouteParams] = useState<any>({});
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [profileData, setProfileData] = useState<any>(null);
   const [toast, setToast] = useState<{ message: string } | null>(null);
   const [walletBalance, setWalletBalance] = useState<number>(0);
 
@@ -40,21 +47,22 @@ export default function App() {
     runMigrations();
   }, []);
 
+  // Route based on auth state
   useEffect(() => {
-    const profile = profileStorage.getProfile();
-    if (profile) {
-      setCurrentScreen('home');
-    }
-  }, []);
+    if (isLoading) return; // Wait for session to resolve
 
-  useEffect(() => {
-    const profile = profileStorage.getProfile();
-    if (profile) {
-      setProfileData(profile);
+    if (isAuthenticated) {
+      // Only redirect to home from auth screens; don't disrupt already-in-app navigation
+      if (AUTH_SCREENS.includes(currentScreen)) {
+        setCurrentScreen('home');
+      }
     } else {
-      setProfileData(null);
+      // Not authenticated — send to login (or keep on splash while loading)
+      if (!AUTH_SCREENS.includes(currentScreen)) {
+        setCurrentScreen('login');
+      }
     }
-  }, [currentScreen, isDrawerOpen]);
+  }, [isAuthenticated, isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Subscribe to wallet state changes reactively
   useEffect(() => {
@@ -82,7 +90,7 @@ export default function App() {
     setCurrentScreen(tab);
   };
 
-  const showBottomNav = ['home', 'chat-list', 'chat-history', 'nova-ai', 'services', 'profile', 'astrologers'].includes(currentScreen);
+  const showBottomNav = NAV_SCREENS.includes(currentScreen);
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -91,8 +99,11 @@ export default function App() {
     return 'Good Evening';
   };
 
-  const userName = profileData?.name || 'Guest User';
-  const userPhone = profileData?.phone || '+91 98765 43210';
+  // Derive display name + phone from the authenticated Supabase user
+  const userName = user?.user_metadata?.name || user?.user_metadata?.full_name || 'User';
+  const userPhone = user?.phone
+    ? user.phone.replace(/^\+91(\d{5})(\d{5})$/, '+91 $1 $2')
+    : '';
 
   const menuItems = [
     { id: 'profile', label: 'My Profile', icon: <User size={20} strokeWidth={1.8} className="text-neutral-500" /> },
@@ -103,7 +114,7 @@ export default function App() {
     { id: 'logout', label: 'Logout', icon: <LogOut size={20} strokeWidth={1.8} className="text-[#EF4444]/70" />, isLogout: true },
   ];
 
-  const handleMenuClick = (id: string) => {
+  const handleMenuClick = async (id: string) => {
     setIsDrawerOpen(false);
     switch (id) {
       case 'profile':
@@ -122,8 +133,8 @@ export default function App() {
         setToast({ message: 'Connecting with Customer Support...' });
         break;
       case 'logout':
-        profileStorage.removeProfile();
-        navigate('splash');
+        await signOut();
+        // Auth state change will route to login automatically
         break;
       default:
         break;
@@ -134,7 +145,7 @@ export default function App() {
     switch (currentScreen) {
       case 'splash': return <SplashScreen onFinish={(s) => navigate(s)} />;
       case 'login': return <LoginScreen onNavigate={navigate} />;
-      case 'otp': return <OtpScreen onNavigate={navigate} />;
+      case 'otp': return <OtpScreen onNavigate={navigate} routeParams={routeParams} />;
       case 'create-profile': return <CreateProfileScreen onNavigate={navigate} />;
       case 'edit-profile': return <EditProfileScreen onNavigate={navigate} />;
       case 'view-kundli': return <NovaKundliScreen onNavigate={navigate} routeParams={{ fromScreen: 'profile' }} />;
@@ -162,6 +173,10 @@ export default function App() {
       default: return <HomeScreen onNavigate={navigate} onOpenDrawer={() => setIsDrawerOpen(true)} />;
     }
   };
+
+  // Suppress unused import warning — ViewKundliScreen kept for future use
+  void ViewKundliScreen;
+  void MessageCircle;
 
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-0 sm:p-4 font-sans text-gray-900 selection:bg-gray-200">
@@ -203,14 +218,12 @@ export default function App() {
                 transition={{ type: 'spring', damping: 32, stiffness: 280 }}
                 className="absolute inset-y-0 left-0 w-[84%] max-w-[330px] bg-white z-[100] shadow-[12px_0_40px_rgba(0,0,0,0.04)] flex flex-col overflow-hidden"
               >
-                {/* Profile Header Section - Left Aligned & Airy */}
+                {/* Profile Header Section */}
                 <div className="pt-[max(48px,env(safe-area-inset-top))] pb-[20px] px-[24px] flex flex-col items-start bg-white">
-                  {/* Greeting label above avatar */}
                   <p className="text-[11px] font-[700] text-neutral-400 uppercase tracking-widest leading-none mb-[16px]">
                     {getGreeting()}
                   </p>
 
-                  {/* Circular Avatar with soft tap hover pencil ripple */}
                   <motion.div 
                     whileTap={{ scale: 0.96 }}
                     onClick={() => {
@@ -221,30 +234,25 @@ export default function App() {
                   >
                     <div className="w-[64px] h-[64px] rounded-full bg-gradient-to-tr from-[#FF8A00] to-[#FFA733] text-white flex items-center justify-center text-[24px] font-[800] shadow-[0_4px_16px_rgba(255,138,0,0.15)] ring-4 ring-neutral-50 shrink-0 relative overflow-hidden transition-all duration-300">
                       {userName.charAt(0).toUpperCase()}
-                      
-                      {/* Subtle hover/active overlay with pencil icon */}
                       <div className="absolute inset-0 bg-black/15 opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity flex items-center justify-center duration-200">
                         <Pencil size={14} className="text-white fill-none stroke-[2.5]" />
                       </div>
                     </div>
                   </motion.div>
 
-                  {/* Name and Account Manage Text */}
                   <h2 className="text-[19px] font-[800] text-neutral-900 tracking-tight leading-tight">{userName}</h2>
                   <p className="text-[11.5px] text-neutral-400 font-semibold leading-none mt-[6px]">Manage your Kundli Nova account</p>
-                  
-                  {/* Mobile number */}
-                  <p className="text-[12.5px] text-neutral-500 font-medium leading-none mt-[10px]">{userPhone}</p>
+                  {userPhone && (
+                    <p className="text-[12.5px] text-neutral-500 font-medium leading-none mt-[10px]">{userPhone}</p>
+                  )}
                 </div>
 
-                {/* Ultra-thin divider separating header from menu */}
                 <div className="h-[1px] bg-neutral-100/60 mx-[24px] mb-[8px]" />
 
                 {/* Navigation Menu Items */}
                 <div className="flex-1 overflow-y-auto py-[8px] no-scrollbar">
                   {menuItems.map((item) => (
                     <React.Fragment key={item.id}>
-                      {/* Ultra-thin divider repeating before Logout option */}
                       {item.isLogout && (
                         <div className="h-[1px] bg-neutral-100/60 mx-[24px] my-[12px]" />
                       )}
@@ -264,7 +272,6 @@ export default function App() {
                         </div>
                         
                         <div className="flex items-center space-x-[10px]">
-                          {/* Rich Wallet info badge */}
                           {item.id === 'wallet' && (
                             <span className="text-[11.5px] font-[700] text-neutral-600 bg-neutral-100/60 px-2.5 py-0.5 rounded-full border border-neutral-100/50 tracking-tight">
                               ₹{walletBalance.toLocaleString('en-IN')}

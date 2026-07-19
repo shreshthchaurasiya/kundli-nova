@@ -5,8 +5,8 @@ import {
   ChevronRight, Sparkles, Share2, CheckCircle2, X, Camera, Info, Shield
 } from 'lucide-react';
 import { Screen } from '../types';
-import { walletStorage } from '../services/storage/walletStorage';
-import { profileStorage } from '../services/storage/profileStorage';
+import { useAuth } from '../auth';
+import { useRepositories } from '../repositories/repositoryProvider';
 
 interface ProfileScreenProps {
   onNavigate: (screen: Screen) => void;
@@ -22,31 +22,32 @@ interface AstrologyDetails {
 }
 
 export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
+  const { user } = useAuth();
+  const repositories = useRepositories();
   const [loading, setLoading] = useState(true);
   const [profileData, setProfileData] = useState<any>(null);
   const [walletBalance, setWalletBalance] = useState<number>(0);
   const [isKundliOpen, setIsKundliOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Load profile details and simulate high-fidelity loading state
   useEffect(() => {
-    const profile = profileStorage.getProfile();
-    setProfileData(profile);
-
-    setWalletBalance(walletStorage.getBalance());
-    const unsubscribe = walletStorage.subscribe((state) => {
-      setWalletBalance(state.balance);
-    });
-
-    const timer = setTimeout(() => {
-      setLoading(false);
-    }, 450);
-
-    return () => {
-      clearTimeout(timer);
-      unsubscribe();
+    const loadData = async () => {
+      try {
+        const [profile, wallet] = await Promise.all([
+          repositories.profile.getProfile(),
+          repositories.wallet.getWalletState(),
+        ]);
+        if (profile) setProfileData(profile);
+        if (wallet) setWalletBalance(wallet.balance);
+      } catch (err) {
+        console.error('Failed to load profile data:', err);
+      } finally {
+        setLoading(false);
+      }
     };
-  }, []);
+
+    loadData();
+  }, [repositories.profile, repositories.wallet]);
 
   // Helper to show premium feedback toasts
   const showToast = (msg: string) => {
@@ -62,7 +63,9 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
   const state = profileData?.state || '';
   const district = profileData?.district || '';
   const city = profileData?.city || '';
-  const phone = profileData?.phone || '+91 98765 43210';
+  const phone = user?.phone
+    ? user.phone.replace(/^\+91(\d{5})(\d{5})$/, '+91 $1 $2')
+    : profileData?.phone || '';
   const email = profileData?.email || '';
 
   // Place of Birth assembly

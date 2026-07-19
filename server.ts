@@ -3,12 +3,16 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
+import backendApp from "./src/server/app";
 
 dotenv.config();
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = parseInt(process.env.PORT || "3000", 10);
+
+  // Mount the Kundli Nova Backend Proxy (Phase 2)
+  app.use(backendApp);
 
   app.use(express.json());
 

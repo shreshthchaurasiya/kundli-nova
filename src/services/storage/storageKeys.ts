@@ -15,4 +15,5 @@ export const KEYS = {
   SAVED_KUNDLI_PREFIX: 'kundli_nova_saved_kundli_',
   USER_KUNDLI_PREFIX: 'kundli_nova_user_kundli_',
   PROFILES_LIST: 'kundli_nova_profiles_list', // for ID-based Kundli profiles
+  KUNDLI_DEFAULT_PROFILE: 'kundli_nova_default_profile',
 };

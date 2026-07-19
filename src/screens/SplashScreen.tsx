@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { motion } from 'motion/react';
 import { LOGO_URL } from '../data';
 import { Screen } from '../types';
-import { profileStorage } from '../services/storage/profileStorage';
+import { supabase } from '../lib/supabase';
 
 interface SplashScreenProps {
   onFinish: (screen: Screen) => void;
@@ -10,14 +10,17 @@ interface SplashScreenProps {
 
 export default function SplashScreen({ onFinish }: SplashScreenProps) {
   useEffect(() => {
-    const timer = setTimeout(() => {
-      const profile = profileStorage.getProfile();
-      if (profile) {
+    // Check real Supabase session — not localStorage profile
+    const check = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
         onFinish('home');
       } else {
         onFinish('login');
       }
-    }, 2000);
+    };
+
+    const timer = setTimeout(check, 1800);
     return () => clearTimeout(timer);
   }, [onFinish]);
 

@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   ArrowLeft, ChevronRight, Check, Search, X, Shield, Sparkles, 
-  User, Calendar, Clock, MapPin, Globe, Compass, Smartphone, Mail
+  User, Calendar, Clock, MapPin, Globe, Compass, Smartphone, Mail, Loader2
 } from 'lucide-react';
 import { Screen } from '../types';
-import { profileStorage } from '../services/storage/profileStorage';
+import { useRepositories } from '../repositories/repositoryProvider';
+import { useAuth } from '../auth';
 
 // Mock Data
 const COUNTRIES = [
@@ -66,11 +67,13 @@ interface EditProfileScreenProps {
 }
 
 export default function EditProfileScreen({ onNavigate }: EditProfileScreenProps) {
+  const repositories = useRepositories();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   
   // Form State
   const [fullName, setFullName] = useState('');
-  const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [gender, setGender] = useState('');
   const [dob, setDob] = useState('');
@@ -80,44 +83,48 @@ export default function EditProfileScreen({ onNavigate }: EditProfileScreenProps
   const [district, setDistrict] = useState('');
   const [city, setCity] = useState('');
   
+  // Phone from auth — read-only, not from form
+  const phoneDisplay = user?.phone
+    ? user.phone.replace(/^\+91(\d{5})(\d{5})$/, '+91 $1 $2')
+    : '';
+
   // Sheet state
   const [activeSheet, setActiveSheet] = useState<'country' | 'state' | 'district' | 'city' | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Load existing profile data on mount
+  // Load existing profile data on mount via repository
   useEffect(() => {
-    const loadProfile = () => {
-      const profile = profileStorage.getProfile();
-      if (profile) {
-        setFullName(profile.name || profile.fullName || '');
-        setPhone(profile.phone || '');
-        setEmail(profile.email || '');
-        setGender(profile.gender || '');
-        setDob(profile.dob || '');
-        setTob(profile.tob || profile.birthTime || '');
-        setCountry(profile.country || 'India');
-        setState(profile.state || '');
-        setDistrict(profile.district || '');
-        setCity(profile.city || '');
+    const loadProfile = async () => {
+      try {
+        const profile = await repositories.profile.getProfile();
+        if (profile) {
+          setFullName(profile.name || profile.fullName || '');
+          setEmail(profile.email || '');
+          setGender(profile.gender || '');
+          setDob(profile.dob || '');
+          setTob(profile.tob || profile.birthTime || '');
+          setCountry(profile.country || 'India');
+          setState(profile.state || '');
+          setDistrict(profile.district || '');
+          setCity(profile.city || '');
+        }
+      } catch (err) {
+        console.error('Failed to load profile:', err);
+      } finally {
+        setLoading(false);
       }
     };
 
     loadProfile();
-
-    const timer = setTimeout(() => {
-      setLoading(false);
-    }, 400);
-
-    return () => clearTimeout(timer);
-  }, []);
+  }, [repositories.profile]);
 
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 2500);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!fullName.trim()) {
       setErrorMessage('Full Name is required');
       return;
@@ -148,30 +155,32 @@ export default function EditProfileScreen({ onNavigate }: EditProfileScreenProps
     }
 
     setErrorMessage(null);
+    setSaving(true);
 
-    // Save changes back to localStorage
-    const updatedProfile = {
-      name: fullName.trim(),
-      fullName: fullName.trim(),
-      gender,
-      dob,
-      tob,
-      birthTime: tob,
-      country,
-      state,
-      district,
-      city,
-      phone: phone.trim(),
-      email: email.trim()
-    };
+    try {
+      await repositories.profile.saveProfile({
+        name: fullName.trim(),
+        fullName: fullName.trim(),
+        gender,
+        dob,
+        tob,
+        birthTime: tob,
+        country,
+        state,
+        district,
+        city,
+        email: email.trim() || undefined,
+      });
 
-    profileStorage.saveProfile(updatedProfile);
-
-    // Show success message and navigate back to ProfileScreen after short delay
-    triggerToast('Profile updated successfully.');
-    setTimeout(() => {
-      onNavigate('profile');
-    }, 1500);
+      triggerToast('Profile updated successfully.');
+      setTimeout(() => {
+        onNavigate('profile');
+      }, 1500);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Failed to save profile. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Safe selectors list generators based on dependency state
@@ -266,19 +275,15 @@ export default function EditProfileScreen({ onNavigate }: EditProfileScreenProps
               </div>
             </div>
 
-            {/* Phone & Email Info */}
+            {/* Phone (read-only from auth) & Email */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-[12px] font-[800] text-neutral-400 uppercase tracking-widest pl-1">Phone Number</label>
-                <div className="relative h-[54px] w-full bg-neutral-50/60 rounded-[16px] border border-neutral-100 flex items-center px-4 focus-within:border-[#FF8A00] focus-within:bg-white transition-all duration-200">
+                <div className="relative h-[54px] w-full bg-neutral-100/50 rounded-[16px] border border-neutral-100 flex items-center px-4 opacity-70">
                   <Smartphone size={18} className="text-neutral-400 mr-3 shrink-0" />
-                  <input 
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="Enter mobile number"
-                    className="flex-1 bg-transparent border-none focus:outline-none text-neutral-800 text-[14.5px] font-[600]"
-                  />
+                  <span className="flex-1 text-neutral-700 text-[14.5px] font-[600]">
+                    {phoneDisplay || 'Linked via OTP'}
+                  </span>
                 </div>
               </div>
 
@@ -470,9 +475,10 @@ export default function EditProfileScreen({ onNavigate }: EditProfileScreenProps
           <motion.button
             whileTap={{ scale: 0.98 }}
             onClick={handleSave}
-            className="w-full h-[54px] bg-[#FF8A00] text-white font-[700] rounded-2xl text-[15px] flex items-center justify-center shadow-lg shadow-[#FF8A00]/15 cursor-pointer hover:bg-[#E07A00] transition-all"
+            disabled={saving}
+            className="w-full h-[54px] bg-[#FF8A00] text-white font-[700] rounded-2xl text-[15px] flex items-center justify-center shadow-lg shadow-[#FF8A00]/15 cursor-pointer hover:bg-[#E07A00] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
           >
-            Save Changes
+            {saving ? <Loader2 size={22} className="animate-spin" /> : 'Save Changes'}
           </motion.button>
 
         </div>

@@ -1,0 +1,26 @@
+import { Router } from 'express';
+import { 
+  createSession, 
+  getActiveSession, 
+  getSessionById, 
+  heartbeatSession, 
+  endSession 
+} from '../../controllers/consultation';
+import { getMessages, sendMessage } from '../../controllers/chat';
+import { requireAuth } from '../../middleware/auth';
+import { validateRequest } from '../../middleware/validate';
+import { createConsultationSchema, consultationIdSchema } from '../../validation';
+
+const router = Router();
+
+router.use(requireAuth);
+
+router.post('/', validateRequest(createConsultationSchema), createSession);
+router.get('/active', getActiveSession);
+router.get('/:id', validateRequest(consultationIdSchema), getSessionById);
+router.post('/:id/heartbeat', validateRequest(consultationIdSchema), heartbeatSession);
+router.post('/:id/end', validateRequest(consultationIdSchema), endSession);
+router.get('/:id/messages', validateRequest(consultationIdSchema), getMessages);
+router.post('/:id/messages', validateRequest(consultationIdSchema), sendMessage);
+
+export default router;

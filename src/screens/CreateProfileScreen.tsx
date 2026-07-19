@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, ChevronDown, Search, Check, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Search, Check, ShieldCheck, Loader2 } from 'lucide-react';
 import { Screen } from '../types';
-import { profileStorage } from '../services/storage/profileStorage';
+import { useRepositories } from '../repositories/repositoryProvider';
 
 // Indian States
 const INDIAN_STATES = [
@@ -28,6 +28,7 @@ const InputWrapper = ({ label, children, delay = 0 }: any) => (
 );
 
 export default function CreateProfileScreen({ onNavigate }: CreateProfileScreenProps) {
+  const repositories = useRepositories();
   const [name, setName] = useState('');
   const [gender, setGender] = useState('');
   const [dob, setDob] = useState('');
@@ -38,6 +39,7 @@ export default function CreateProfileScreen({ onNavigate }: CreateProfileScreenP
   const [city, setCity] = useState('');
   
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
   
   // Sheet state
   const [activeSheet, setActiveSheet] = useState<'state' | null>(null);
@@ -208,21 +210,41 @@ export default function CreateProfileScreen({ onNavigate }: CreateProfileScreenP
               )}
               <button 
                 type="button"
-                onClick={() => {
+                onClick={async () => {
                   if (!name || !gender || !dob || !tob || !state || !district || !city) {
                     setError('Please fill all required fields');
                     return;
                   }
                   
-                  // Save profile using profileStorage
-                  const profileData = { name, gender, dob, tob, state, district, city };
-                  profileStorage.saveProfile(profileData);
-                  
-                  onNavigate('welcome-gift');
+                  setSaving(true);
+                  setError('');
+
+                  try {
+                    await repositories.profile.saveProfile({
+                      name,
+                      gender,
+                      dob,
+                      tob,
+                      // Map to DB column names
+                      state: state,           // backend maps → birth_state
+                      district: district,     // backend maps → birth_district
+                      city: city,             // backend maps → birth_city
+                    });
+                    onNavigate('welcome-gift');
+                  } catch (err: any) {
+                    setError(err?.message || 'Failed to save profile. Please try again.');
+                  } finally {
+                    setSaving(false);
+                  }
                 }}
-                className="w-full h-[56px] bg-[#FF8A00] rounded-[16px] text-[#FFFFFF] flex items-center justify-center active:scale-[0.98] transition-all hover:bg-[#E97700] shadow-[0_4px_14px_rgba(255,138,0,0.25)] shrink-0"
+                className="w-full h-[56px] bg-[#FF8A00] rounded-[16px] text-[#FFFFFF] flex items-center justify-center active:scale-[0.98] transition-all hover:bg-[#E97700] shadow-[0_4px_14px_rgba(255,138,0,0.25)] shrink-0 disabled:opacity-70 disabled:cursor-not-allowed"
+                disabled={saving}
               >
-                <span className="font-semibold text-[17px] tracking-wide">Complete Profile</span>
+                {saving ? (
+                  <Loader2 size={22} className="animate-spin" />
+                ) : (
+                  <span className="font-semibold text-[17px] tracking-wide">Complete Profile</span>
+                )}
               </button>
               
               <div className="mt-[24px] flex items-start justify-center space-x-[8px] max-w-[320px]">
