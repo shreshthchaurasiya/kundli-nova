@@ -2,7 +2,7 @@ import { KEYS } from './storageKeys';
 import { storageAdapter } from './storageAdapter';
 import { WalletState, WalletTransaction } from '../../types/wallet';
 import { BUSINESS_RULES } from '../../config/businessRules';
-import { IWalletRepository } from './index';
+import { IWalletRepository } from './interfaces';
 
 type WalletListener = (state: WalletState) => void;
 const listeners = new Set<WalletListener>();

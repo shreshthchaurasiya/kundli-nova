@@ -1,7 +1,7 @@
 import { KEYS } from './storageKeys';
 import { storageAdapter } from './storageAdapter';
 import { ConsultationSession } from '../../types/consultation';
-import { IConsultationRepository } from './index';
+import { IConsultationRepository } from './interfaces';
 
 type ConsultationListener = (session: ConsultationSession | null) => void;
 const listeners = new Set<ConsultationListener>();

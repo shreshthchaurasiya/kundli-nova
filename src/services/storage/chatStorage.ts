@@ -1,7 +1,7 @@
 import { KEYS } from './storageKeys';
 import { storageAdapter } from './storageAdapter';
 import { Message, ChatState, AiChatThread } from '../../types/chat';
-import { IChatRepository } from './index';
+import { IChatRepository } from './interfaces';
 
 export const chatStorage: IChatRepository = {
   getMessages(sessionId: string): Message[] {

@@ -1,7 +1,7 @@
 import { KEYS } from './storageKeys';
 import { storageAdapter } from './storageAdapter';
 import { KundliProfile, KundliData } from '../../types/kundli';
-import { IKundliProfileRepository } from './index';
+import { IKundliProfileRepository } from './interfaces';
 
 type ProfilesListener = (profiles: KundliProfile[]) => void;
 const listeners = new Set<ProfilesListener>();

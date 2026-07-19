@@ -1,7 +1,7 @@
 import { KEYS } from './storageKeys';
 import { storageAdapter } from './storageAdapter';
 import { UserProfile } from '../../types/profile';
-import { IProfileRepository } from './index';
+import { IProfileRepository } from './interfaces';
 
 export const profileStorage: IProfileRepository = {
   getProfile(): UserProfile | null {
