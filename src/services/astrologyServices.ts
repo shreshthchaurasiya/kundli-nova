@@ -145,20 +145,13 @@ export const consultationService = {
       totalCharged: 0,
       billedMinutes: 0
     };
-    localStorage.setItem('kundli_nova_active_request', JSON.stringify(newReq));
+    consultationStorage.setActiveRequest(newReq);
     return newReq;
   },
 
   async getRequest(requestId: string): Promise<ConsultationRequest | null> {
-    const saved = localStorage.getItem('kundli_nova_active_request');
-    if (saved) {
-      try {
-        const req: ConsultationRequest = JSON.parse(saved);
-        if (req.id === requestId) return req;
-      } catch {
-        return null;
-      }
-    }
+    const req = consultationStorage.getActiveRequest();
+    if (req && req.id === requestId) return req;
     return null;
   },
 
@@ -166,7 +159,7 @@ export const consultationService = {
     const req = await this.getRequest(requestId);
     if (req) {
       req.status = status;
-      localStorage.setItem('kundli_nova_active_request', JSON.stringify(req));
+      consultationStorage.setActiveRequest(req);
       return req;
     }
     return null;
@@ -178,7 +171,12 @@ export const consultationService = {
     if (req) {
       req.status = 'ACTIVE';
       req.acceptedAt = new Date().toISOString();
-      localStorage.setItem('kundli_nova_active_request', JSON.stringify(req));
+      req.startedAt = new Date().toISOString();
+      req.lastBilledAt = new Date().toISOString();
+      req.billedMinutes = 1;
+      req.totalCharged = req.ratePerMinute;
+      walletStorage.debit(req.ratePerMinute, 'Consultation Session Start');
+      consultationStorage.setActiveRequest(req);
       return req;
     }
     return null;
@@ -200,7 +198,12 @@ export const consultationService = {
     if (req) {
       req.status = 'ACTIVE';
       req.acceptedAt = new Date().toISOString();
-      localStorage.setItem('kundli_nova_active_request', JSON.stringify(req));
+      req.startedAt = new Date().toISOString();
+      req.lastBilledAt = new Date().toISOString();
+      req.billedMinutes = 1;
+      req.totalCharged = req.ratePerMinute;
+      walletStorage.debit(req.ratePerMinute, 'Consultation Session Start');
+      consultationStorage.setActiveRequest(req);
       return req;
     }
     return null;
@@ -214,18 +217,11 @@ export const consultationService = {
       req.elapsedSeconds = currentSeconds;
       req.totalCharged = currentCharged;
       req.endedAt = new Date().toISOString();
-      localStorage.setItem('kundli_nova_active_request', JSON.stringify(req));
-      
-      // Save session state to a historic catalog with unique id check
-      const history = await this.getSessionHistory();
-      const filteredHistory = history.filter(item => item.id !== sessionId);
-      localStorage.setItem('kundli_nova_session_history', JSON.stringify([req, ...filteredHistory]));
-      
-      // Also clear active request
-      localStorage.removeItem('kundli_nova_active_request');
+      consultationStorage.saveSessionSession(req);
+      consultationStorage.removeActiveRequest();
       return req;
     } else {
-      const history = await this.getSessionHistory();
+      const history = consultationStorage.getSessionHistory();
       const existing = history.find(item => item.id === sessionId);
       if (existing) {
         return existing;
@@ -235,15 +231,7 @@ export const consultationService = {
   },
 
   async getSessionHistory(): Promise<ConsultationRequest[]> {
-    const saved = localStorage.getItem('kundli_nova_session_history');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return [];
-      }
-    }
-    return [];
+    return consultationStorage.getSessionHistory();
   }
 };
 
@@ -319,19 +307,11 @@ export const kundliService = {
 export const chatService = {
   async getMessages(sessionId: string): Promise<Message[]> {
     await delay(100);
-    const saved = localStorage.getItem(`kundli_nova_chat_messages_${sessionId}`);
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return [];
-      }
-    }
-    return [];
+    return chatStorage.getMessages(sessionId);
   },
 
   async saveMessages(sessionId: string, messages: Message[]): Promise<void> {
-    localStorage.setItem(`kundli_nova_chat_messages_${sessionId}`, JSON.stringify(messages));
+    chatStorage.saveMessages(sessionId, messages);
   },
 
   async sendTextMessage(sessionId: string, senderId: string, text: string): Promise<Message> {
@@ -373,7 +353,7 @@ export const chatService = {
   },
 
   subscribeToMessages(sessionId: string, onUpdate: (messages: Message[]) => void): () => void {
-    // Poll localStorage for chat updates (creates simulation of real-time server updates)
+    // Poll storage for chat updates (creates simulation of real-time server updates)
     const interval = setInterval(async () => {
       const msgs = await this.getMessages(sessionId);
       onUpdate(msgs);
@@ -384,7 +364,7 @@ export const chatService = {
 
   async saveSessionState(sessionId: string, state: any): Promise<void> {
     await delay(100);
-    localStorage.setItem(`kundli_nova_chat_state_${sessionId}`, JSON.stringify(state));
+    chatStorage.saveChatState(sessionId, state);
   }
 };
 

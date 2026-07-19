@@ -36,7 +36,7 @@ import {
   ChevronUp,
   Image
 } from 'lucide-react';
-import { Screen, Astrologer } from '../types';
+import { Screen, Astrologer, Message, ConsultationState, KundliData } from '../types';
 import { ASTROLOGERS } from '../data';
 import { 
   walletService, 
@@ -44,11 +44,11 @@ import {
   kundliService, 
   chatService, 
   astrologerService, 
-  ConsultationState, 
-  Message, 
-  KundliData,
   retrieveImageFromIndexedDB
 } from '../services/astrologyServices';
+import { walletStorage } from '../services/storage/walletStorage';
+import { consultationStorage } from '../services/storage/consultationStorage';
+import { chatStorage } from '../services/storage/chatStorage';
 
 // Custom lazy-loaded image component for IndexedDB images to prevent UI flicker
 function IndexedDBImage({ url, className, alt }: { url: string; className?: string; alt?: string }) {
@@ -189,56 +189,81 @@ export default function ConsultationChatScreen({ astrologerId = '1', readOnlySes
       }
 
       // 4. RESTORE ACTIVE SESSION
-      const activeRequest = localStorage.getItem('kundli_nova_active_request');
-      if (activeRequest) {
-        try {
-          const parsed = JSON.parse(activeRequest);
-          if (parsed.status === 'ACTIVE' || parsed.status === 'LOW_BALANCE' || parsed.status === 'RECHARGING') {
-            // Restore session
-            setActiveSessionId(parsed.id);
-            setElapsedSeconds(parsed.elapsedSeconds || 0);
-            setTotalCharged(parsed.totalCharged || 0);
-            
-            // Re-calculate how much elapsed real time has passed since last update
-            const lastUpdated = localStorage.getItem('kundli_nova_active_request_time');
-            if (lastUpdated) {
-              const gapSeconds = Math.floor((Date.now() - parseInt(lastUpdated)) / 1000);
-              if (gapSeconds > 0) {
-                // Determine simulated minutes to bill for the offline gap
-                let additionalMinutes = 0;
-                if (isSpeedUpMode) {
-                  additionalMinutes = Math.floor(gapSeconds / 10);
-                } else {
-                  additionalMinutes = Math.floor(gapSeconds / 60);
-                }
-                
-                if (additionalMinutes > 0) {
-                  const billCost = additionalMinutes * (parsed.ratePerMin || 25);
-                  await walletService.debit(billCost);
-                  const updatedBal = await walletService.getBalance();
-                  setWalletBalance(updatedBal);
-                  setTotalCharged(prev => prev + billCost);
-                }
+      const activeReq = consultationStorage.getActiveRequest();
+      if (activeReq) {
+        if (['ACTIVE', 'LOW_BALANCE', 'RECHARGING'].includes(activeReq.status)) {
+          setActiveSessionId(activeReq.id);
+          const currentRate = activeReq.ratePerMinute || activeReq.ratePerMin || 25;
 
-                // Sync seconds
-                setElapsedSeconds(prev => prev + gapSeconds);
-              }
+          const secondsInMinute = isSpeedUpMode ? 10 : 60;
+          let currentElapsedSeconds = activeReq.elapsedSeconds || 0;
+          let currentBilledMinutes = activeReq.billedMinutes || 1;
+          let currentTotalCharged = activeReq.totalCharged || currentRate;
+
+          // Re-calculate how much elapsed real time has passed since startedAt
+          if (activeReq.startedAt) {
+            const totalElapsedMs = Date.now() - new Date(activeReq.startedAt).getTime();
+            const calculatedElapsedSeconds = Math.floor(totalElapsedMs / 1000);
+            if (calculatedElapsedSeconds > currentElapsedSeconds) {
+              currentElapsedSeconds = calculatedElapsedSeconds;
             }
 
-            // Load saved messages
-            const chatMsgs = await chatService.getMessages(parsed.id);
-            setMessages(chatMsgs);
+            const completedMinutes = Math.floor(currentElapsedSeconds / secondsInMinute);
+            const expectedTotalMinutes = 1 + completedMinutes;
 
-            // Establish startTime
-            const formattedStart = new Date(parsed.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            setStartTimeString(formattedStart);
+            if (expectedTotalMinutes > currentBilledMinutes) {
+              const unbilledMinutes = expectedTotalMinutes - currentBilledMinutes;
+              const billCost = unbilledMinutes * currentRate;
 
-            // Restore state
-            setCurrentState(parsed.status as ConsultationState);
-            return;
+              const currentWalletBal = walletStorage.getBalance();
+              if (currentWalletBal >= billCost) {
+                walletStorage.debit(billCost, 'Consultation Session Charge (Catch-up)');
+                currentBilledMinutes = expectedTotalMinutes;
+                currentTotalCharged += billCost;
+              } else {
+                const affordableMinutes = Math.floor(currentWalletBal / currentRate);
+                if (affordableMinutes > 0) {
+                  const affordableCost = affordableMinutes * currentRate;
+                  walletStorage.debit(affordableCost, 'Consultation Session Charge (Catch-up)');
+                  currentBilledMinutes += affordableMinutes;
+                  currentTotalCharged += affordableCost;
+                }
+                
+                activeReq.status = 'ENDED';
+                activeReq.endedAt = new Date().toISOString();
+                activeReq.elapsedSeconds = currentElapsedSeconds;
+                activeReq.totalCharged = currentTotalCharged;
+                activeReq.billedMinutes = currentBilledMinutes;
+                
+                consultationStorage.saveSessionSession(activeReq);
+                consultationStorage.removeActiveRequest();
+                consultationStorage.removeActiveRequestTime();
+                
+                setCurrentState('ENDED');
+                setElapsedSeconds(currentElapsedSeconds);
+                setTotalCharged(currentTotalCharged);
+                return;
+              }
+            }
           }
-        } catch (e) {
-          console.error("Restoration failed, resetting", e);
+
+          setElapsedSeconds(currentElapsedSeconds);
+          setTotalCharged(currentTotalCharged);
+
+          activeReq.elapsedSeconds = currentElapsedSeconds;
+          activeReq.billedMinutes = currentBilledMinutes;
+          activeReq.totalCharged = currentTotalCharged;
+          consultationStorage.setActiveRequest(activeReq);
+          consultationStorage.setActiveRequestTime(Date.now());
+
+          const chatMsgs = await chatService.getMessages(activeReq.id);
+          setMessages(chatMsgs);
+
+          const formattedStart = new Date(activeReq.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          setStartTimeString(formattedStart);
+
+          setCurrentState(activeReq.status);
+          return;
         }
       }
 
@@ -249,19 +274,16 @@ export default function ConsultationChatScreen({ astrologerId = '1', readOnlySes
     loadInitialData();
   }, [astrologerId]);
 
-  // Sync state and timestamp to localStorage for gap-proof session restoration
+  // Sync state and timestamp to repository for gap-proof session restoration
   useEffect(() => {
     if (activeSessionId && (currentState === 'ACTIVE' || currentState === 'LOW_BALANCE' || currentState === 'RECHARGING') && !readOnlySessionId) {
-      const activeRequest = localStorage.getItem('kundli_nova_active_request');
-      if (activeRequest) {
-        try {
-          const parsed = JSON.parse(activeRequest);
-          parsed.status = currentState;
-          parsed.elapsedSeconds = elapsedSeconds;
-          parsed.totalCharged = totalCharged;
-          localStorage.setItem('kundli_nova_active_request', JSON.stringify(parsed));
-          localStorage.setItem('kundli_nova_active_request_time', Date.now().toString());
-        } catch {}
+      const activeRequestObj = consultationStorage.getActiveRequest();
+      if (activeRequestObj) {
+        activeRequestObj.status = currentState;
+        activeRequestObj.elapsedSeconds = elapsedSeconds;
+        activeRequestObj.totalCharged = totalCharged;
+        consultationStorage.setActiveRequest(activeRequestObj);
+        consultationStorage.setActiveRequestTime(Date.now());
       }
     }
   }, [currentState, elapsedSeconds, totalCharged, activeSessionId, readOnlySessionId]);
@@ -523,8 +545,8 @@ export default function ConsultationChatScreen({ astrologerId = '1', readOnlySes
     
     // Retain clean ended states
     setCurrentState('ENDED');
-    localStorage.removeItem('kundli_nova_active_request');
-    localStorage.removeItem('kundli_nova_active_request_time');
+    consultationStorage.removeActiveRequest();
+    consultationStorage.removeActiveRequestTime();
     setShowEndConfirm(false);
   };
 

@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { MessageCircle, ChevronRight, Search, MessageSquare, ArrowRight, ShieldCheck, Clock, Sparkles, Filter } from 'lucide-react';
-import { Screen } from '../types';
+import { Screen, ConsultationSession, Message } from '../types';
 import { ASTROLOGERS } from '../data';
 import { consultationService, chatService, walletService } from '../services/astrologyServices';
+import { consultationStorage } from '../services/storage/consultationStorage';
+import { chatStorage } from '../services/storage/chatStorage';
 
 interface ChatHistoryScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
@@ -63,7 +65,7 @@ export default function ChatHistoryScreen({ onNavigate }: ChatHistoryScreenProps
   // Seed development data if empty
   const seedDevData = async () => {
     if ((import.meta as any).env.DEV) {
-      const alreadySeeded = localStorage.getItem('kundli_nova_session_history_seeded_v1');
+      const alreadySeeded = consultationStorage.isSessionSeeded();
       if (!alreadySeeded) {
         const now = new Date();
         
@@ -71,19 +73,22 @@ export default function ChatHistoryScreen({ onNavigate }: ChatHistoryScreenProps
         const seed2Date = new Date(now.getTime() - 28 * 60 * 60 * 1000); // 28 hours ago (Yesterday)
         const seed3Date = new Date(now.getTime() - 4 * 24 * 60 * 60 * 1000); // 4 days ago (Earlier)
 
-        const seedSessions = [
+        const seedSessions: ConsultationSession[] = [
           {
             id: 'session-seed-1',
             astrologerId: '2', // Tarot Priya
             userId: 'dev-user',
             status: 'ENDED',
             createdAt: seed1Date.toISOString(),
+            requestedAt: seed1Date.toISOString(),
             acceptedAt: seed1Date.toISOString(),
             endedAt: new Date(seed1Date.getTime() + 8 * 60 * 1000).toISOString(),
             elapsedSeconds: 480,
             billingMode: 'wallet',
             ratePerMin: 15,
-            totalCharged: 120
+            ratePerMinute: 15,
+            totalCharged: 120,
+            billedMinutes: 8
           },
           {
             id: 'session-seed-2',
@@ -91,12 +96,15 @@ export default function ChatHistoryScreen({ onNavigate }: ChatHistoryScreenProps
             userId: 'dev-user',
             status: 'ENDED',
             createdAt: seed2Date.toISOString(),
+            requestedAt: seed2Date.toISOString(),
             acceptedAt: seed2Date.toISOString(),
             endedAt: new Date(seed2Date.getTime() + 12 * 60 * 1000).toISOString(),
             elapsedSeconds: 720,
             billingMode: 'wallet',
             ratePerMin: 50,
-            totalCharged: 600
+            ratePerMinute: 50,
+            totalCharged: 600,
+            billedMinutes: 12
           },
           {
             id: 'session-seed-3',
@@ -104,30 +112,27 @@ export default function ChatHistoryScreen({ onNavigate }: ChatHistoryScreenProps
             userId: 'dev-user',
             status: 'ENDED',
             createdAt: seed3Date.toISOString(),
+            requestedAt: seed3Date.toISOString(),
             acceptedAt: seed3Date.toISOString(),
             endedAt: new Date(seed3Date.getTime()).toISOString(),
             elapsedSeconds: 0,
             billingMode: 'wallet',
             ratePerMin: 25,
-            totalCharged: 0
+            ratePerMinute: 25,
+            totalCharged: 0,
+            billedMinutes: 0
           }
         ];
 
         // Save to session history
-        const existingHistoryStr = localStorage.getItem('kundli_nova_session_history');
-        let existingHistory = [];
-        if (existingHistoryStr) {
-          try {
-            existingHistory = JSON.parse(existingHistoryStr);
-          } catch (e) {}
-        }
+        const existingHistory = consultationStorage.getSessionHistory();
         
         // Filter out seed IDs just in case to be idempotent
         const filteredExisting = existingHistory.filter((s: any) => !s.id.startsWith('session-seed-'));
-        localStorage.setItem('kundli_nova_session_history', JSON.stringify([...filteredExisting, ...seedSessions]));
+        consultationStorage.saveSessionHistory([...filteredExisting, ...seedSessions]);
 
         // Save messages for Seed 1
-        const msgs1 = [
+        const msgs1: Message[] = [
           {
             id: 'msg-seed1-1',
             text: 'Hello Priya, can you help me check my relationship compatibility?',
@@ -161,10 +166,10 @@ export default function ChatHistoryScreen({ onNavigate }: ChatHistoryScreenProps
             status: 'sent'
           }
         ];
-        localStorage.setItem('kundli_nova_chat_messages_session-seed-1', JSON.stringify(msgs1));
+        chatStorage.saveMessages('session-seed-1', msgs1);
 
         // Save messages for Seed 2
-        const msgs2 = [
+        const msgs2: Message[] = [
           {
             id: 'msg-seed2-1',
             text: 'Pranam Pandit ji, my career growth has stalled since January.',
@@ -198,12 +203,12 @@ export default function ChatHistoryScreen({ onNavigate }: ChatHistoryScreenProps
             status: 'sent'
           }
         ];
-        localStorage.setItem('kundli_nova_chat_messages_session-seed-2', JSON.stringify(msgs2));
+        chatStorage.saveMessages('session-seed-2', msgs2);
 
         // Save messages for Seed 3 (Cancelled)
-        localStorage.setItem('kundli_nova_chat_messages_session-seed-3', JSON.stringify([]));
+        chatStorage.saveMessages('session-seed-3', []);
 
-        localStorage.setItem('kundli_nova_session_history_seeded_v1', 'true');
+        consultationStorage.setSessionSeeded(true);
       }
     }
   };
@@ -218,13 +223,10 @@ export default function ChatHistoryScreen({ onNavigate }: ChatHistoryScreenProps
       const items: ChatItem[] = [];
 
       // 1. Process Active Request (if any)
-      const activeRequestStr = localStorage.getItem('kundli_nova_active_request');
-      if (activeRequestStr) {
-        try {
-          const activeReq = JSON.parse(activeRequestStr);
-          const astro = ASTROLOGERS.find(a => a.id === activeReq.astrologerId) || ASTROLOGERS[0];
-          
-          if (['ACTIVE', 'LOW_BALANCE', 'RECHARGING', 'PREPARING_KUNDLI', 'WAITING_FOR_ASTROLOGER'].includes(activeReq.status)) {
+      const activeReq = consultationStorage.getActiveRequest();
+      if (activeReq) {
+        const astro = ASTROLOGERS.find(a => a.id === activeReq.astrologerId) || ASTROLOGERS[0];
+        if (['ACTIVE', 'LOW_BALANCE', 'RECHARGING', 'PREPARING_KUNDLI', 'WAITING_FOR_ASTROLOGER'].includes(activeReq.status)) {
             const msgs = await chatService.getMessages(activeReq.id);
             // Filter out system messages so user doesn't see "₹25 deducted..." in preview
             const chatMsgs = msgs.filter(m => m.sender !== 'system');
@@ -260,9 +262,6 @@ export default function ChatHistoryScreen({ onNavigate }: ChatHistoryScreenProps
               walletBalance: currentBal
             });
           }
-        } catch (err) {
-          console.error("Failed to parse active request in chat tab:", err);
-        }
       }
 
       // 2. Process Completed History

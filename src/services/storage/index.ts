@@ -23,6 +23,7 @@ export interface IConsultationRepository {
   removeActiveRequestTime(): void;
   getSessionHistory(): ConsultationSession[];
   saveSessionSession(session: ConsultationSession): void;
+  saveSessionHistory(history: ConsultationSession[]): void;
   isSessionSeeded(): boolean;
   setSessionSeeded(status: boolean): void;
   subscribe(callback: (session: ConsultationSession | null) => void): () => void;

@@ -55,6 +55,10 @@ export const consultationStorage: IConsultationRepository = {
     storageAdapter.setItem(KEYS.SESSION_HISTORY, updated);
   },
 
+  saveSessionHistory(history: ConsultationSession[]): void {
+    storageAdapter.setItem(KEYS.SESSION_HISTORY, history);
+  },
+
   isSessionSeeded(): boolean {
     return storageAdapter.getRaw(KEYS.SESSION_HISTORY_SEEDED) === 'true';
   },
