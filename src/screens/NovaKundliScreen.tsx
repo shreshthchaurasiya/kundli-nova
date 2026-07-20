@@ -31,6 +31,7 @@ import { KundliData } from '../services/kundliStorage';
 import { useRepositories } from '../repositories/repositoryProvider';
 import { generateKundli } from '../services/kundliService';
 import { generateKundliPdf } from '../services/kundliPdfService';
+import { postAiRequest } from '../services/aiClient';
 
 interface NovaKundliScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
@@ -174,16 +175,11 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
         };
       }
 
-      const response = await fetch('/api/explain', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          section,
-          data: sectionData,
-          userProfile: birthDetails
-        })
+      const result = await postAiRequest<{ explanation: string }>('/api/explain', {
+        section,
+        data: sectionData,
+        userProfile: birthDetails,
       });
-      const result = await response.json();
       setExplanations(prev => ({
         ...prev,
         [section]: { text: result.explanation, loading: false }
@@ -192,7 +188,7 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
       console.error(err);
       setExplanations(prev => ({
         ...prev,
-        [section]: { text: "Radhe Radhe Ji. API connection me error hai. Kripya bad me prayas karein.", loading: false }
+        [section]: { text: err instanceof Error ? err.message : "Nova AI se connection nahi ho paaya. Kripya dobara prayas karein.", loading: false }
       }));
     }
   };

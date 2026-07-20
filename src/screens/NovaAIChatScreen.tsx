@@ -23,6 +23,7 @@ import { UserProfile } from '../types/profile';
 import { generateKundli } from '../services/kundliService';
 import { generateKundliPdf } from '../services/kundliPdfService';
 import KundliPreviewMessage from '../components/KundliPreviewMessage';
+import { postAiRequest } from '../services/aiClient';
 
 interface NovaAIChatScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
@@ -57,7 +58,6 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [userName, setUserName] = useState<string>('Shreshth');
   const [currentConvId, setCurrentConvId] = useState<string>('');
   const [currentTopic, setCurrentTopic] = useState<string>('General Guidance');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -101,12 +101,6 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
       // 1. Get user first name
       const profile = await repositories.profile.getProfile();
       setProfileData(profile);
-      let firstName = 'Shreshth';
-      if (profile) {
-        firstName = profile.name.trim().split(' ')[0];
-        setUserName(firstName);
-      }
-
       // 2. Determine if loading existing conversation or creating new
     const savedHistoryStr = localStorage.getItem('kundli_nova_ai_history');
     let historyList: SavedConversation[] = [];
@@ -153,22 +147,30 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
         initialMsgs = [userMsg];
         setMessages(initialMsgs);
         
-        // Trigger simulated response
+        // Request a real Gemini response through the authenticated server API.
         setIsTyping(true);
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        
-        const responseText = getSimulatedAstroResponse(initialQuery, firstName);
-        const systemMsg: Message = {
-          id: `nova-resp-${Date.now()}`,
-          text: responseText,
-          sender: 'nova',
-          time: getFormattedTime()
-        };
-        
-        const finalMsgs = [...initialMsgs, systemMsg];
-        setMessages(finalMsgs);
-        saveToHistory(newId, topic, finalMsgs);
-        setIsTyping(false);
+        try {
+          const responseTexts = await requestNovaResponse(initialMsgs, profile);
+          const aiMessages = responseTexts.map((text, index): Message => ({
+            id: `nova-resp-${Date.now()}-${index}`,
+            text,
+            sender: 'nova',
+            time: getFormattedTime(),
+          }));
+          const finalMsgs = [...initialMsgs, ...aiMessages];
+          setMessages(finalMsgs);
+          saveToHistory(newId, topic, finalMsgs);
+        } catch (error) {
+          const errorMessage: Message = {
+            id: `nova-error-${Date.now()}`,
+            text: error instanceof Error ? error.message : 'Nova AI se connection nahi ho paaya.',
+            sender: 'nova',
+            time: getFormattedTime(),
+          };
+          setMessages([...initialMsgs, errorMessage]);
+        } finally {
+          setIsTyping(false);
+        }
       } else {
         // Get actual profile data (already fetched)
         const activeProfileData = profile;
@@ -328,6 +330,20 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
     return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  const requestNovaResponse = async (conversation: Message[], profile: UserProfile | null) => {
+    const result = await postAiRequest<{ texts: string[] }>('/api/chat', {
+      messages: conversation
+        .filter(message => message.type === 'text' || !message.type)
+        .filter(message => Boolean(message.text))
+        .map(message => ({ sender: message.sender, text: message.text })),
+      userProfile: profile,
+    });
+    if (!Array.isArray(result.texts) || result.texts.length === 0) {
+      throw new Error('Nova AI ne empty response diya. Kripya dobara try karein.');
+    }
+    return result.texts;
+  };
+
   const handleSelectChip = async (chipText: string) => {
     if (isTyping) return;
 
@@ -342,22 +358,32 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
     setMessages(newMsgsList);
     saveToHistory(currentConvId, currentTopic, newMsgsList);
 
-    // Trigger realistic simulated astrologer typing & response
+    // Request a real Gemini response.
     setIsTyping(true);
-    await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000));
-
-    const aiText = getSimulatedAstroResponse(chipText, userName);
-    const aiMsg: Message = {
-      id: `ai-${Date.now()}`,
-      text: aiText,
-      sender: 'nova',
-      time: getFormattedTime()
-    };
-
-    const finalMsgs = [...newMsgsList, aiMsg];
-    setMessages(finalMsgs);
-    saveToHistory(currentConvId, currentTopic, finalMsgs);
-    setIsTyping(false);
+    try {
+      const responseTexts = await requestNovaResponse(newMsgsList, profileData);
+      const aiMessages = responseTexts.map((text, index): Message => ({
+        id: `ai-${Date.now()}-${index}`,
+        text,
+        sender: 'nova',
+        time: getFormattedTime(),
+      }));
+      const finalMsgs = [...newMsgsList, ...aiMessages];
+      setMessages(finalMsgs);
+      saveToHistory(currentConvId, currentTopic, finalMsgs);
+    } catch (error) {
+      const errorMessage: Message = {
+        id: `ai-error-${Date.now()}`,
+        text: error instanceof Error ? error.message : 'Nova AI se connection nahi ho paaya.',
+        sender: 'nova',
+        time: getFormattedTime(),
+      };
+      const finalMsgs = [...newMsgsList, errorMessage];
+      setMessages(finalMsgs);
+      saveToHistory(currentConvId, currentTopic, finalMsgs);
+    } finally {
+      setIsTyping(false);
+    }
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -378,65 +404,32 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
     setMessages(newMsgsList);
     saveToHistory(currentConvId, currentTopic, newMsgsList);
 
-    // Trigger realistic simulated astrologer typing & response
+    // Request a real Gemini response.
     setIsTyping(true);
-    await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000));
-
-    const aiText = getSimulatedAstroResponse(userText, userName);
-    const aiMsg: Message = {
-      id: `ai-${Date.now()}`,
-      text: aiText,
-      sender: 'nova',
-      time: getFormattedTime()
-    };
-
-    const finalMsgs = [...newMsgsList, aiMsg];
-    setMessages(finalMsgs);
-    saveToHistory(currentConvId, currentTopic, finalMsgs);
-    setIsTyping(false);
-  };
-
-  // Authentic Vedic Astrological response simulator
-  const getSimulatedAstroResponse = (query: string, name: string): string => {
-    const q = query.toLowerCase();
-    
-    if (q.includes('career') || q.includes('job') || q.includes('promotion') || q.includes('work') || q.includes('naukri')) {
-      return `Shreshth Ji, aapki kundli me Dasham house (10th house of career) par Guru aur Surya ka shubh sanyog ban raha hai.\n\nTransient Saturn (Shani Dev) abhi aapko thodi mehnat aur patience ka path sikha rahe hain. October se aapki sthiti me behad shubh sudhaar dikh raha hai. Nayi opportunities aane ki puri sambhavna hai.\n\nRemedy: Har Saturday Shani Dev ko namaskar karein aur deepak jalayein. Kya aap naya business ya current job change me se kiske baare me soch rahe hain?`;
+    try {
+      const responseTexts = await requestNovaResponse(newMsgsList, profileData);
+      const aiMessages = responseTexts.map((text, index): Message => ({
+        id: `ai-${Date.now()}-${index}`,
+        text,
+        sender: 'nova',
+        time: getFormattedTime(),
+      }));
+      const finalMsgs = [...newMsgsList, ...aiMessages];
+      setMessages(finalMsgs);
+      saveToHistory(currentConvId, currentTopic, finalMsgs);
+    } catch (error) {
+      const errorMessage: Message = {
+        id: `ai-error-${Date.now()}`,
+        text: error instanceof Error ? error.message : 'Nova AI se connection nahi ho paaya.',
+        sender: 'nova',
+        time: getFormattedTime(),
+      };
+      const finalMsgs = [...newMsgsList, errorMessage];
+      setMessages(finalMsgs);
+      saveToHistory(currentConvId, currentTopic, finalMsgs);
+    } finally {
+      setIsTyping(false);
     }
-    
-    if (q.includes('love') || q.includes('relationship') || q.includes('marriage') || q.includes('compatibility') || q.includes('vivaah') || q.includes('shaadi')) {
-      return `Radhe Radhe Ji. 7th house (house of marriage/partnerships) me Venus (Shukra Dev) ki shubh dhrishti ban rahi hai.\n\nAapki emotional connectivity aane wale samay me aur gahri hogi. Agar koi rukaawat chal rahi hai, to woh jaldi hi solve hogi. Guru (Jupiter) ka transit aane wale saal me ek majboot aur shubh relationship dasha darshata hai.\n\nRemedy: Dainik roop se Shiv-Parvati puja karein. Kya aap kisi specific planetary compatibility ke bare me janna chahte hain?`;
-    }
-
-    if (q.includes('money') || q.includes('wealth') || q.includes('finance') || q.includes('investment') || q.includes('paisa')) {
-      return `Aapka Dhan bhav (2nd house) kafi dynamic state me lag raha hai. Transient Rahu aur Guru ki vajah se temporary expenses badh sakte hain, isliye bada financial risk abhi 2 mahine talna hi behtar rahega.\n\nLekin long-term me, aapki hard work ka shubh fal dhan-vriddhi ke roop me avashya milega. Naye source of income September ke baad open hone ke sanket hain.\n\nRemedy: Har Wednesday Ganpati ko durva arpan karein aur Lal Kitab ke anusar thoda safai ka dhyan rakhein.`;
-    }
-
-    if (q.includes('family') || q.includes('parivar') || q.includes('happiness') || q.includes('peace') || q.includes('ghar') || q.includes('parents')) {
-      return `Shreshth Ji, aapki Kundli ke 4th house (Sukha bhav - house of family & peace) par Shubh grahon ki dhrishti hai.\n\nParivar me sadasyo ke bich sneh aur aadar bana rahega. Kuch temporary tension ho sakti hai par aapki samajhdaari se sab thik ho jayega. September ke baad se parivarik sukh-shanti me behad shubh sudhaar ke sanket hain.`;
-    }
-
-    if (q.includes('dasha') || q.includes('mahadasha') || q.includes('planet cycle')) {
-      return `Aapki Kundli ke anusar, aapki active dasha is samay behad mahatvapurna phase me hai.\n\nYeh period aapko naye opportunities aur career advancement ki taraf le ja rahi hai. Thoda patience rakhein aur apne goals par focused rahein, shubh samay shuru ho chuka hai.\n\nRemedy: Surya Dev ko roz subah jal arpan karein aur 'Om Namah Shivaya' ka jaap karein.`;
-    }
-
-    if (q.includes('business') || q.includes('startup') || q.includes('vyapaar')) {
-      return `Kundli ke 7th aur 10th houses ke swami abhi favourable phase me enter kar rahe hain. Naya business start karne ke liye shubh mahurat aur strong planning ki avashyakta hai.\n\nAgar aap kisi partnership me business plan kar rahe hain to paper-work aur trust ko clear rakhein. Navgrah dasha me Budh (Mercury) ki position aapki communication ko vyapaar me asardaar banayegi.\n\nRemedy: Shubh mahurat nikaalkar hi naya shubharambh karein aur Surya dev ko jal chadhayein.`;
-    }
-
-    if (q.includes('health') || q.includes('fitness') || q.includes('wellness')) {
-      return `Health dasha ke anusar, 6th house me transient Mars (Mangal Dev) ki presence dikh rahi hai. Isse kabhi-kabhi mental anxiety ya energy drainage feel ho sakti hai.\n\nKripya dhyan aur yog ko dainik routine me shamil karein. Swaasthya ki dhrishti se balanced aahar aur proper sleep sabse badi remedy hai.\n\nRemedy: Tuesday ke din Hanuman Chalisa ka paath karein.`;
-    }
-
-    if (q.includes('remedy') || q.includes(' उपाय') || q.includes('upay')) {
-      return `Aapke liye sabse saral aur prabhavshali remedies ye hain:\n\n1. Chandra Dev ko majboot karne ke liye dainik roop se subah pani me thoda sa gangajal milakar snan karein aur Shiv Puja karein.\n2. Surya Dev ko roz subah jal arpan karein taaki confidence aur career success bani rahe.\n3. Har Saturday thoda sa daan karein.\n\nYe remedies aapke aura ko clean karengi aur planetary obstacles ko kam karengi.`;
-    }
-
-    if (q.includes('numerology') || q.includes('moolank') || q.includes('bhagyank') || q.includes('number')) {
-      return `Numerology ke anusar, aapka number dynamic energy ko represent karta hai. Yeh aapke andar leadership qualities aur intuitive thinking ko badhata hai.\n\nAapka lucky number 1 aur 7 is year behad supportive hain. Important decisions in numbers ke days par lena beneficial ho sakta hai.\n\nKya aap kisi specific date ya document validation ke liye lucky days janna chahte hain?`;
-    }
-
-    return `Shreshth Ji, aapki Janam Kundli ki planetary positions ko analyze karne par mujhe behad shubh sanket dikh rahe hain.\n\nAapke planetary transits dhyan se dhyan dene aur shanti ke sath aage badhne ki salah dete hain. Planets abhi alignment me aa rahe hain taaki aapko life me clear direction mil sake.\n\nKripya mujhe apne kisi specific vishay (Career, Relationship, Wealth, ya Remedies) ke baare me bataiye taaki main gehra vishleshan karke guide kar sakoon.`;
   };
 
   // Check if we should show suggestion chips
