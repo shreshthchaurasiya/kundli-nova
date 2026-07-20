@@ -112,7 +112,7 @@ describe('API Integration Tests', () => {
         .post('/api/v1/consultations')
         .set('Authorization', token)
         .send({
-          astrologerId: '33333333-3333-4333-8333-333333333333',
+          astrologerId: '11111111-1111-1111-1111-111111111111',
           ratePerMinute: 0.01,
         });
 
@@ -120,7 +120,7 @@ describe('API Integration Tests', () => {
       expect(res.body.data.ratePerMinute).toBe(25);
       expect(supabaseAdmin.rpc).toHaveBeenCalledWith('create_consultation_session', {
         p_user_id: '22222222-2222-4222-8222-222222222222',
-        p_astrologer_id: '33333333-3333-4333-8333-333333333333',
+        p_astrologer_id: '11111111-1111-1111-1111-111111111111',
       });
     });
 
