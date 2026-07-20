@@ -1,3 +1,4 @@
+// Shared, centrally managed options used by application and profile flows.
 export const ASTROLOGER_LANGUAGES = [
   'Hindi',
   'English',
@@ -56,4 +57,3 @@ export const APPLICATION_STATUS_CONTENT = {
     description: 'Please contact support for help with your professional account.',
   },
 } as const;
-

@@ -6,7 +6,7 @@ import { AuthProvider } from './auth';
 import { RepositoryProvider } from './repositories/repositoryProvider';
 import { ProfileProvider } from './contexts/ProfileContext';
 import { WalletProvider } from './contexts/WalletContext';
-import { AstrologerPartnerProvider } from './features/astrologer';
+import { AstrologerDashboardProvider, AstrologerPartnerProvider } from './features/astrologer';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -15,7 +15,9 @@ createRoot(document.getElementById('root')!).render(
         <ProfileProvider>
           <WalletProvider>
             <AstrologerPartnerProvider>
-              <App />
+              <AstrologerDashboardProvider>
+                <App />
+              </AstrologerDashboardProvider>
             </AstrologerPartnerProvider>
           </WalletProvider>
         </ProfileProvider>

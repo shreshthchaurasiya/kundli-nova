@@ -1,8 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { useAuth } from '../../auth';
-import { supabase } from '../../lib/supabase';
-import { Astrologer } from '../../types';
-import { astrologerPartnerService } from './service';
+import { useAuth } from '../../../auth';
+import { supabase } from '../../../lib/supabase';
+import { Astrologer } from '../../../types';
+import { astrologerPartnerService } from './astrologerPartnerService';
 import {
   AstrologerApplication,
   AstrologerApplicationDraft,
@@ -141,4 +141,3 @@ export function useAstrologerPartner(): AstrologerPartnerContextValue {
   if (!context) throw new Error('useAstrologerPartner must be used inside AstrologerPartnerProvider');
   return context;
 }
-

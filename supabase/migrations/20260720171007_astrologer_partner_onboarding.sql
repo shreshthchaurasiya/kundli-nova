@@ -1,4 +1,5 @@
 -- Astrologer partner onboarding and self-managed public profiles.
+-- Filename version matches the applied remote migration history.
 -- Applications and verification documents stay private; only approved,
 -- published astrologer profiles are visible in the customer application.
 

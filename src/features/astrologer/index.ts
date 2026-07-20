@@ -1,5 +1,8 @@
-export * from './AstrologerPartnerContext';
-export * from './constants';
-export * from './service';
-export * from './types';
-
+export * from './partner/AstrologerPartnerContext';
+export * from './partner/astrologerPartnerService';
+export * from './partner/types';
+export * from './shared/constants';
+export * from './application';
+export * from './dashboard';
+export * from './profile';
+export * from './public-profile';

@@ -1,19 +1,20 @@
 import React from 'react';
 import { ArrowLeft, BadgeCheck, BriefcaseBusiness, ChevronRight, Clock3, ShieldCheck, Sparkles, UserRoundCheck } from 'lucide-react';
 import { motion } from 'motion/react';
-import { APPLICATION_STATUS_CONTENT, useAstrologerPartner } from '../features/astrologer';
-import { Screen } from '../types';
+import { useAstrologerPartner } from '../../partner/AstrologerPartnerContext';
+import { APPLICATION_STATUS_CONTENT } from '../../shared/constants';
+import { Screen } from '../../../../types';
 
-interface PartnerWithUsScreenProps {
+interface AstrologerPartnershipScreenProps {
   onNavigate: (screen: Screen, params?: unknown) => void;
 }
 
-export default function PartnerWithUsScreen({ onNavigate }: PartnerWithUsScreenProps) {
+export default function AstrologerPartnershipScreen({ onNavigate }: AstrologerPartnershipScreenProps) {
   const { application, publicProfile, isLoading, error } = useAstrologerPartner();
 
   const openAstrologerFlow = () => {
     if (publicProfile) {
-      onNavigate('manage-astrologer-profile');
+      onNavigate('astrologer-dashboard');
       return;
     }
     if (application?.status === 'pending' || application?.status === 'suspended') return;
@@ -75,8 +76,8 @@ export default function PartnerWithUsScreen({ onNavigate }: PartnerWithUsScreenP
 
           <PartnerCard
             icon={<UserRoundCheck size={22} />}
-            title={publicProfile ? 'Manage Astrologer Profile' : status === 'draft' || status === 'rejected' ? 'Continue Astrologer Application' : 'Become a Verified Astrologer'}
-            description={publicProfile ? 'Preview and update the profile customers see in the app.' : 'Create your professional profile and submit verification details.'}
+            title={publicProfile ? 'Open Astrologer Dashboard' : status === 'draft' || status === 'rejected' ? 'Continue Astrologer Application' : 'Become a Verified Astrologer'}
+            description={publicProfile ? 'Manage availability, live requests, activity and your public profile.' : 'Create your professional profile and submit verification details.'}
             onClick={openAstrologerFlow}
             disabled={isLoading || status === 'pending' || status === 'suspended'}
             accent
@@ -135,4 +136,3 @@ function PartnerCard({ icon, title, description, onClick, disabled, accent }: {
     </motion.button>
   );
 }
-

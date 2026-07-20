@@ -1,6 +1,6 @@
-import { supabase } from '../../lib/supabase';
-import { Astrologer } from '../../types';
-import { ASTROLOGER_UPLOAD_LIMITS } from './constants';
+import { supabase } from '../../../lib/supabase';
+import { Astrologer } from '../../../types';
+import { ASTROLOGER_UPLOAD_LIMITS } from '../shared/constants';
 import {
   AstrologerApplication,
   AstrologerApplicationDraft,
