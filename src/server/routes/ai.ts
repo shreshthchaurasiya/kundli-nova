@@ -22,15 +22,20 @@ export function createAiRouter(config: AiRouterConfig) {
       })
     : null;
 
-  router.use(express.json({ limit: '256kb' }));
-  router.use(rateLimit({
+  // The router is mounted at the Vite/Express app root, so middleware must
+  // only run for Nova AI endpoints. Otherwise it intercepts the React SPA
+  // (including "/") and returns UNAUTHORIZED before Vite can serve index.html.
+  const protectedAiPaths = ['/api/ai', '/api/chat', '/api/explain'];
+
+  router.use(protectedAiPaths, express.json({ limit: '256kb' }));
+  router.use(protectedAiPaths, rateLimit({
     windowMs: 60 * 1000,
     max: 20,
     standardHeaders: true,
     legacyHeaders: false,
   }));
 
-  router.use(async (req, res, next) => {
+  router.use(protectedAiPaths, async (req, res, next) => {
     if (!authClient) {
       return res.status(503).json({ code: 'AUTH_NOT_CONFIGURED', error: 'AI authentication is not configured.' });
     }
