@@ -48,6 +48,7 @@ import {
 } from '../services/astrologyServices';
 import { chatStorage } from '../services/storage/chatStorage';
 import { ApiConsultationRepository } from '../repositories/api/apiConsultationRepository';
+import { ApiError, NetworkError, TimeoutError } from '../services/api/apiErrors';
 
 const consultationRepository = new ApiConsultationRepository();
 
@@ -242,7 +243,16 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
       runKundliPreparation(session.id, result.requestTimeoutSeconds);
     } catch (error) {
       console.error('Consultation eligibility check failed', error);
-      setVerificationError('Secure consultation service could not be reached. Please retry.');
+      if (error instanceof ApiError) {
+        const message = error.statusCode === 401
+          ? 'Your login session is missing or expired. Please sign in again.'
+          : error.message;
+        setVerificationError(`${message} (HTTP ${error.statusCode})`);
+      } else if (error instanceof TimeoutError || error instanceof NetworkError) {
+        setVerificationError(error.message);
+      } else {
+        setVerificationError('Secure consultation service could not be reached. Please retry.');
+      }
     }
   };
 

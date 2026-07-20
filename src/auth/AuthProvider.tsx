@@ -5,6 +5,15 @@ import { setTokenProvider } from '../services/api/authTokenProvider';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Register the API token source before React effects run. Child effects can
+// issue API requests before a parent useEffect, so doing this inside the
+// provider effect creates an intermittent unauthenticated-request race.
+setTokenProvider(async () => {
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error || !session) return null;
+  return session.access_token;
+});
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, setState] = useState<AuthState>({
     user: null,
@@ -15,13 +24,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   useEffect(() => {
-    // Provide token fetching capability to the API client
-    setTokenProvider(async () => {
-      const { data: { session }, error } = await supabase.auth.getSession();
-      if (error || !session) return null;
-      return session.access_token;
-    });
-
     const initSession = async () => {
       try {
         const { data: { session }, error } = await supabase.auth.getSession();
