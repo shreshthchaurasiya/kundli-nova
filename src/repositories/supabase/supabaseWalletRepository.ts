@@ -1,7 +1,6 @@
 import { supabase } from '../../lib/supabase';
 import { WalletState, WalletTransaction } from '../../types/wallet';
 import { IWalletRepository } from '../interfaces/wallet';
-import { v4 as uuidv4 } from 'uuid';
 
 type TransactionRow = {
   id: string;
@@ -59,22 +58,12 @@ export class SupabaseWalletRepository implements IWalletRepository {
     }));
   }
 
-  async recharge(amount: number, _title: string, referenceId?: string): Promise<WalletState> {
-    const { error } = await supabase.rpc('demo_recharge_wallet', {
-      p_amount: amount,
-      p_idempotency_key: referenceId || uuidv4(),
-    });
-    if (error) throw error;
-    return this.getWalletState();
+  async recharge(_amount?: number, _title?: string, _referenceId?: string): Promise<WalletState> {
+    throw new Error('Direct frontend wallet recharge is not allowed. Use verified Razorpay checkout.');
   }
 
-  async debit(amount: number, _title: string, referenceId?: string): Promise<WalletState> {
-    const { error } = await supabase.rpc('demo_debit_wallet', {
-      p_amount: amount,
-      p_idempotency_key: referenceId || uuidv4(),
-    });
-    if (error) throw error;
-    return this.getWalletState();
+  async debit(_amount?: number, _title?: string, _referenceId?: string): Promise<WalletState> {
+    throw new Error('Direct frontend wallet debit is not allowed. Mutations must occur via backend RPCs.');
   }
 
   async refund(): Promise<WalletState> {

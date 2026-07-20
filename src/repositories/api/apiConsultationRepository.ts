@@ -1,5 +1,5 @@
 import { IConsultationRepository } from '../interfaces/consultation';
-import { ConsultationSession } from '../../types/consultation';
+import { ConsultationHeartbeatResult, ConsultationRequestResult, ConsultationSession } from '../../types/consultation';
 import { ApiClient } from '../../services/api/apiClient';
 import { ENDPOINTS } from '../../services/api/endpoints';
 
@@ -15,9 +15,9 @@ export class ApiConsultationRepository implements IConsultationRepository {
     }
   }
 
-  async createSession(astrologerId: string): Promise<ConsultationSession> {
-    return await ApiClient.post<ConsultationSession>(ENDPOINTS.CONSULTATION.CREATE, {
-      body: { astrologer_id: astrologerId },
+  async createSession(astrologerId: string): Promise<ConsultationRequestResult> {
+    return await ApiClient.post<ConsultationRequestResult>(ENDPOINTS.CONSULTATION.CREATE, {
+      body: { astrologerId },
     });
   }
 
@@ -25,12 +25,22 @@ export class ApiConsultationRepository implements IConsultationRepository {
     return await ApiClient.get<ConsultationSession>(ENDPOINTS.CONSULTATION.GET_BY_ID(id));
   }
 
-  async heartbeat(id: string): Promise<{ status: string; balance?: number }> {
-    return await ApiClient.post<{ status: string; balance?: number }>(ENDPOINTS.CONSULTATION.HEARTBEAT(id));
+  async heartbeat(id: string): Promise<ConsultationHeartbeatResult> {
+    return await ApiClient.post<ConsultationHeartbeatResult>(ENDPOINTS.CONSULTATION.HEARTBEAT(id));
   }
 
-  async endSession(id: string): Promise<void> {
-    await ApiClient.post(ENDPOINTS.CONSULTATION.END(id));
+  async endSession(id: string): Promise<ConsultationHeartbeatResult> {
+    return await ApiClient.post<ConsultationHeartbeatResult>(ENDPOINTS.CONSULTATION.END(id));
+  }
+
+  async expireSession(id: string): Promise<ConsultationHeartbeatResult> {
+    return await ApiClient.post<ConsultationHeartbeatResult>(ENDPOINTS.CONSULTATION.EXPIRE(id));
+  }
+
+  async transitionForDevelopment(id: string, targetStatus: 'ACTIVE' | 'REJECTED' | 'EXPIRED'): Promise<ConsultationHeartbeatResult> {
+    return await ApiClient.post<ConsultationHeartbeatResult>(ENDPOINTS.CONSULTATION.DEV_TRANSITION(id), {
+      body: { targetStatus },
+    });
   }
 
   subscribe(callback: (session: ConsultationSession | null) => void): () => void {

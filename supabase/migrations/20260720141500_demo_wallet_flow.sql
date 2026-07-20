@@ -1,6 +1,5 @@
--- Demo wallet mode: use an authenticated, per-user database operation until a
--- payment gateway is connected. Disable private.app_config.demo_wallet_enabled
--- before production/payment launch.
+-- Historical demo wallet objects are retained for migration compatibility,
+-- but remain disabled because verified Razorpay checkout is now connected.
 
 create schema if not exists private;
 revoke all on schema private from public, anon, authenticated;
@@ -12,7 +11,7 @@ create table if not exists private.app_config (
 );
 
 insert into private.app_config (key, enabled)
-values ('demo_wallet_enabled', true)
+values ('demo_wallet_enabled', false)
 on conflict (key) do update set enabled = excluded.enabled, updated_at = now();
 
 -- Remove only untouched welcome-seed balances. Wallets with a real transaction
@@ -153,7 +152,5 @@ begin
 end;
 $$;
 
-revoke execute on function public.demo_recharge_wallet(numeric, uuid) from public, anon;
-revoke execute on function public.demo_debit_wallet(numeric, uuid) from public, anon;
-grant execute on function public.demo_recharge_wallet(numeric, uuid) to authenticated;
-grant execute on function public.demo_debit_wallet(numeric, uuid) to authenticated;
+revoke execute on function public.demo_recharge_wallet(numeric, uuid) from public, anon, authenticated;
+revoke execute on function public.demo_debit_wallet(numeric, uuid) from public, anon, authenticated;

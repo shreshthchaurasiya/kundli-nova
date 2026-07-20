@@ -27,4 +27,23 @@ export interface ConsultationSession {
   elapsedSeconds: number; // timer compatibility
   billingMode?: 'wallet' | 'subscription'; // legacy compatibility
   acceptedAt?: string; // legacy compatibility
+  rechargeDeadlineAt?: string;
+}
+
+export interface ConsultationRequestResult {
+  outcome: 'created' | 'existing_session' | 'insufficient_balance';
+  session: ConsultationSession | null;
+  balance: number;
+  ratePerMinute: number;
+  minimumMinutes: number;
+  minimumRequired: number;
+  heartbeatIntervalSeconds: number;
+  requestTimeoutSeconds: number;
+  rechargeGraceSeconds: number;
+}
+
+export interface ConsultationHeartbeatResult {
+  status: string;
+  session: ConsultationSession;
+  balance?: number;
 }

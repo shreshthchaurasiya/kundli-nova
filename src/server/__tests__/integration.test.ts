@@ -61,25 +61,15 @@ describe('API Integration Tests', () => {
       expect(mockEq).toHaveBeenCalledWith('user_id', '22222222-2222-4222-8222-222222222222');
     });
 
-    it('POST /api/v1/wallet/recharge allows recharge and prevents duplicate (idempotency)', async () => {
+    it('POST /api/v1/wallet/recharge is not exposed', async () => {
       const token = mockValidToken();
-      (supabaseAdmin.rpc as any).mockResolvedValue({ data: { balance: 250 }, error: null });
-
-      // First request (Success)
-      const res1 = await request(app)
+      const res = await request(app)
         .post('/api/v1/wallet/recharge')
         .set('Authorization', token)
         .send({ amount: 100, title: 'Test', idempotencyKey: 'idemp-1' });
 
-      expect(res1.status).toBe(200);
-
-      // Second request with same key (Conflict)
-      const res2 = await request(app)
-        .post('/api/v1/wallet/recharge')
-        .set('Authorization', token)
-        .send({ amount: 100, title: 'Test', idempotencyKey: 'idemp-1' });
-
-      expect(res2.status).toBe(409); // Idempotency conflict
+      expect(res.status).toBe(404);
+      expect(supabaseAdmin.rpc).not.toHaveBeenCalled();
     });
 
     it('POST /api/v1/wallet/recharge rejects unauthorized mutation', async () => {
@@ -92,6 +82,67 @@ describe('API Integration Tests', () => {
   });
 
   describe('Consultation Endpoints', () => {
+    it('POST /api/v1/consultations resolves price on the server', async () => {
+      const token = mockValidToken();
+      (supabaseAdmin.rpc as any).mockResolvedValue({
+        data: {
+          outcome: 'created',
+          session: {
+            id: '11111111-1111-4111-8111-111111111111',
+            user_id: '22222222-2222-4222-8222-222222222222',
+            astrologer_id: '33333333-3333-4333-8333-333333333333',
+            status: 'WAITING_FOR_ASTROLOGER',
+            rate_per_minute: 25,
+            requested_at: '2026-07-20T10:00:00.000Z',
+            billed_minutes: 0,
+            total_charged: 0,
+            elapsed_seconds: 0,
+          },
+          balance: 500,
+          minimum_minutes: 5,
+          minimum_required: 125,
+          heartbeat_interval_seconds: 10,
+          request_timeout_seconds: 60,
+          recharge_grace_seconds: 30,
+        },
+        error: null,
+      });
+
+      const res = await request(app)
+        .post('/api/v1/consultations')
+        .set('Authorization', token)
+        .send({
+          astrologerId: '33333333-3333-4333-8333-333333333333',
+          ratePerMinute: 0.01,
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.data.ratePerMinute).toBe(25);
+      expect(supabaseAdmin.rpc).toHaveBeenCalledWith('create_consultation_session', {
+        p_user_id: '22222222-2222-4222-8222-222222222222',
+        p_astrologer_id: '33333333-3333-4333-8333-333333333333',
+      });
+    });
+
+    it('does not expose development transitions in test or production mode', async () => {
+      const token = mockValidToken();
+      const mockSelect = vi.fn().mockReturnThis();
+      const mockEq = vi.fn().mockReturnThis();
+      const mockSingle = vi.fn().mockResolvedValue({
+        data: { user_id: '22222222-2222-4222-8222-222222222222', status: 'WAITING_FOR_ASTROLOGER' },
+        error: null,
+      });
+      (supabaseAdmin.from as any).mockReturnValue({ select: mockSelect, eq: mockEq, single: mockSingle });
+
+      const res = await request(app)
+        .post('/api/v1/consultations/11111111-1111-4111-8111-111111111111/dev-transition')
+        .set('Authorization', token)
+        .send({ targetStatus: 'ACTIVE' });
+
+      expect(res.status).toBe(404);
+      expect(supabaseAdmin.rpc).not.toHaveBeenCalled();
+    });
+
     it('POST /api/v1/consultations/:id/heartbeat checks ownership (Cross-user denial)', async () => {
       const token = mockValidToken();
       
