@@ -28,10 +28,12 @@ const InputWrapper = ({ label, children, delay = 0 }: any) => (
 );
 
 import { useAuth } from '../auth';
+import { useProfile } from '../contexts/ProfileContext';
 
 export default function CreateProfileScreen({ onNavigate }: CreateProfileScreenProps) {
   const repositories = useRepositories();
   const { user } = useAuth();
+  const { refreshProfile } = useProfile();
   
   const [name, setName] = useState(user?.user_metadata?.name || user?.user_metadata?.full_name || '');
   const [email] = useState(user?.email || '');
@@ -268,6 +270,9 @@ export default function CreateProfileScreen({ onNavigate }: CreateProfileScreenP
                       district: district,     // backend maps → birth_district
                       city: city,             // backend maps → birth_city
                     });
+                    if (refreshProfile) {
+                      await refreshProfile();
+                    }
                     onNavigate('welcome-gift');
                   } catch (err: any) {
                     setError(err?.message || 'Failed to save profile. Please try again.');

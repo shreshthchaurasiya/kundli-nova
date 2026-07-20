@@ -85,51 +85,16 @@ export default function ChatScreen({ onNavigate, routeParams }: ChatScreenProps)
 
         setIsTyping(true);
         try {
-          const response = await fetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              messages: [
-                {
-                  id: 'greet-0',
-                  text: initialGreetingText,
-                  sender: 'astrologer',
-                  time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                },
-                {
-                  id: 'user-0',
-                  text: routeParams.initialQuery,
-                  sender: 'user',
-                  time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                }
-              ],
-              userProfile: pData || {}
-            })
-          });
-          const resData = await response.json();
+          // Simulate network delay
+          await new Promise(resolve => setTimeout(resolve, 1500));
           if (!isMounted) return;
 
-          if (resData.texts && Array.isArray(resData.texts)) {
-            for (let i = 0; i < resData.texts.length; i++) {
-              if (!isMounted) return;
-              setIsTyping(true);
-              await new Promise(resolve => setTimeout(resolve, Math.random() * 800 + 800));
-              if (!isMounted) return;
-              setMessages(prev => [...prev, {
-                id: `response-${Date.now()}-${i}`,
-                text: resData.texts[i],
-                sender: 'astrologer',
-                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-              }]);
-            }
-          } else if (resData.text) {
-            setMessages(prev => [...prev, {
-              id: `response-${Date.now()}`,
-              text: resData.text,
-              sender: 'astrologer',
-              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            }]);
-          }
+          setMessages(prev => [...prev, {
+            id: `response-${Date.now()}`,
+            text: "Radhe Radhe! Main dekh pa raha hoon ki aapka prashna mahatvapurna hai. Kripya apni pareshani vistar se batayein taaki main apki Kundli ke anusar sahi margdarshan kar saku.",
+            sender: 'astrologer',
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          }]);
         } catch (e) {
           console.error(e);
         }
@@ -246,50 +211,16 @@ export default function ChatScreen({ onNavigate, routeParams }: ChatScreenProps)
     const tempMessages = [...messages, hiddenContextMessage];
     
     try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: tempMessages,
-          userProfile: profileData || {}
-        })
-      });
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
-      const data = await response.json();
-      
-      if (data.texts && Array.isArray(data.texts)) {
-        for (let i = 0; i < data.texts.length; i++) {
-          setIsTyping(true);
-          await new Promise(resolve => setTimeout(resolve, Math.random() * 1500 + 1500));
-          setMessages(prev => [...prev, {
-            id: Date.now().toString() + i,
-            text: data.texts[i],
-            sender: 'astrologer',
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          }]);
-        }
-        setIsTyping(false);
-      } else if (data.text) {
-        setTimeout(() => {
-          setMessages(prev => [...prev, {
-            id: Date.now().toString(),
-            text: data.text,
-            sender: 'astrologer',
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          }]);
-          setIsTyping(false);
-        }, Math.random() * 1500 + 1500);
-      } else {
-        setTimeout(() => {
-          setMessages(prev => [...prev, {
-            id: Date.now().toString(),
-            text: "Kshama chahta hoon, abhi thoda vyast hoon. Kripya thodi der baad sandesh bhejen. 🙏",
-            sender: 'astrologer',
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          }]);
-          setIsTyping(false);
-        }, 1500);
-      }
+      setMessages(prev => [...prev, {
+        id: Date.now().toString(),
+        text: "Main tab tak aapki Kundli dekh raha tha... Aapki rashi me ek shubh yog ban raha hai. Kya aap iske bare me vistar se janna chahenge?",
+        sender: 'astrologer',
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }]);
+      setIsTyping(false);
     } catch (error) {
       console.error("Chat idle error:", error);
       setTimeout(() => {
@@ -317,7 +248,7 @@ export default function ChatScreen({ onNavigate, routeParams }: ChatScreenProps)
 
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!inputText.trim() || timeLeft <= 0) return;
+    if (!inputText.trim() || timeLeft <= 0 || isTyping) return;
 
     const userText = inputText.trim();
     setInputText('');
@@ -329,70 +260,33 @@ export default function ChatScreen({ onNavigate, routeParams }: ChatScreenProps)
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
-    const updatedMessages = [...messages, newUserMessage];
-    setMessages(updatedMessages);
-    
+    setMessages(prev => [...prev, newUserMessage]);
     setIsTyping(true);
 
-    try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: updatedMessages,
-          userProfile: profileData || {}
-        })
-      });
-      
-      const data = await response.json();
-      
-      if (data.texts && Array.isArray(data.texts)) {
-        for (let i = 0; i < data.texts.length; i++) {
-          setIsTyping(true);
-          // Wait between 1.5s and 3s for each bubble
-          await new Promise(resolve => setTimeout(resolve, Math.random() * 1500 + 1500));
-          setMessages(prev => [...prev, {
-            id: Date.now().toString() + i,
-            text: data.texts[i],
-            sender: 'astrologer',
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          }]);
-        }
-        setIsTyping(false);
-      } else if (data.text) {
-        // Fallback for single response
-        setTimeout(() => {
-          setMessages(prev => [...prev, {
-            id: Date.now().toString(),
-            text: data.text,
-            sender: 'astrologer',
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          }]);
-          setIsTyping(false);
-        }, Math.random() * 1500 + 1500);
-      } else {
-        setTimeout(() => {
-          setMessages(prev => [...prev, {
-            id: Date.now().toString(),
-            text: "Kshama chahta hoon, network samasya hai. Kripya thodi der baad sandesh bhejen. 🙏",
-            sender: 'astrologer',
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          }]);
-          setIsTyping(false);
-        }, 1500);
-      }
-    } catch (error) {
-      console.error("Chat error:", error);
-      setTimeout(() => {
-        setMessages(prev => [...prev, {
-          id: Date.now().toString(),
-          text: "Astrologer is experiencing a network issue. Please try again later.",
-          sender: 'astrologer',
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        }]);
-        setIsTyping(false);
-      }, 1500);
+    // Simulate network delay
+    await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000));
+    
+    let aiText = "Mujhe aapki pareshani samajh aa rahi hai. Kripya thoda aur vistar se batayein.";
+    const q = userText.toLowerCase();
+    
+    if (q.includes('career') || q.includes('job') || q.includes('work')) {
+      aiText = "Aapki kundli me 10th house strong hai. Career me jald hi nayi opportunity aane wali hai.";
+    } else if (q.includes('love') || q.includes('marriage') || q.includes('shaadi')) {
+      aiText = "7th house par Guru ki drishti hai. Relationships me sudhaar aayega, thoda patience rakhein.";
+    } else if (q.includes('money') || q.includes('finance') || q.includes('paisa')) {
+      aiText = "Financial growth thodi slow hai, par aane wale 3 mahino me dhan laabh ke yog ban rahe hain.";
+    } else if (q.includes('family') || q.includes('health')) {
+      aiText = "Parivar me shanti ka aagman hoga. Health ke liye thoda dhyan rakhein, subah jaldi uthne ka prayas karein.";
     }
+
+    setMessages(prev => [...prev, {
+      id: Date.now().toString() + "-ai",
+      text: aiText,
+      sender: 'astrologer',
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }]);
+    
+    setIsTyping(false);
   };
 
   return (

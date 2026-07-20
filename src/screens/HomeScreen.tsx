@@ -66,7 +66,7 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
       localStorage.setItem(COUNTDOWN_KEY, futureTime.toString());
       targetTime = futureTime.toString();
     }
-    
+
     const target = parseInt(targetTime, 10);
     const updateTimer = () => {
       const now = Date.now();
@@ -93,7 +93,7 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
-    
+
     return [
       hours.toString().padStart(2, '0'),
       minutes.toString().padStart(2, '0'),
@@ -134,9 +134,9 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
 
   const listCardVariants = {
     hidden: { opacity: 0, y: 16, scale: 0.98 },
-    visible: { 
-      opacity: 1, 
-      y: 0, 
+    visible: {
+      opacity: 1,
+      y: 0,
       scale: 1,
       transition: {
         type: "spring",
@@ -144,9 +144,9 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
         damping: 26
       }
     },
-    exit: { 
-      opacity: 0, 
-      y: -12, 
+    exit: {
+      opacity: 0,
+      y: -12,
       scale: 0.98,
       transition: {
         duration: 0.2
@@ -157,19 +157,19 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
   return (
     <div className="flex-1 relative overflow-hidden bg-[#FAFAFA] selection:bg-[#FF8A00]/20 flex flex-col">
       <div className="flex flex-col flex-1 overflow-y-auto no-scrollbar pb-24">
-        
+
         {/* App Bar */}
         <div className="flex items-center justify-between px-[20px] py-[16px] bg-[#FFFFFF]/90 backdrop-blur-md sticky top-0 z-30 border-b border-gray-100/60 shadow-[0_2px_12px_rgba(0,0,0,0.015)]">
-          <motion.button 
+          <motion.button
             whileTap={{ scale: 0.9 }}
-            onClick={onOpenDrawer} 
+            onClick={onOpenDrawer}
             className="p-[8px] -ml-[8px] rounded-full text-[#111827] hover:bg-gray-50 active:bg-gray-100 transition-colors"
           >
             <Menu size={22} strokeWidth={2.5} />
           </motion.button>
-          
+
           <div className="flex items-center space-x-4">
-            <button 
+            <button
               onClick={() => onNavigate('wallet')}
               className="flex items-center space-x-1.5 border border-gray-300 rounded-full pl-3 pr-1 py-1 hover:bg-gray-50 transition-colors"
             >
@@ -178,12 +178,12 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
                 <Plus size={14} strokeWidth={3} />
               </div>
             </button>
-            
+
             <button className="text-gray-600 hover:text-gray-900 transition-colors">
               <Search size={22} strokeWidth={2} />
             </button>
-            
-            <button 
+
+            <button
               onClick={() => onNavigate('chat-history')}
               className="text-gray-600 hover:text-gray-900 transition-colors relative"
             >
@@ -192,15 +192,15 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
           </div>
         </div>
 
-        <motion.div 
+        <motion.div
           variants={containerVariants}
           initial="hidden"
           animate="visible"
           className="px-[20px] space-y-[24px] mt-[16px]"
         >
-          
+
           {/* Banner Carousel */}
-          <motion.div 
+          <motion.div
             variants={itemVariants}
             className="relative rounded-[20px] overflow-hidden aspect-[2.75/1] shadow-[0_8px_30px_rgba(0,0,0,0.04)] bg-gray-950 border border-gray-100/50"
           >
@@ -213,10 +213,10 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
                 transition={{ duration: 0.4 }}
                 className="absolute inset-0"
               >
-                <img 
-                  src={BANNERS[currentBanner].image} 
-                  className="w-full h-full object-cover select-none pointer-events-none" 
-                  alt="Banner" 
+                <img
+                  src={BANNERS[currentBanner].image}
+                  className="w-full h-full object-cover select-none pointer-events-none"
+                  alt="Banner"
                   draggable={false}
                   onContextMenu={(e) => e.preventDefault()}
                   loading="eager"
@@ -224,7 +224,7 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
                 />
               </motion.div>
             </AnimatePresence>
-            
+
             {/* Pagination Dots */}
             <div className="absolute bottom-[10px] left-0 right-0 flex justify-center z-10">
               <div className="flex space-x-[5px] bg-black/15 backdrop-blur-md px-[8px] py-[5px] rounded-full">
@@ -240,18 +240,18 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
           </motion.div>
 
           {/* Offer Countdown Strip */}
-          <motion.div 
+          <motion.div
             variants={itemVariants}
             className="bg-[#FFFFFF] rounded-[16px] border border-[#F4A300]/20 shadow-[0_2px_10px_rgba(0,0,0,0.015)] px-4 py-2.5 flex items-center justify-between relative overflow-hidden"
           >
             {/* Soft decorative light gold gradient overlay */}
             <div className="absolute inset-y-0 right-0 w-32 bg-gradient-to-l from-[#F4A300]/5 to-transparent pointer-events-none"></div>
-            
+
             <div className="flex items-center gap-2 relative z-10">
               <Zap size={14} className="text-[#FF8A00] fill-[#FF8A00]/10" />
               <span className="text-[12px] font-extrabold text-gray-900 tracking-wide">Special Welcome Offer Active</span>
             </div>
-            
+
             <div className="flex items-center gap-1.5 shrink-0 bg-[#FFF9E6] border border-[#F4A300]/15 px-2.5 py-1 rounded-full relative z-10">
               <span className="text-[9.5px] font-[800] text-[#D68B00] uppercase tracking-wider">Offer Ends In</span>
               <span className="text-[12.5px] font-black text-gray-900 font-mono tracking-wider min-w-[64px] text-center">
@@ -261,7 +261,7 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
           </motion.div>
 
           {/* Quick Services Grid */}
-          <motion.div 
+          <motion.div
             variants={itemVariants}
             className="grid grid-cols-4 gap-[8px]"
           >
@@ -271,8 +271,8 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
               { icon: <img src="https://i.ibb.co/4nKbYhZw/image-removebg-preview-3.png" alt="Kundli Matching" loading="eager" fetchPriority="high" draggable={false} onContextMenu={(e) => e.preventDefault()} className="w-full h-full object-cover scale-[1.3] select-none pointer-events-none transition-transform duration-300 group-hover:scale-[1.38]" />, bg: 'bg-gradient-to-br from-[#FEF2FE] to-[#F5D6D6]', borderColor: 'border-[#F5D6D6]/40', label: 'KUNDLI\nMATCHING' },
               { icon: <img src="https://i.ibb.co/sJRdZrtC/image-removebg-preview-4.png" alt="Numerology" loading="eager" fetchPriority="high" draggable={false} onContextMenu={(e) => e.preventDefault()} className="w-full h-full object-cover scale-[1.3] select-none pointer-events-none transition-transform duration-300 group-hover:scale-[1.38]" />, bg: 'bg-gradient-to-br from-[#FAF5FF] to-[#E2D6F5]', borderColor: 'border-[#E2D6F5]/40', label: 'NUMEROLOGY' },
             ].map((item, i) => (
-              <motion.div 
-                key={i} 
+              <motion.div
+                key={i}
                 whileTap={{ scale: 0.95 }}
                 className={`flex flex-col items-center justify-start pt-[14px] pb-[10px] px-[2px] rounded-[20px] bg-[#FFFFFF] border ${item.borderColor} shadow-[0_4px_16px_rgba(0,0,0,0.015)] active:shadow-[0_2px_8px_rgba(0,0,0,0.01)] transition-all h-[118px] cursor-pointer group hover:border-[#FF8A00]/20`}
               >
@@ -287,7 +287,7 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
           </motion.div>
 
           {/* Filters Row */}
-          <motion.div 
+          <motion.div
             id="astrologer-section"
             variants={itemVariants}
             className="flex items-center overflow-x-auto no-scrollbar space-x-[8px] -mx-[20px] px-[20px] pb-[16px] pt-[2px]"
@@ -303,75 +303,75 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
               { label: 'Numerology', value: 'Numerology' },
               { label: 'Remedies', value: 'Remedies' }
             ].map((filter, i) => {
-               const isActive = activeFilter === filter.value;
-               return (
-                 <motion.button 
-                   key={i} 
-                   whileTap={{ scale: 0.94 }}
-                   onClick={() => setActiveFilter(filter.value)}
-                   className="relative flex items-center space-x-[6px] px-[18px] py-[9.5px] rounded-full whitespace-nowrap transition-colors duration-300 shrink-0 focus:outline-none"
-                 >
-                   {/* Base subtle background for unselected */}
-                   {!isActive && (
-                     <div className="absolute inset-0 rounded-full border border-gray-200/75 bg-[#FFFFFF] shadow-[0_2px_8px_rgba(0,0,0,0.015)] hover:border-gray-300/90 transition-all duration-300" />
-                   )}
-                   
-                   {/* Gliding premium background indicator */}
-                   {isActive && (
-                     <motion.div 
-                       layoutId="activeCategoryBg"
-                       className="absolute inset-0 bg-[#FF8A00] rounded-full shadow-[0_4px_16px_rgba(255,138,0,0.22)]"
-                       transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                     />
-                   )}
+              const isActive = activeFilter === filter.value;
+              return (
+                <motion.button
+                  key={i}
+                  whileTap={{ scale: 0.94 }}
+                  onClick={() => setActiveFilter(filter.value)}
+                  className="relative flex items-center space-x-[6px] px-[18px] py-[9.5px] rounded-full whitespace-nowrap transition-colors duration-300 shrink-0 focus:outline-none"
+                >
+                  {/* Base subtle background for unselected */}
+                  {!isActive && (
+                    <div className="absolute inset-0 rounded-full border border-gray-200/75 bg-[#FFFFFF] shadow-[0_2px_8px_rgba(0,0,0,0.015)] hover:border-gray-300/90 transition-all duration-300" />
+                  )}
 
-                   <span className={`relative text-[13px] font-[600] tracking-tight transition-colors duration-300 ${isActive ? 'text-white font-[700]' : 'text-[#4B5563]'}`}>
-                     {filter.label}
-                   </span>
-                   
-                   {filter.icon && (
-                     <span className={`relative transition-colors duration-300 ${isActive ? 'text-white' : 'text-[#9CA3AF]'}`}>
-                       {filter.icon}
-                     </span>
-                   )}
-                 </motion.button>
-               );
+                  {/* Gliding premium background indicator */}
+                  {isActive && (
+                    <motion.div
+                      layoutId="activeCategoryBg"
+                      className="absolute inset-0 bg-[#FF8A00] rounded-full shadow-[0_4px_16px_rgba(255,138,0,0.22)]"
+                      transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                    />
+                  )}
+
+                  <span className={`relative text-[13px] font-[600] tracking-tight transition-colors duration-300 ${isActive ? 'text-white font-[700]' : 'text-[#4B5563]'}`}>
+                    {filter.label}
+                  </span>
+
+                  {filter.icon && (
+                    <span className={`relative transition-colors duration-300 ${isActive ? 'text-white' : 'text-[#9CA3AF]'}`}>
+                      {filter.icon}
+                    </span>
+                  )}
+                </motion.button>
+              );
             })}
           </motion.div>
 
           {/* Dynamic Top Astrologer Feature */}
           <motion.div variants={itemVariants} className="space-y-[12px]">
-             <div className="flex items-center justify-between">
-               <h3 className="text-[13px] font-[800] text-[#111827] uppercase tracking-wider">Recommended For You</h3>
-               <div className="flex items-center space-x-[12px]">
-                 <div className="flex space-x-[4px]">
-                   {ASTROLOGERS.slice(0,3).map((_, idx) => (
-                     <div key={idx} className={`h-[4px] rounded-full transition-all duration-300 ${currentBanner % 3 === idx ? 'w-[12px] bg-[#FF8A00]' : 'w-[4px] bg-[#E5E7EB]'}`} />
-                   ))}
-                 </div>
-                 <button 
-                   onClick={() => setActiveFilter(null)}
-                   className="text-[11px] font-[800] text-[#FF8A00] hover:text-[#E07A00] active:scale-95 transition-all uppercase tracking-wider focus:outline-none"
-                 >
-                   View All
-                 </button>
-               </div>
-             </div>
-             <AnimatePresence mode="wait">
-               <motion.div
-                 key={currentBanner % 3}
-                 initial={{ opacity: 0, scale: 0.97, y: 4 }}
-                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                 exit={{ opacity: 0, scale: 0.97, y: -4 }}
-                 transition={{ duration: 0.35, ease: "easeInOut" }}
-               >
-                 <TopAstrologerCard 
-                   astro={ASTROLOGERS[currentBanner % 3]} 
-                   onClick={() => onNavigate('astrologer-profile', { astrologerId: ASTROLOGERS[currentBanner % 3].id })} 
-                   onChat={() => onNavigate('consultation-chat', { astrologerId: ASTROLOGERS[currentBanner % 3].id })} 
-                 />
-               </motion.div>
-             </AnimatePresence>
+            <div className="flex items-center justify-between">
+              <h3 className="text-[13px] font-[800] text-[#111827] uppercase tracking-wider">Recommended For You</h3>
+              <div className="flex items-center space-x-[12px]">
+                <div className="flex space-x-[4px]">
+                  {ASTROLOGERS.slice(0, 3).map((_, idx) => (
+                    <div key={idx} className={`h-[4px] rounded-full transition-all duration-300 ${currentBanner % 3 === idx ? 'w-[12px] bg-[#FF8A00]' : 'w-[4px] bg-[#E5E7EB]'}`} />
+                  ))}
+                </div>
+                <button
+                  onClick={() => setActiveFilter(null)}
+                  className="text-[11px] font-[800] text-[#FF8A00] hover:text-[#E07A00] active:scale-95 transition-all uppercase tracking-wider focus:outline-none"
+                >
+                  View All
+                </button>
+              </div>
+            </div>
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={currentBanner % 3}
+                initial={{ opacity: 0, scale: 0.97, y: 4 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.97, y: -4 }}
+                transition={{ duration: 0.35, ease: "easeInOut" }}
+              >
+                <TopAstrologerCard
+                  astro={ASTROLOGERS[currentBanner % 3]}
+                  onClick={() => onNavigate('astrologer-profile', { astrologerId: ASTROLOGERS[currentBanner % 3].id })}
+                  onChat={() => onNavigate('consultation-chat', { astrologerId: ASTROLOGERS[currentBanner % 3].id })}
+                />
+              </motion.div>
+            </AnimatePresence>
           </motion.div>
 
           {/* Normal Astrologers List */}
@@ -390,10 +390,10 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
                   variants={listCardVariants}
                   layout
                 >
-                  <TopAstrologerCard 
-                    astro={astro} 
-                    onClick={() => onNavigate('astrologer-profile', { astrologerId: astro.id })} 
-                    onChat={() => onNavigate('consultation-chat', { astrologerId: astro.id })} 
+                  <TopAstrologerCard
+                    astro={astro}
+                    onClick={() => onNavigate('astrologer-profile', { astrologerId: astro.id })}
+                    onChat={() => onNavigate('consultation-chat', { astrologerId: astro.id })}
                   />
                 </motion.div>
               ))}
@@ -401,7 +401,7 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
           </AnimatePresence>
 
           {/* Today's Cosmic Dashboard - Luxury Vedic Layout */}
-          <motion.div 
+          <motion.div
             variants={itemVariants}
             className="bg-[#FFFFFF] rounded-[24px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-[#F4A300]/20 relative overflow-hidden"
           >
@@ -418,7 +418,7 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
             </svg>
 
             <div className="p-4 relative z-10">
-              
+
               {/* Header */}
               <div className="flex items-center justify-between mb-3">
                 <div>
@@ -439,7 +439,7 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
                     Your stars are aligning for a powerful, productive day.
                   </p>
                 </div>
-                
+
                 {/* Elegant Gauge Ring */}
                 <div className="relative w-[60px] h-[60px] flex items-center justify-center shrink-0">
                   <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
@@ -569,7 +569,7 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
           </motion.div>
 
           {/* Today's Panchang Section */}
-          <motion.div 
+          <motion.div
             variants={itemVariants}
             className="bg-[#FFFFFF] rounded-[24px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-[#F4A300]/20 relative overflow-hidden"
           >
@@ -637,13 +637,13 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
           </motion.div>
 
           {/* Daily Lucky Insights Section */}
-          <motion.div 
+          <motion.div
             variants={itemVariants}
             className="bg-[#FFFFFF] rounded-[24px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-[#F4A300]/20 relative overflow-hidden"
           >
             {/* Subtle Celestial Decorative Gradients */}
             <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-b from-[#F4A300]/4 to-transparent rounded-full blur-2xl pointer-events-none"></div>
-            
+
             <div className="p-4 relative z-10">
               {/* Header */}
               <div className="flex items-center justify-between mb-3">
@@ -704,7 +704,7 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
           </motion.div>
 
           {/* Live Astrologers Status Row */}
-          <motion.div 
+          <motion.div
             variants={itemVariants}
             onClick={() => {
               const targetEl = document.getElementById('astrologer-section');
@@ -745,7 +745,7 @@ export const TopAstrologerCard: React.FC<{ astro: Astrologer, onClick: () => voi
   const trustSignal = astro.id % 2 === 0 ? "5000+ Chats" : "Replies in <1 min";
 
   return (
-    <motion.div 
+    <motion.div
       whileHover={{ y: -3, shadow: "0_10px_30px_rgba(0,0,0,0.025)" }}
       whileTap={{ scale: 0.98 }}
       onClick={onClick}
@@ -753,10 +753,10 @@ export const TopAstrologerCard: React.FC<{ astro: Astrologer, onClick: () => voi
     >
       {/* Left Portrait Block - nested with elevation & premium cropping */}
       <div className="relative shrink-0 w-[110px] h-[122px] rounded-[16px] overflow-hidden bg-gray-50 border border-gray-100/65 shadow-sm group">
-        <img 
-          src={astro.image} 
-          alt={astro.name} 
-          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-104" 
+        <img
+          src={astro.image}
+          alt={astro.name}
+          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-104"
           loading="lazy"
         />
       </div>
@@ -774,7 +774,7 @@ export const TopAstrologerCard: React.FC<{ astro: Astrologer, onClick: () => voi
               </div>
             </div>
           </div>
-          
+
           <p className="text-[11px] font-[600] text-[#6B7280] leading-none uppercase tracking-wider">
             {astro.skills.slice(0, 3).join(' • ')}
           </p>
@@ -802,7 +802,7 @@ export const TopAstrologerCard: React.FC<{ astro: Astrologer, onClick: () => voi
             </span>
           </div>
 
-          <motion.button 
+          <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.96 }}
             onClick={(e) => {
