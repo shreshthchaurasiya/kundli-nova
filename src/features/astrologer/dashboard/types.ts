@@ -1,6 +1,6 @@
 export type AstrologerAvailability = 'ONLINE' | 'BUSY' | 'OFFLINE';
 
-export type AstrologerDashboardTab = 'home' | 'requests' | 'activity';
+export type AstrologerDashboardTab = 'home' | 'requests' | 'chats' | 'profile';
 
 export type AstrologerConsultationStatus =
   | 'CHECKING_WALLET'
@@ -9,6 +9,7 @@ export type AstrologerConsultationStatus =
   | 'WAITING_FOR_ASTROLOGER'
   | 'REJECTED'
   | 'EXPIRED'
+  | 'CANCELLED'
   | 'ACTIVE'
   | 'LOW_BALANCE'
   | 'RECHARGING'
@@ -27,6 +28,7 @@ export interface AstrologerWorkspaceProfile {
 
 export interface AstrologerDashboardSession {
   id: string;
+  customerDisplayName?: string;
   status: AstrologerConsultationStatus;
   ratePerMinute: number;
   requestedAt: string;

@@ -7,8 +7,11 @@ export interface IConsultationRepository {
   getSession(id: string): Promise<ConsultationSession>;
   heartbeat(id: string): Promise<ConsultationHeartbeatResult>;
   endSession(id: string): Promise<ConsultationHeartbeatResult>;
+  endAssignedSession(id: string): Promise<ConsultationHeartbeatResult>;
   expireSession(id: string): Promise<ConsultationHeartbeatResult>;
-  transitionForDevelopment(id: string, targetStatus: 'ACTIVE' | 'REJECTED' | 'EXPIRED'): Promise<ConsultationHeartbeatResult>;
+  acceptSession(id: string): Promise<ConsultationHeartbeatResult>;
+  rejectSession(id: string): Promise<ConsultationHeartbeatResult>;
+  cancelSession(id: string): Promise<ConsultationHeartbeatResult>;
   
   // Expose subscriptions if realtime is supported, else polling handled higher up
   subscribe(callback: (session: ConsultationSession | null) => void): () => void;

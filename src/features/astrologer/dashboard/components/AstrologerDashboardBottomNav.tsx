@@ -1,11 +1,10 @@
 import React from 'react';
-import { CalendarClock, Home, UserRound, UsersRound } from 'lucide-react';
+import { Home, MessageCircleMore, UserRound, UsersRound } from 'lucide-react';
 import { AstrologerDashboardTab } from '../types';
 
 interface AstrologerDashboardBottomNavProps {
   currentTab: AstrologerDashboardTab;
   onTabChange: (tab: AstrologerDashboardTab) => void;
-  onOpenProfile: () => void;
 }
 
 const tabs: Array<{
@@ -15,14 +14,13 @@ const tabs: Array<{
 }> = [
   { id: 'home', label: 'Home', icon: Home },
   { id: 'requests', label: 'Requests', icon: UsersRound },
-  { id: 'activity', label: 'Activity', icon: CalendarClock },
+  { id: 'chats', label: 'Chats', icon: MessageCircleMore },
   { id: 'profile', label: 'Profile', icon: UserRound },
 ];
 
 export default function AstrologerDashboardBottomNav({
   currentTab,
   onTabChange,
-  onOpenProfile,
 }: AstrologerDashboardBottomNavProps) {
   return (
     <nav className="border-t border-neutral-100 bg-white px-3 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_24px_rgba(0,0,0,0.025)]">
@@ -34,7 +32,7 @@ export default function AstrologerDashboardBottomNav({
             <button
               key={tab.id}
               type="button"
-              onClick={() => tab.id === 'profile' ? onOpenProfile() : onTabChange(tab.id)}
+              onClick={() => onTabChange(tab.id)}
               className={`flex min-h-[54px] flex-col items-center justify-center gap-1.5 rounded-xl text-[10px] font-bold transition-colors ${
                 isActive ? 'text-[#FF8A00]' : 'text-neutral-400 active:bg-neutral-50'
               }`}

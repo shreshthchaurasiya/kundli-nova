@@ -1,12 +1,12 @@
 import { Response, NextFunction } from 'express';
 import type { AuthenticatedRequest } from '../types';
 import { supabaseAdmin } from '../config/supabase';
-import { env } from '../config/env';
 import { ApiError } from '../errors/ApiError';
 
 type SessionRow = Record<string, unknown> & {
   id: string;
   user_id: string;
+  astrologer_id: string | null;
   status: string;
 };
 
@@ -21,6 +21,7 @@ const serializeSession = (row: SessionRow | null) => {
     id: row.id,
     userId: row.user_id,
     astrologerId: row.astrologer_id,
+    customerDisplayName: row.customer_display_name ?? undefined,
     status: row.status,
     ratePerMinute: Number(row.rate_per_minute),
     requestedAt: row.requested_at,
@@ -33,6 +34,19 @@ const serializeSession = (row: SessionRow | null) => {
     elapsedSeconds: Number(row.elapsed_seconds),
     rechargeDeadlineAt: row.recharge_deadline_at ?? undefined,
   };
+};
+
+const requireAssignedAstrologerSession = async (sessionId: string, userId: string) => {
+  const { data, error } = await supabaseAdmin
+    .from('consultation_sessions')
+    .select('*, astrologers!inner(user_id, is_published)')
+    .eq('id', sessionId)
+    .eq('astrologers.user_id', userId)
+    .eq('astrologers.is_published', true)
+    .single();
+
+  if (error || !data) throw new ApiError(404, 'Assigned consultation not found');
+  return data as unknown as SessionRow;
 };
 
 const requireOwnedSession = async (sessionId: string, userId: string) => {
@@ -153,6 +167,19 @@ export const endSession = async (req: AuthenticatedRequest, res: Response, next:
   }
 };
 
+export const endAssignedSession = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    await requireAssignedAstrologerSession(req.params.id, req.user!.id);
+    const result = await runSessionRpc('finish_consultation_session', {
+      p_session_id: req.params.id,
+      p_reason: 'astrologer_ended',
+    });
+    res.status(200).json({ status: 'success', data: serializeRpcResult(result) });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const expireSession = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     await requireOwnedSession(req.params.id, req.user!.id);
@@ -163,15 +190,38 @@ export const expireSession = async (req: AuthenticatedRequest, res: Response, ne
   }
 };
 
-export const transitionSessionForDevelopment = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+export const acceptAssignedSession = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    if (env.NODE_ENV !== 'development') {
-      throw new ApiError(404, 'Route not found');
-    }
-    await requireOwnedSession(req.params.id, req.user!.id);
-    const result = await runSessionRpc('transition_waiting_consultation', {
+    await requireAssignedAstrologerSession(req.params.id, req.user!.id);
+    const result = await runSessionRpc('accept_astrologer_consultation', {
       p_session_id: req.params.id,
-      p_target_status: req.body.targetStatus,
+      p_astrologer_user_id: req.user!.id,
+    });
+    res.status(200).json({ status: 'success', data: serializeRpcResult(result) });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const rejectAssignedSession = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    await requireAssignedAstrologerSession(req.params.id, req.user!.id);
+    const result = await runSessionRpc('reject_astrologer_consultation', {
+      p_session_id: req.params.id,
+      p_astrologer_user_id: req.user!.id,
+    });
+    res.status(200).json({ status: 'success', data: serializeRpcResult(result) });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const cancelWaitingSession = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    await requireOwnedSession(req.params.id, req.user!.id);
+    const result = await runSessionRpc('cancel_customer_consultation', {
+      p_session_id: req.params.id,
+      p_customer_user_id: req.user!.id,
     });
     res.status(200).json({ status: 'success', data: serializeRpcResult(result) });
   } catch (error) {

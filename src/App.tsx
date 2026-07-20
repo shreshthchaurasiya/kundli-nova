@@ -26,6 +26,7 @@ import HelpSupportScreen from './screens/HelpSupportScreen';
 import {
   AstrologerApplicationScreen,
   AstrologerDashboardScreen,
+  AstrologerConsultationChatScreen,
   AstrologerPartnershipScreen,
   AstrologerProfileEditorScreen,
   PublicAstrologerProfileScreen,
@@ -205,6 +206,15 @@ export default function App() {
       case 'partner-with-us': return <AstrologerPartnershipScreen onNavigate={navigate} />;
       case 'astrologer-application': return <AstrologerApplicationScreen onNavigate={navigate} />;
       case 'astrologer-dashboard': return <AstrologerDashboardScreen onNavigate={navigate} />;
+      case 'astrologer-consultation-chat': return (
+        <AstrologerConsultationChatScreen
+          sessionId={routeParams?.sessionId}
+          customerName={routeParams?.customerName}
+          startedAt={routeParams?.startedAt}
+          readOnly={routeParams?.readOnly}
+          onNavigate={navigate}
+        />
+      );
       case 'manage-astrologer-profile': return <AstrologerProfileEditorScreen onNavigate={navigate} />;
       case 'help-support': return <HelpSupportScreen onNavigate={navigate} routeParams={routeParams} />;
       case 'category-detail': return <CategoryDetailScreen category={routeParams?.category} onNavigate={navigate} />;

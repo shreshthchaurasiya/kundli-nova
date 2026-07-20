@@ -23,6 +23,7 @@ export type Screen =
   | 'partner-with-us'
   | 'astrologer-application'
   | 'astrologer-dashboard'
+  | 'astrologer-consultation-chat'
   | 'manage-astrologer-profile'
   | 'help-support'
   | 'category-detail'

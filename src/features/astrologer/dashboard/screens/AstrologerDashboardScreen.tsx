@@ -8,9 +8,11 @@ import {
   Clock3,
   LoaderCircle,
   MessageCircleMore,
+  Pencil,
   RefreshCw,
   ShieldCheck,
   UsersRound,
+  UserRound,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Screen } from '../../../../types';
@@ -18,6 +20,9 @@ import AstrologerDashboardBottomNav from '../components/AstrologerDashboardBotto
 import { useAstrologerDashboard } from '../AstrologerDashboardContext';
 import { AstrologerDashboardSession, AstrologerDashboardTab } from '../types';
 import { ACTIVE_ASTROLOGER_SESSION_STATUSES } from '../dashboardConfig';
+import { ApiConsultationRepository } from '../../../../repositories/api/apiConsultationRepository';
+
+const consultationRepository = new ApiConsultationRepository();
 
 interface AstrologerDashboardScreenProps {
   onNavigate: (screen: Screen, params?: unknown) => void;
@@ -58,6 +63,8 @@ export default function AstrologerDashboardScreen({ onNavigate }: AstrologerDash
     setAvailability,
   } = useAstrologerDashboard();
   const [currentTab, setCurrentTab] = useState<AstrologerDashboardTab>('home');
+  const [processingSessionId, setProcessingSessionId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const waitingSessions = useMemo(
     () => sessions.filter(session => session.status === 'WAITING_FOR_ASTROLOGER'),
@@ -67,6 +74,42 @@ export default function AstrologerDashboardScreen({ onNavigate }: AstrologerDash
     () => sessions.filter(session => activeStatuses.has(session.status)),
     [sessions],
   );
+  const chatSessions = useMemo(
+    () => sessions.filter(session => session.status !== 'WAITING_FOR_ASTROLOGER'),
+    [sessions],
+  );
+
+  const openChat = (session: AstrologerDashboardSession) => {
+    onNavigate('astrologer-consultation-chat', {
+      sessionId: session.id,
+      customerName: session.customerDisplayName,
+      startedAt: session.startedAt,
+      readOnly: !activeStatuses.has(session.status),
+    });
+  };
+
+  const decideRequest = async (session: AstrologerDashboardSession, decision: 'accept' | 'reject') => {
+    if (processingSessionId) return;
+    setProcessingSessionId(session.id);
+    setActionError(null);
+    try {
+      const result = decision === 'accept'
+        ? await consultationRepository.acceptSession(session.id)
+        : await consultationRepository.rejectSession(session.id);
+      await refresh();
+      if (decision === 'accept' && result.session) {
+        onNavigate('astrologer-consultation-chat', {
+          sessionId: result.session.id,
+          customerName: session.customerDisplayName,
+          startedAt: result.session.startedAt,
+        });
+      }
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : 'Unable to update this consultation request.');
+    } finally {
+      setProcessingSessionId(null);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -117,10 +160,10 @@ export default function AstrologerDashboardScreen({ onNavigate }: AstrologerDash
         </button>
       </header>
 
-      {error && (
+      {(error || actionError) && (
         <div className="mx-5 mt-4 flex items-center justify-between gap-3 rounded-2xl border border-red-100 bg-red-50 px-4 py-3">
-          <p className="text-xs font-semibold text-red-700">{error}</p>
-          <button type="button" onClick={() => void refresh()} className="shrink-0 rounded-full p-2 text-red-600 active:bg-red-100"><RefreshCw size={15} /></button>
+          <p className="text-xs font-semibold text-red-700">{actionError || error}</p>
+          <button type="button" onClick={() => { setActionError(null); void refresh(); }} className="shrink-0 rounded-full p-2 text-red-600 active:bg-red-100"><RefreshCw size={15} /></button>
         </div>
       )}
 
@@ -164,6 +207,9 @@ export default function AstrologerDashboardScreen({ onNavigate }: AstrologerDash
               emptyTitle="No consultation waiting"
               emptyDescription={isOnline ? 'New requests will appear here automatically.' : 'Go online to start receiving consultation requests.'}
               sessions={[...waitingSessions, ...activeSessions].slice(0, 4)}
+              processingSessionId={processingSessionId}
+              onDecision={decideRequest}
+              onOpen={openChat}
             />
 
             <button
@@ -184,23 +230,55 @@ export default function AstrologerDashboardScreen({ onNavigate }: AstrologerDash
             emptyTitle="No requests waiting"
             emptyDescription={isOnline ? 'Your queue is clear. New requests appear in realtime.' : 'Go online from Home to receive requests.'}
             sessions={waitingSessions}
+            processingSessionId={processingSessionId}
+            onDecision={decideRequest}
+            onOpen={openChat}
           />
         )}
 
-        {currentTab === 'activity' && (
+        {currentTab === 'chats' && (
           <DashboardList
-            title="Consultation activity"
-            emptyTitle="No consultation activity"
-            emptyDescription="Your assigned consultations will appear here after customers request them."
-            sessions={sessions}
+            title="Chats & history"
+            emptyTitle="No consultation chats yet"
+            emptyDescription="Accepted and completed consultations will appear here with their saved messages."
+            sessions={chatSessions}
+            processingSessionId={processingSessionId}
+            onDecision={decideRequest}
+            onOpen={openChat}
           />
+        )}
+
+        {currentTab === 'profile' && (
+          <section className="space-y-4">
+            <div className="rounded-[22px] border border-neutral-100 bg-white p-5 shadow-[0_4px_18px_rgba(0,0,0,0.025)]">
+              <div className="flex items-center gap-4">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-orange-50">
+                  {profile.image ? <img src={profile.image} alt={profile.name} className="h-full w-full object-cover" /> : <UserRound className="text-[#FF8A00]" />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5"><h2 className="truncate text-lg font-black text-neutral-900">{profile.name}</h2><BadgeCheck size={17} className="text-emerald-500" /></div>
+                  <p className="mt-1 text-xs font-semibold text-neutral-500">{formatMoney(profile.pricePerMinute)}/min</p>
+                  <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-emerald-600">Verified public profile</p>
+                </div>
+              </div>
+            </div>
+            <button type="button" onClick={() => onNavigate('manage-astrologer-profile')} className="flex w-full items-center gap-3 rounded-[18px] border border-neutral-100 bg-white p-4 text-left">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-orange-50 text-[#FF8A00]"><Pencil size={18} /></span>
+              <span className="min-w-0 flex-1"><span className="block text-sm font-extrabold text-neutral-900">Edit public profile</span><span className="mt-1 block text-[11px] font-medium text-neutral-500">Photo, experience, expertise, languages and introduction.</span></span>
+              <ArrowRight size={17} className="text-neutral-300" />
+            </button>
+            <button type="button" onClick={() => onNavigate('astrologer-profile', { astrologerId: profile.id })} className="flex w-full items-center gap-3 rounded-[18px] border border-neutral-100 bg-white p-4 text-left">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-100 text-neutral-600"><UserRound size={18} /></span>
+              <span className="min-w-0 flex-1"><span className="block text-sm font-extrabold text-neutral-900">Preview customer profile</span><span className="mt-1 block text-[11px] font-medium text-neutral-500">See exactly what Kundli Nova customers see.</span></span>
+              <ArrowRight size={17} className="text-neutral-300" />
+            </button>
+          </section>
         )}
       </main>
 
       <AstrologerDashboardBottomNav
         currentTab={currentTab}
         onTabChange={setCurrentTab}
-        onOpenProfile={() => onNavigate('manage-astrologer-profile')}
       />
     </div>
   );
@@ -221,11 +299,17 @@ function DashboardList({
   emptyTitle,
   emptyDescription,
   sessions,
+  processingSessionId,
+  onDecision,
+  onOpen,
 }: {
   title: string;
   emptyTitle: string;
   emptyDescription: string;
   sessions: AstrologerDashboardSession[];
+  processingSessionId: string | null;
+  onDecision: (session: AstrologerDashboardSession, decision: 'accept' | 'reject') => Promise<void>;
+  onOpen: (session: AstrologerDashboardSession) => void;
 }) {
   return (
     <section>
@@ -245,7 +329,7 @@ function DashboardList({
             <motion.article key={session.id} layout className="rounded-[17px] border border-neutral-100 bg-white p-4 shadow-[0_3px_14px_rgba(0,0,0,0.02)]">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-extrabold text-neutral-900">Consultation</p>
+                  <p className="text-sm font-extrabold text-neutral-900">{session.customerDisplayName || 'Kundli Nova customer'}</p>
                   <p className="mt-1 text-[11px] font-medium text-neutral-400">Requested {formatDateTime(session.requestedAt)}</p>
                 </div>
                 <span className={`rounded-full px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-wide ${
@@ -259,6 +343,18 @@ function DashboardList({
                 <span>{session.billedMinutes} billed min</span>
                 <span className="ml-auto font-extrabold text-neutral-800">{formatMoney(session.totalCharged)}</span>
               </div>
+              {session.status === 'WAITING_FOR_ASTROLOGER' ? (
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button type="button" disabled={processingSessionId === session.id} onClick={() => void onDecision(session, 'reject')} className="h-10 rounded-xl border border-neutral-200 text-[11px] font-extrabold text-neutral-600 disabled:opacity-50">Decline</button>
+                  <button type="button" disabled={processingSessionId === session.id} onClick={() => void onDecision(session, 'accept')} className="flex h-10 items-center justify-center gap-1.5 rounded-xl bg-[#FF8A00] text-[11px] font-extrabold text-white disabled:opacity-50">
+                    {processingSessionId === session.id && <LoaderCircle size={14} className="animate-spin" />} Accept & chat
+                  </button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => onOpen(session)} className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-neutral-950 text-[11px] font-extrabold text-white">
+                  <MessageCircleMore size={14} /> {activeStatuses.has(session.status) ? 'Open live chat' : 'View chat history'}
+                </button>
+              )}
             </motion.article>
           ))}
         </div>

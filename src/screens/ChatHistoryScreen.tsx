@@ -4,7 +4,7 @@ import { ChevronRight, MessageCircle, Search, Sparkles, UserRound } from 'lucide
 import { Screen } from '../types';
 import { ApiConsultationRepository } from '../repositories/api/apiConsultationRepository';
 import { chatStorage } from '../services/storage/chatStorage';
-import { chatService } from '../services/astrologyServices';
+import { ApiChatRepository } from '../repositories/api/apiChatRepository';
 import { useAstrologerPartner } from '../features/astrologer';
 
 
@@ -26,6 +26,7 @@ interface HistoryItem {
 }
 
 const consultationRepository = new ApiConsultationRepository();
+const chatRepository = new ApiChatRepository();
 const OPEN_STATUSES = new Set(['CHECKING_WALLET', 'PREPARING_KUNDLI', 'WAITING_FOR_ASTROLOGER', 'ACTIVE', 'LOW_BALANCE', 'RECHARGING']);
 
 const timestampValue = (value: string) => {
@@ -65,7 +66,7 @@ export default function ChatHistoryScreen({ onNavigate }: ChatHistoryScreenProps
 
         const paidItems: HistoryItem[] = await Promise.all((sessions || []).map(async session => {
           const astrologer = astrologers.find(item => item.id === session.astrologerId);
-          const rawMessages = await chatService.getMessages(session.id);
+          const rawMessages = await chatRepository.getMessages(session.id);
           const messages = Array.isArray(rawMessages) ? rawMessages.filter(message => message?.sender !== 'system') : [];
           const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
           return {

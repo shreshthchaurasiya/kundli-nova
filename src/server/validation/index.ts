@@ -13,17 +13,18 @@ export const createConsultationSchema = z.object({
   }),
 });
 
-export const consultationTransitionSchema = z.object({
+export const consultationIdSchema = z.object({
+  params: z.object({
+    id: z.string().uuid('Invalid consultation session ID'),
+  }),
+});
+
+export const consultationMessageSchema = z.object({
   params: z.object({
     id: z.string().uuid('Invalid consultation session ID'),
   }),
   body: z.object({
-    targetStatus: z.enum(['ACTIVE', 'REJECTED', 'EXPIRED']),
-  }),
-});
-
-export const consultationIdSchema = z.object({
-  params: z.object({
-    id: z.string().uuid('Invalid consultation session ID'),
+    text: z.string().trim().min(1, 'Message cannot be empty').max(4000, 'Message is too long'),
+    client_message_id: z.string().uuid('Invalid client message ID'),
   }),
 });

@@ -6,3 +6,4 @@ export * from './application';
 export * from './dashboard';
 export * from './profile';
 export * from './public-profile';
+export * from './chat';

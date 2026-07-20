@@ -181,6 +181,64 @@ describe('API Integration Tests', () => {
       expect(supabaseAdmin.rpc).not.toHaveBeenCalled();
     });
 
+    it('allows only the assigned astrologer to accept a waiting consultation', async () => {
+      const token = mockValidToken();
+      const mockSelect = vi.fn().mockReturnThis();
+      const mockEq = vi.fn().mockReturnThis();
+      const mockSingle = vi.fn().mockResolvedValue({
+        data: {
+          id: '11111111-1111-4111-8111-111111111111',
+          astrologer_id: '33333333-3333-4333-8333-333333333333',
+          status: 'WAITING_FOR_ASTROLOGER',
+        },
+        error: null,
+      });
+      (supabaseAdmin.from as any).mockReturnValue({ select: mockSelect, eq: mockEq, single: mockSingle });
+      (supabaseAdmin.rpc as any).mockResolvedValue({
+        data: {
+          status: 'started',
+          session: {
+            id: '11111111-1111-4111-8111-111111111111',
+            user_id: '44444444-4444-4444-8444-444444444444',
+            astrologer_id: '33333333-3333-4333-8333-333333333333',
+            status: 'ACTIVE',
+            rate_per_minute: 15,
+            requested_at: '2026-07-20T10:00:00.000Z',
+            billed_minutes: 1,
+            total_charged: 15,
+            elapsed_seconds: 0,
+          },
+        },
+        error: null,
+      });
+
+      const res = await request(app)
+        .post('/api/v1/consultations/11111111-1111-4111-8111-111111111111/accept')
+        .set('Authorization', token);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.session.status).toBe('ACTIVE');
+      expect(supabaseAdmin.rpc).toHaveBeenCalledWith('accept_astrologer_consultation', {
+        p_session_id: '11111111-1111-4111-8111-111111111111',
+        p_astrologer_user_id: '22222222-2222-4222-8222-222222222222',
+      });
+    });
+
+    it('does not call the acceptance RPC for an unassigned user', async () => {
+      const token = mockValidToken();
+      const mockSelect = vi.fn().mockReturnThis();
+      const mockEq = vi.fn().mockReturnThis();
+      const mockSingle = vi.fn().mockResolvedValue({ data: null, error: { message: 'not found' } });
+      (supabaseAdmin.from as any).mockReturnValue({ select: mockSelect, eq: mockEq, single: mockSingle });
+
+      const res = await request(app)
+        .post('/api/v1/consultations/11111111-1111-4111-8111-111111111111/accept')
+        .set('Authorization', token);
+
+      expect(res.status).toBe(404);
+      expect(supabaseAdmin.rpc).not.toHaveBeenCalled();
+    });
+
     it('POST /api/v1/consultations/:id/heartbeat checks ownership (Cross-user denial)', async () => {
       const token = mockValidToken();
       

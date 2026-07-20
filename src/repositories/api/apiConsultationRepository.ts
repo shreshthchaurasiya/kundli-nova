@@ -37,14 +37,24 @@ export class ApiConsultationRepository implements IConsultationRepository {
     return await ApiClient.post<ConsultationHeartbeatResult>(ENDPOINTS.CONSULTATION.END(id));
   }
 
+  async endAssignedSession(id: string): Promise<ConsultationHeartbeatResult> {
+    return await ApiClient.post<ConsultationHeartbeatResult>(ENDPOINTS.CONSULTATION.ASTROLOGER_END(id));
+  }
+
   async expireSession(id: string): Promise<ConsultationHeartbeatResult> {
     return await ApiClient.post<ConsultationHeartbeatResult>(ENDPOINTS.CONSULTATION.EXPIRE(id));
   }
 
-  async transitionForDevelopment(id: string, targetStatus: 'ACTIVE' | 'REJECTED' | 'EXPIRED'): Promise<ConsultationHeartbeatResult> {
-    return await ApiClient.post<ConsultationHeartbeatResult>(ENDPOINTS.CONSULTATION.DEV_TRANSITION(id), {
-      body: { targetStatus },
-    });
+  async acceptSession(id: string): Promise<ConsultationHeartbeatResult> {
+    return await ApiClient.post<ConsultationHeartbeatResult>(ENDPOINTS.CONSULTATION.ACCEPT(id));
+  }
+
+  async rejectSession(id: string): Promise<ConsultationHeartbeatResult> {
+    return await ApiClient.post<ConsultationHeartbeatResult>(ENDPOINTS.CONSULTATION.REJECT(id));
+  }
+
+  async cancelSession(id: string): Promise<ConsultationHeartbeatResult> {
+    return await ApiClient.post<ConsultationHeartbeatResult>(ENDPOINTS.CONSULTATION.CANCEL(id));
   }
 
   subscribe(callback: (session: ConsultationSession | null) => void): () => void {

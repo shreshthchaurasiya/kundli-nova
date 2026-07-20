@@ -16,8 +16,11 @@ export const ENDPOINTS = {
     GET_BY_ID: (id: string) => `${API_BASE}/consultations/${id}`,
     HEARTBEAT: (id: string) => `${API_BASE}/consultations/${id}/heartbeat`,
     END: (id: string) => `${API_BASE}/consultations/${id}/end`,
+    ASTROLOGER_END: (id: string) => `${API_BASE}/consultations/${id}/astrologer-end`,
     EXPIRE: (id: string) => `${API_BASE}/consultations/${id}/expire`,
-    DEV_TRANSITION: (id: string) => `${API_BASE}/consultations/${id}/dev-transition`,
+    ACCEPT: (id: string) => `${API_BASE}/consultations/${id}/accept`,
+    REJECT: (id: string) => `${API_BASE}/consultations/${id}/reject`,
+    CANCEL: (id: string) => `${API_BASE}/consultations/${id}/cancel`,
   },
   PROFILE: {
     GET: `${API_BASE}/profile`,

@@ -20,6 +20,7 @@ type WorkspaceProfileRow = {
 
 type DashboardSessionRow = {
   id: string;
+  customer_display_name: string | null;
   status: AstrologerDashboardSession['status'];
   rate_per_minute: number | string;
   requested_at: string;
@@ -42,6 +43,7 @@ const workspaceProfileColumns = [
 
 const dashboardSessionColumns = [
   'id',
+  'customer_display_name',
   'status',
   'rate_per_minute',
   'requested_at',
@@ -67,6 +69,7 @@ function mapProfile(row: WorkspaceProfileRow): AstrologerWorkspaceProfile {
 function mapSession(row: DashboardSessionRow): AstrologerDashboardSession {
   return {
     id: row.id,
+    customerDisplayName: row.customer_display_name ?? undefined,
     status: row.status,
     ratePerMinute: Number(row.rate_per_minute),
     requestedAt: row.requested_at,

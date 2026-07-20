@@ -4,18 +4,12 @@ import {
   ArrowLeft, 
   Phone, 
   Video, 
-  Paperclip, 
   Send, 
   Clock, 
   BadgeCheck, 
   Star, 
   ShieldCheck, 
   Check, 
-  CheckCheck, 
-  FileText, 
-  Play, 
-  Volume2, 
-  Image as ImageIcon, 
   Sparkles, 
   ChevronRight,
   Info,
@@ -36,52 +30,20 @@ import {
   ChevronUp,
   Image
 } from 'lucide-react';
-import { Screen, Astrologer, Message, ConsultationState, KundliData } from '../types';
-import { ASTROLOGERS } from '../data';
-import { 
-  walletService, 
-  consultationService, 
-  kundliService, 
-  chatService, 
-  astrologerService, 
-  retrieveImageFromIndexedDB
-} from '../services/astrologyServices';
+import { Screen, Message, ConsultationState, KundliData } from '../types';
+import { walletBalanceService } from '../services/wallet/walletBalanceService';
 import { chatStorage } from '../services/storage/chatStorage';
 import { ApiConsultationRepository } from '../repositories/api/apiConsultationRepository';
 import { ApiError, NetworkError, TimeoutError } from '../services/api/apiErrors';
 import CelestialChatBackground from '../components/chat/CelestialChatBackground';
+import { useAstrologerPartner } from '../features/astrologer';
+import { ApiChatRepository } from '../repositories/api/apiChatRepository';
+import { supabase } from '../lib/supabase';
+import { useProfile } from '../contexts/ProfileContext';
+import { ConsultationMessageBubble } from '../features/consultation-chat';
 
 const consultationRepository = new ApiConsultationRepository();
-
-// Custom lazy-loaded image component for IndexedDB images to prevent UI flicker
-function IndexedDBImage({ url, className, alt }: { url: string; className?: string; alt?: string }) {
-  const [src, setSrc] = useState<string>('');
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let active = true;
-    if (url.startsWith('idb://')) {
-      retrieveImageFromIndexedDB(url).then(data => {
-        if (active) {
-          setSrc(data);
-          setLoading(false);
-        }
-      });
-    } else {
-      setSrc(url);
-      setLoading(false);
-    }
-    return () => {
-      active = false;
-    };
-  }, [url]);
-
-  if (loading) {
-    return <div className={`bg-neutral-100 animate-pulse ${className}`} />;
-  }
-
-  return <img src={src || 'https://images.unsplash.com/photo-1515942400420-2b98fed1f515?w=500'} alt={alt} className={className} />;
-}
+const chatRepository = new ApiChatRepository();
 
 interface ConsultationChatScreenProps {
   astrologerId?: string;
@@ -89,10 +51,11 @@ interface ConsultationChatScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
 }
 
-export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1111-1111-111111111111', readOnlySessionId, onNavigate }: ConsultationChatScreenProps) {
-  const [astro, setAstro] = useState<Astrologer>(() => {
-    return ASTROLOGERS.find(a => a.id === astrologerId) || ASTROLOGERS[0];
-  });
+export default function ConsultationChatScreen({ astrologerId, readOnlySessionId, onNavigate }: ConsultationChatScreenProps) {
+  const { directory } = useAstrologerPartner();
+  const { profile: authenticatedProfile } = useProfile();
+  const [resolvedAstrologerId, setResolvedAstrologerId] = useState(astrologerId ?? '');
+  const astro = directory.find(item => item.id === resolvedAstrologerId) ?? null;
 
   // --- Central Consultation State Machine ---
   const [currentState, setCurrentState] = useState<ConsultationState>('CHECKING_WALLET');
@@ -102,8 +65,6 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
   const [userProfile, setUserProfile] = useState<any>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const [isAttachmentOpen, setIsAttachmentOpen] = useState(false);
   const [activeCall, setActiveCall] = useState<'voice' | 'video' | null>(null);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [startTimeString, setStartTimeString] = useState('');
@@ -127,11 +88,6 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
   // Waiting Screen State
   const [waitingTimeoutSeconds, setWaitingTimeoutSeconds] = useState(60);
 
-  // File Upload Previews
-  const [selectedImageFile, setSelectedImageFile] = useState<string>('');
-  const [selectedImageName, setSelectedImageName] = useState<string>('');
-  const [isUploadingImage, setIsUploadingImage] = useState(false);
-  const [uploadFailed, setUploadFailed] = useState(false);
 
   // References
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -155,33 +111,32 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
   // -----------------------------------------------------------------
   useEffect(() => {
     async function loadInitialData() {
-      // 1. Fetch astrologer
-      const currentAstro = await astrologerService.getAstrologer(astrologerId);
-      if (currentAstro) setAstro(currentAstro);
+      if (!astrologerId && !readOnlySessionId) {
+        setVerificationError('No astrologer was selected for this consultation.');
+        return;
+      }
 
       // 2. Load wallet balance
-      const balance = await walletService.getBalance();
+      const balance = await walletBalanceService.getBalance();
       setWalletBalance(balance);
 
-      // 3. Load user profile & Kundli details
-      const profile = await kundliService.getUserProfile('current-user');
-      setUserProfile(profile);
-      const kData = await kundliService.generateDemoKundli('current-user');
-      setKundliData(kData);
+      // Use only the authenticated profile. Kundli data is attached once the
+      // production Kundli engine supplies it; no synthetic chart is generated.
+      setUserProfile(authenticatedProfile);
+      setKundliData(null);
 
       // 0. CHECK IF READ-ONLY SESSION IS REQUESTED
       if (readOnlySessionId) {
         try {
           const pastSession = await consultationRepository.getSession(readOnlySessionId);
-          const pastAstro = await astrologerService.getAstrologer(pastSession.astrologerId);
-          if (pastAstro) setAstro(pastAstro);
+          setResolvedAstrologerId(pastSession.astrologerId);
           
           setActiveSessionId(pastSession.id);
           setElapsedSeconds(pastSession.elapsedSeconds || 0);
           setTotalCharged(pastSession.totalCharged || 0);
           
           // Load past messages
-          const chatMsgs = await chatService.getMessages(pastSession.id);
+          const chatMsgs = await chatRepository.getMessages(pastSession.id);
           setMessages(chatMsgs);
           
           const formattedStart = new Date(pastSession.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -201,7 +156,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
     }
 
     loadInitialData();
-  }, [astrologerId]);
+  }, [astrologerId, readOnlySessionId]);
 
   // -----------------------------------------------------------------
   // 1. WALLET VERIFICATION FLOW
@@ -210,6 +165,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
     setCurrentState('CHECKING_WALLET');
     setVerificationError('');
     try {
+      if (!astrologerId) throw new Error('No astrologer selected');
       const result = await consultationRepository.createSession(astrologerId);
       setWalletBalance(result.balance);
       setRatePerMin(result.ratePerMinute);
@@ -235,7 +191,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
       if (['ACTIVE', 'LOW_BALANCE', 'RECHARGING'].includes(session.status)) {
         const heartbeat = await consultationRepository.heartbeat(session.id);
         hydrateBillingState(heartbeat.session, heartbeat.balance);
-        setMessages(await chatService.getMessages(session.id));
+        setMessages(await chatRepository.getMessages(session.id));
         return;
       }
 
@@ -244,7 +200,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
         return;
       }
 
-      runKundliPreparation(session.id, result.requestTimeoutSeconds);
+      runAstrologerReviewWait(session.id, result.requestTimeoutSeconds);
     } catch (error) {
       console.error('Consultation eligibility check failed', error);
       if (error instanceof ApiError) {
@@ -317,59 +273,23 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
     }, 1000);
   };
 
-  // Wait Simulation actions
-  const handleSimulateAccept = async () => {
-    if (waitingTimerRef.current) clearInterval(waitingTimerRef.current);
-    
-    // Set starting session details
-    const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    setStartTimeString(nowStr);
-    setElapsedSeconds(0);
-    setTotalCharged(0);
-
-    // Initialize chat messages
-    const initialMsgs: Message[] = [
-      {
-        id: 'welcome-system',
-        sender: 'system',
-        time: nowStr,
-        type: 'system'
-      },
-      {
-        id: 'astro-greet-1',
-        text: `Radhe Radhe! Pranam 🙏 Main ${astro?.name || 'Astro'} bol raha hoon. Janam Kundli ka vivechan safalta-purvak prarambh ho gaya hai.`,
-        sender: 'astrologer',
-        time: nowStr,
-        type: 'text'
-      },
-      {
-        id: 'astro-greet-2',
-        text: `Aapke vivah, career, aur dhan yog ke vishleshan hetu dasha chakra taiyaar hai. Kripya apna sawal puchhein. Main sahyog karne ke liye sachet hoon.`,
-        sender: 'astrologer',
-        time: nowStr,
-        type: 'text'
+  useEffect(() => {
+    if (!activeSessionId) return;
+    const refreshSession = async () => {
+      const session = await consultationRepository.getSession(activeSessionId);
+      hydrateBillingState(session);
+      if (session.startedAt) setStartTimeString(new Date(session.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      if (['ACTIVE', 'LOW_BALANCE', 'RECHARGING', 'ENDED'].includes(session.status)) {
+        setMessages(await chatRepository.getMessages(activeSessionId));
       }
-    ];
-
-    setMessages(initialMsgs);
-    await chatService.saveMessages(activeSessionId, initialMsgs);
-    
-    // Mark ACTIVE
-    const result = await consultationRepository.transitionForDevelopment(activeSessionId, 'ACTIVE');
-    hydrateBillingState(result.session, result.balance);
-  };
-
-  const handleSimulateReject = async () => {
-    if (waitingTimerRef.current) clearInterval(waitingTimerRef.current);
-    const result = await consultationRepository.transitionForDevelopment(activeSessionId, 'REJECTED');
-    hydrateBillingState(result.session, result.balance);
-  };
-
-  const handleSimulateTimeout = async () => {
-    if (waitingTimerRef.current) clearInterval(waitingTimerRef.current);
-    const result = await consultationRepository.transitionForDevelopment(activeSessionId, 'EXPIRED');
-    hydrateBillingState(result.session, result.balance);
-  };
+    };
+    const channel = supabase
+      .channel(`customer-consultation:${activeSessionId}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'consultation_sessions', filter: `id=eq.${activeSessionId}` }, () => void refreshSession())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'consultation_messages', filter: `session_id=eq.${activeSessionId}` }, async () => setMessages(await chatRepository.getMessages(activeSessionId)))
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [activeSessionId]);
 
   // -----------------------------------------------------------------
   // 5. BILLING TIMER & RUNTIME ENG (ACTIVE / LOW_BALANCE / RECHARGING)
@@ -458,138 +378,25 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
   };
 
   // -----------------------------------------------------------------
-  // 7. CHAT MESSAGE SENDING & MOCK SCHOLAR REPLY
+  // 7. CHAT MESSAGE SENDING
   // -----------------------------------------------------------------
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (currentState === 'RECHARGING') return; // block send in grace period
 
     const textToSend = inputText.trim();
-    if (!textToSend && !selectedImageFile) return;
+    if (!textToSend) return;
 
     setInputText('');
 
-    let newMsg: Message;
-
-    if (selectedImageFile) {
-      // Send image message saved securely via IndexedDB
-      newMsg = await chatService.sendImageMessage(
-        activeSessionId, 
-        'user', 
-        selectedImageFile, 
-        selectedImageName || 'attachment.jpg'
-      );
-      // Clean selected image previews
-      setSelectedImageFile('');
-      setSelectedImageName('');
-    } else {
-      // Send text message
-      newMsg = await chatService.sendTextMessage(activeSessionId, 'user', textToSend);
-    }
-
+    const newMsg = await chatRepository.sendMessage(activeSessionId, textToSend, crypto.randomUUID());
     setMessages(prev => [...prev, newMsg]);
-    triggerScholarReply(textToSend || "Sent image attachment");
-  };
-
-  const triggerScholarReply = async (userText: string) => {
-    setIsTyping(true);
-    const simulatedDelay = Math.random() * 1000 + 1200;
-    await new Promise(resolve => setTimeout(resolve, simulatedDelay));
-
-    let reply = "Hum aapke janam chakra ka grah dasha chakra dekh rahe hain. Shani ki dristi saptam bhav par hone ke karan karyon mein thoda vilamb avashya hai, parantu sanyam banae rakhein, 2026 ke ant tak samay kafi shubh prathit ho raha hai.";
-    const lower = userText.toLowerCase();
-
-    if (lower.includes('job') || lower.includes('career') || lower.includes('paisa') || lower.includes('money') || lower.includes('naukri')) {
-      reply = "Dasam bhav (career house) mein Budhaditya Yoga ka prabhav behad shubh hai. Agle teen mahinon mein padonnati (promotion) athwa naye shubh avsar prapt hone ki dridha sambhavna hai. Surya Dev ko jal arpit karein.";
-    } else if (lower.includes('shadi') || lower.includes('marriage') || lower.includes('love') || lower.includes('relationship') || lower.includes('vivah')) {
-      reply = "Saptam ghar mein Guru (Jupiter) ki kripa dristi hai. Vivah yog November 2026 se prarambh honge. Jeevansathi gyanwan aur parivaar ke prati samarpit hoga. Shubh parinam hetu Thursday ko chane ki daal daan karein.";
-    } else if (lower.includes('gem') || lower.includes('stone') || lower.includes('panna') || lower.includes('remedy') || lower.includes('upay')) {
-      reply = "Aapki rashi aur lagna ke anusaar, ek shubh Panna (Emerald) dharan karna labhdayak hoga. Budhwar ko niyamit roop se Vishnu Sahasranama ka paath karein athwa shri durga chalisa padein.";
-    }
-
-    const replyMsg = await chatService.sendTextMessage(activeSessionId, 'astrologer', reply);
-    setMessages(prev => [...prev, replyMsg]);
-    setIsTyping(false);
-  };
-
-  // Handle local file selection for uploading as images
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsUploadingImage(true);
-    setUploadFailed(false);
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        setSelectedImageFile(reader.result);
-        setSelectedImageName(file.name);
-        setIsUploadingImage(false);
-      } else {
-        setUploadFailed(true);
-        setIsUploadingImage(false);
-      }
-    };
-    reader.onerror = () => {
-      setUploadFailed(true);
-      setIsUploadingImage(false);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  // Reusable Dispatchers for Attachment Simulation (Rich Messages)
-  const sendMockPdf = async () => {
-    setIsAttachmentOpen(false);
-    const newMsg: Message = {
-      id: `user-pdf-${Date.now()}`,
-      sender: 'user',
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      type: 'pdf',
-      attachmentName: 'Birth_Report_Kundli_Nova.pdf',
-      attachmentSize: '2.4 MB',
-      status: 'sent'
-    };
-
-    const updated = [...messages, newMsg];
-    setMessages(updated);
-    await chatService.saveMessages(activeSessionId, updated);
-
-    setIsTyping(true);
-    setTimeout(async () => {
-      const reply = await chatService.sendTextMessage(activeSessionId, 'astrologer', "Dhanyawaad, maine janam patrika PDF kholi hai. Navamsa chakra ka vishleshan karne par aapka Bhagyesh ucha ka baitha hai.");
-      setMessages(prev => [...prev, reply]);
-      setIsTyping(false);
-    }, 1500);
-  };
-
-  const sendMockVoiceNote = async () => {
-    setIsAttachmentOpen(false);
-    const newMsg: Message = {
-      id: `user-voice-${Date.now()}`,
-      sender: 'user',
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      type: 'voice',
-      duration: '0:18',
-      status: 'sent'
-    };
-
-    const updated = [...messages, newMsg];
-    setMessages(updated);
-    await chatService.saveMessages(activeSessionId, updated);
-
-    setIsTyping(true);
-    setTimeout(async () => {
-      const reply = await chatService.sendTextMessage(activeSessionId, 'astrologer', "Main aapki aawaz sun pa raha hoon. Pareshan na hon, aapka grah dasha chakra bilkul anukool ho raha hai.");
-      setMessages(prev => [...prev, reply]);
-      setIsTyping(false);
-    }, 1500);
   };
 
   // Dynamic Scroll to Bottom on Messages List updates
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isTyping, selectedImageFile]);
+  }, [messages]);
 
   // Format Helper: Seconds to MM:SS
   const formatMMSS = (totalSecs: number) => {
@@ -615,110 +422,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
   // RENDER INDIVIDUAL MESSAGES
   // -----------------------------------------------------------------
   const renderMessageBubble = (msg: Message) => {
-    if (msg.type === 'system') {
-      return (
-        <div key={msg.id} className="w-full flex justify-center my-3 px-2">
-          {msg.id === 'welcome-system' ? (
-            /* Simple, elegant welcome system notification */
-            <div className="bg-neutral-50 border border-neutral-100 px-4 py-2.5 rounded-2xl flex items-center space-x-2 max-w-[95%] shadow-[0_1px_3px_rgba(0,0,0,0.01)]">
-              <span className="text-[8.5px] uppercase font-extrabold tracking-widest text-[#FF8A00] bg-[#FF8A00]/5 border border-[#FF8A00]/10 px-1.5 py-0.5 rounded-md">SYSTEM</span>
-              <span className="text-[11px] text-neutral-700 font-bold leading-relaxed">Paid consultation started with {astro?.name}. Real-time billing active.</span>
-            </div>
-          ) : (
-            /* Log systems for completion */
-            <div className="bg-neutral-50 border border-neutral-100 px-4 py-2.5 rounded-2xl flex items-center space-x-2 max-w-[95%] shadow-[0_1px_3px_rgba(0,0,0,0.01)]">
-              <span className="text-[8.5px] uppercase font-extrabold tracking-widest text-neutral-400 bg-white border border-neutral-200 px-1.5 py-0.5 rounded-md">LOG</span>
-              <span className="text-[11px] text-neutral-700 font-bold leading-relaxed">{msg.text}</span>
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    const isUser = msg.sender === 'user';
-    
-    return (
-      <div 
-        key={msg.id} 
-        className={`flex w-full ${isUser ? 'justify-end' : 'justify-start'} mb-3`}
-      >
-        <div 
-          className={`max-w-[85%] rounded-[20px] px-4 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.01)] flex flex-col ${
-            isUser 
-              ? 'bg-neutral-900 text-white rounded-tr-md' 
-              : 'bg-white border border-neutral-100 text-neutral-800 rounded-tl-md'
-          }`}
-        >
-          {/* Text Bubble */}
-          {msg.type === 'text' && (
-            <p className="text-[13.5px] font-medium leading-relaxed whitespace-pre-wrap">{msg.text}</p>
-          )}
-
-          {/* Reusable Image Message Component with IndexedDB loaders */}
-          {msg.type === 'image' && msg.attachmentUrl && (
-            <div className="space-y-2">
-              <div className="rounded-[14px] overflow-hidden border border-neutral-100/10 max-w-[240px]">
-                <IndexedDBImage 
-                  url={msg.attachmentUrl} 
-                  className="w-full h-auto max-h-[180px] object-cover" 
-                  alt={msg.attachmentName || "Uploaded Image"}
-                />
-              </div>
-              <div className="flex items-center space-x-1.5 text-xs opacity-80">
-                <ImageIcon size={13} className={isUser ? 'text-neutral-400' : 'text-[#FF8A00]'} />
-                <span className="font-semibold truncate max-w-[150px] text-[11px]">{msg.attachmentName}</span>
-              </div>
-            </div>
-          )}
-
-          {/* Reusable PDF Message Component */}
-          {msg.type === 'pdf' && (
-            <div className={`p-2.5 rounded-xl flex items-center space-x-3 max-w-[240px] ${isUser ? 'bg-neutral-800' : 'bg-neutral-50'}`}>
-              <div className="w-9 h-9 rounded-lg bg-red-500/10 flex items-center justify-center text-red-500 shrink-0">
-                <FileText size={18} />
-              </div>
-              <div className="flex-1 min-w-0 text-left">
-                <p className="text-xs font-bold truncate">{msg.attachmentName}</p>
-                <p className="text-[9.5px] text-neutral-400 font-semibold mt-0.5">{msg.attachmentSize}</p>
-              </div>
-            </div>
-          )}
-
-          {/* Reusable Voice Note Component */}
-          {msg.type === 'voice' && (
-            <div className="flex items-center space-x-2 py-0.5 max-w-[240px]">
-              <button className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${isUser ? 'bg-neutral-800 text-white' : 'bg-[#FF8A00]/10 text-[#FF8A00]'}`}>
-                <Play size={11} className="fill-current ml-0.5" />
-              </button>
-              
-              {/* Minimal waveform layout */}
-              <div className="flex items-end space-x-0.5 h-5 shrink-0">
-                {[2, 4, 3, 5, 2, 4, 6, 4, 3, 5, 2, 4, 2, 5, 3, 4].map((h, i) => (
-                  <span 
-                    key={i} 
-                    className={`w-0.5 rounded-full ${isUser ? 'bg-neutral-500' : 'bg-neutral-300'}`} 
-                    style={{ height: `${h * 15}%` }} 
-                  />
-                ))}
-              </div>
-              <span className="text-[9.5px] font-bold text-neutral-400">{msg.duration || '0:18'}</span>
-            </div>
-          )}
-
-          {/* Meta Information: Timestamp and Read receipts */}
-          <div className="flex items-center space-x-1.5 self-end mt-1.5">
-            <span className={`text-[9px] font-semibold tracking-wide ${isUser ? 'text-white/60' : 'text-neutral-400'}`}>
-              {msg.time}
-            </span>
-            {isUser && (
-              <span className="text-white/80 flex items-center">
-                <CheckCheck size={11} className="text-[#FF8A00]" />
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-    );
+    return <div key={msg.id}><ConsultationMessageBubble message={msg} ownSender="user" /></div>;
   };
 
   // -----------------------------------------------------------------
@@ -878,7 +582,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
           <div className="border-b border-neutral-100 pb-2.5 space-y-1">
             <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Birth Profile</span>
             <span className="text-[13px] font-extrabold text-neutral-800 block">
-              {userProfile?.fullName || userProfile?.name || 'Rahul Kumar (Guest)'}
+              {userProfile?.name || 'Your profile'}
             </span>
           </div>
 
@@ -943,9 +647,9 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
               <BadgeCheck size={16} className="fill-[#FF8A00]/5" />
             </div>
             <div className="min-w-0">
-              <h4 className="text-xs font-black text-neutral-800 uppercase tracking-wider">Kundli Sent Successfully</h4>
+              <h4 className="text-xs font-black text-neutral-800 uppercase tracking-wider">Consultation Request Sent</h4>
               <p className="text-neutral-500 text-[10.5px] font-medium leading-relaxed mt-0.5">
-                {astro?.name} has received your planetary birth configurations and is actively reviewing them.
+                {astro?.name || 'The selected astrologer'} has received your request. The chat will open only after they accept it.
               </p>
             </div>
           </div>
@@ -977,19 +681,8 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
           </div>
         </div>
 
-        {/* Action button & Developer Simulator */}
+        {/* Customer action */}
         <div className="space-y-3 max-w-xs mx-auto w-full">
-          {(import.meta as any).env?.DEV === true && (
-            <div className="border border-neutral-100 rounded-xl p-3 bg-neutral-50">
-              <p className="text-[10px] font-extrabold text-neutral-400 uppercase tracking-wider mb-2">⚡ Developer Simulator sandbox</p>
-              <div className="flex space-x-2">
-                <button onClick={handleSimulateAccept} className="flex-1 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white font-extrabold text-[10px] border-none uppercase transition-colors">Accept</button>
-                <button onClick={handleSimulateReject} className="flex-1 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-extrabold text-[10px] border-none uppercase transition-colors">Reject</button>
-                <button onClick={handleSimulateTimeout} className="flex-1 py-1.5 rounded-lg bg-neutral-600 hover:bg-neutral-700 text-white font-extrabold text-[10px] border-none uppercase transition-colors">Timeout</button>
-              </div>
-            </div>
-          )}
-
           <button 
             onClick={() => {
               setShowCancelConfirm(true);
@@ -1029,8 +722,10 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
                   <button 
                     onClick={async () => {
                       if (waitingTimerRef.current) clearInterval(waitingTimerRef.current);
-                      setCurrentState('INSUFFICIENT_BALANCE');
+                      const result = await consultationRepository.cancelSession(activeSessionId);
+                      hydrateBillingState(result.session, result.balance);
                       setShowCancelConfirm(false);
+                      onNavigate('astrologers');
                     }}
                     className="flex-1 h-11 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer border-none"
                   >
@@ -1703,7 +1398,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
                     </div>
                     <div>
                       <span className="text-[9px] font-bold text-neutral-400 uppercase tracking-widest block truncate min-w-0">Rate</span>
-                      <span className="font-extrabold text-neutral-800 block mt-0.5 truncate min-w-0">₹25/min</span>
+                      <span className="font-extrabold text-neutral-800 block mt-0.5 truncate min-w-0">₹{ratePerMin}/min</span>
                     </div>
                     <div>
                       <span className="text-[9px] font-bold text-neutral-400 uppercase tracking-widest block truncate min-w-0">Wallet Balance</span>
@@ -1739,18 +1434,6 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
         {/* Messages Loop */}
         <div className="flex flex-col space-y-1">
           {messages.map(renderMessageBubble)}
-          
-          {/* Typing Indicator */}
-          {isTyping && (
-            <div className="flex w-full justify-start mb-4">
-              <div className="bg-white border border-neutral-100 rounded-[20px] rounded-tl-md px-4 py-3 shadow-[0_1px_3px_rgba(0,0,0,0.01)] flex items-center space-x-1.5">
-                <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest mr-1">Scholar is reviewing charts</span>
-                <span className="w-1.5 h-1.5 bg-[#FF8A00] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-1.5 h-1.5 bg-[#FF8A00] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-1.5 h-1.5 bg-[#FF8A00] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-              </div>
-            </div>
-          )}
           
           <div ref={messagesEndRef} className="h-4" />
         </div>
@@ -1799,95 +1482,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
           </div>
         ) : (
           <>
-            {/* Selected Image Preview with cross button to remove */}
-            {selectedImageFile && (
-              <div className="mb-3 p-2 bg-neutral-50 rounded-xl border border-neutral-100 flex items-center justify-between max-w-sm">
-                <div className="flex items-center space-x-2.5 min-w-0">
-                  <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 border border-neutral-200">
-                    <img src={selectedImageFile} alt="Selected preview" className="w-full h-full object-cover" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold truncate text-neutral-800">{selectedImageName}</p>
-                    <p className="text-[10px] text-green-600 font-semibold">Image selected for sending</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => {
-                    setSelectedImageFile('');
-                    setSelectedImageName('');
-                  }}
-                  className="p-1.5 rounded-full hover:bg-neutral-200 text-neutral-500 border-none bg-transparent"
-                >
-                  <X size={15} />
-                </button>
-              </div>
-            )}
-
-            {/* Attachment menu toggles */}
-            <AnimatePresence>
-              {isAttachmentOpen && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 15 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  className="absolute bottom-[calc(100%+8px)] left-4 bg-white border border-neutral-100 rounded-2xl shadow-xl p-3.5 w-56 flex flex-col space-y-2 z-40"
-                >
-                  {/* Actual file selector styled nicely */}
-                  <label className="flex items-center space-x-3 p-2 rounded-xl hover:bg-neutral-50 text-left transition-colors cursor-pointer w-full">
-                    <div className="w-8 h-8 rounded-lg bg-[#FF8A00]/5 text-[#FF8A00] flex items-center justify-center shrink-0">
-                      <ImageIcon size={16} />
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-neutral-800">Upload Birth Chart</p>
-                      <p className="text-[10px] text-neutral-400 font-semibold">From your gallery</p>
-                    </div>
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      onChange={handleFileChange} 
-                      className="hidden" 
-                    />
-                  </label>
-
-                  <button 
-                    onClick={sendMockPdf}
-                    className="flex items-center space-x-3 p-2 rounded-xl hover:bg-neutral-50 text-left transition-colors cursor-pointer border-none bg-transparent w-full"
-                  >
-                    <div className="w-8 h-8 rounded-lg bg-red-500/5 text-red-500 flex items-center justify-center shrink-0">
-                      <FileText size={16} />
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-neutral-800">Send Birth Patrika</p>
-                      <p className="text-[10px] text-neutral-400 font-semibold font-sans">Detailed PDF report</p>
-                    </div>
-                  </button>
-
-                  <button 
-                    onClick={sendMockVoiceNote}
-                    className="flex items-center space-x-3 p-2 rounded-xl hover:bg-neutral-50 text-left transition-colors cursor-pointer border-none bg-transparent w-full"
-                  >
-                    <div className="w-8 h-8 rounded-lg bg-[#16A34A]/5 text-[#16A34A] flex items-center justify-center shrink-0">
-                      <Volume2 size={16} />
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-neutral-800">Send Voice Note</p>
-                      <p className="text-[10px] text-neutral-400 font-semibold">Audio recording</p>
-                    </div>
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Input bar */}
             <div className="flex items-center space-x-3">
-              
-              <button 
-                onClick={() => setIsAttachmentOpen(!isAttachmentOpen)}
-                className="w-[40px] h-[40px] flex items-center justify-center rounded-full border border-neutral-100 hover:bg-neutral-50 active:bg-neutral-100 transition-colors text-neutral-400 shrink-0 cursor-pointer"
-              >
-                <Paperclip size={18} strokeWidth={2.5} />
-              </button>
-              
               <form onSubmit={handleSendMessage} className="flex-1 flex items-center bg-neutral-50 border border-neutral-100 rounded-2xl pr-1.5 pl-4 py-1">
                 <input 
                   type="text" 
@@ -1904,9 +1499,9 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
                 
                 <button 
                   type="submit"
-                  disabled={(!inputText.trim() && !selectedImageFile) || currentState === 'RECHARGING'}
+                  disabled={!inputText.trim() || currentState === 'RECHARGING'}
                   className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all ${
-                    (inputText.trim() || selectedImageFile) && currentState !== 'RECHARGING'
+                    inputText.trim() && currentState !== 'RECHARGING'
                       ? 'bg-neutral-900 text-white shadow-md active:scale-95 cursor-pointer' 
                       : 'bg-neutral-100 text-neutral-400 cursor-not-allowed'
                   }`}
