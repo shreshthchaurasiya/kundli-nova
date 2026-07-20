@@ -1,8 +1,8 @@
-const API_BASE = (import.meta as any).env.VITE_API_BASE_URL;
-
-if (!API_BASE) {
-  throw new Error('VITE_API_BASE_URL environment variable is missing.');
-}
+// Use a relative URL by default. This works when the Express server serves the
+// app itself and, during standalone Vite development, is forwarded by the
+// development proxy configured in vite.config.ts.
+const configuredApiBase = (import.meta as any).env.VITE_API_BASE_URL as string | undefined;
+const API_BASE = (configuredApiBase || '/api/v1').replace(/\/$/, '');
 
 export const ENDPOINTS = {
   WALLET: {
