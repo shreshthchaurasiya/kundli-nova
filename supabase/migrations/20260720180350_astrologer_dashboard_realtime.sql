@@ -1,3 +1,4 @@
+-- Filename version matches the applied remote migration history.
 -- Realtime, least-privilege read access for an approved astrologer's own
 -- dashboard. Customer sessions remain invisible to every other astrologer.
 

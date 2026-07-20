@@ -1,3 +1,4 @@
+-- Filename version matches the applied remote migration history.
 -- A single participant policy avoids duplicate permissive policy evaluation
 -- while preserving customer access and adding assigned-astrologer access.
 

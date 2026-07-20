@@ -1,3 +1,4 @@
+-- Filename version matches the applied remote migration history.
 revoke all on public.astrologer_applications from anon, authenticated;
 grant select, insert, update on public.astrologer_applications to authenticated;
 
