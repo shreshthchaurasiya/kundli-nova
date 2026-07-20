@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Menu, Search, Wallet, X, ChevronRight, Phone, BookHeart, BookOpen, Share2, Star, Heart, HelpCircle, FileText, LogOut } from 'lucide-react';
 import { Screen } from '../types';
 import { useProfile } from '../contexts/ProfileContext';
+import { useWallet } from '../contexts/WalletContext';
 
 interface CategoryScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
@@ -49,8 +50,11 @@ const LANGUAGES = [
 ];
 
 export default function CategoryScreen({ onNavigate }: CategoryScreenProps) {
-  const { profile } = useProfile();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const { profile } = useProfile();
+  const { wallet } = useWallet();
+  const walletBalance = wallet.balance;
+  
   const [profileData, setProfileData] = useState<any>(null);
 
   useEffect(() => {
@@ -89,7 +93,7 @@ export default function CategoryScreen({ onNavigate }: CategoryScreenProps) {
               className="flex items-center space-x-[6px] bg-[#FFFFFF] border border-[#E5E7EB] rounded-full px-[12px] py-[6px] active:bg-gray-50 transition-colors shadow-[0_2px_8px_rgba(0,0,0,0.03)]"
             >
               <Wallet size={18} strokeWidth={2} className="text-[#111827]" />
-              <span className="text-[13px] font-bold text-[#111827]">₹0</span>
+              <span className="text-[13px] font-bold text-[#111827]">₹{walletBalance}</span>
             </button>
           </div>
         </div>

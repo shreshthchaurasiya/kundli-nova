@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Wallet, Search, Menu, X, ChevronRight, Phone, MessageCircle, Star, Sparkles, BookHeart, BookOpen, Compass, Sun, Map, ShieldCheck, HelpCircle, FileText, Share2, LogOut, Heart, Clock, SlidersHorizontal, SunMoon, LayoutGrid, Hash, Grid3x3, Languages, Plus, Zap, Briefcase, Palette, TrendingUp, Quote } from 'lucide-react';
+import { Wallet, Search, Menu, X, ChevronRight, Phone, MessageCircle, Star, Sparkles, BookHeart, BookOpen, Compass, Sun, Map, ShieldCheck, HelpCircle, FileText, Share2, LogOut, Heart, Clock, SlidersHorizontal, SunMoon, LayoutGrid, Hash, Grid3x3, Languages, Plus, Zap, Briefcase, Palette, TrendingUp, Quote, History } from 'lucide-react';
 import { ASTROLOGERS } from '../data';
 import { Screen, Astrologer } from '../types';
 import { useProfile } from '../contexts/ProfileContext';
@@ -179,7 +179,7 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
               onClick={() => onNavigate('chat-history')}
               className="text-gray-600 hover:text-gray-900 transition-colors relative"
             >
-              <MessageCircle size={22} strokeWidth={2} />
+              <History size={22} strokeWidth={2} />
             </button>
           </div>
         </div>

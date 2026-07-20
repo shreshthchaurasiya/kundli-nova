@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, Menu, Wallet, Filter, Sparkles, Plus, MessageCircle, ArrowLeft, X } from 'lucide-react';
+import { Search, Menu, Wallet, Filter, Sparkles, Plus, MessageCircle, ArrowLeft, X, History } from 'lucide-react';
 import { ASTROLOGERS } from '../data';
 import { Screen } from '../types';
 import { walletService } from '../services/astrologyServices';
@@ -132,7 +132,7 @@ export default function ChatListScreen({ onNavigate, onOpenDrawer }: ChatListScr
                   onClick={() => onNavigate('chat-history')}
                   className="text-gray-600 hover:text-gray-900 transition-colors relative"
                 >
-                  <MessageCircle size={22} strokeWidth={2} />
+                  <History size={22} strokeWidth={2} />
                 </button>
               </div>
             </>

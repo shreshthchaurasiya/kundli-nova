@@ -5,6 +5,8 @@ import {
   ConsultationState, 
   Message 
 } from '../types';
+import { ApiClient } from './api/apiClient';
+import { ENDPOINTS } from './api/endpoints';
 import { ASTROLOGERS } from '../data';
 import { SupabaseWalletRepository } from '../repositories/supabase/supabaseWalletRepository';
 import { consultationStorage } from './storage/consultationStorage';
@@ -288,7 +290,40 @@ export const kundliService = {
 // --- 4. Chat Service ---
 export const chatService = {
   async getMessages(sessionId: string): Promise<Message[]> {
-    await delay(100);
+    try {
+      const dbMessages = await ApiClient.get<any[]>(ENDPOINTS.CHAT.GET_MESSAGES(sessionId));
+      if (Array.isArray(dbMessages)) {
+        const formatted: Message[] = dbMessages.map(msg => ({
+          id: msg.id || `msg-${Date.now()}-${Math.random()}`,
+          text: msg.message_text,
+          sender: msg.sender === 'user' ? 'user' : 'astrologer',
+          time: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          type: 'text',
+          status: 'sent'
+        }));
+        
+        // Merge with local ones in case there are image attachments not in DB yet
+        const localMessages = chatStorage.getMessages(sessionId);
+        const allMessages = [...formatted];
+        // simple merge strategy: add non-text messages from local
+        for (const localMsg of localMessages) {
+          if (localMsg.type !== 'text' && !allMessages.find(m => m.id === localMsg.id)) {
+            allMessages.push(localMsg);
+          }
+        }
+        allMessages.sort((a, b) => {
+          // If we can't properly sort by time, keep insertion order, 
+          // but formatted are from DB so they are already sorted by time.
+          return 0;
+        });
+
+        chatStorage.saveMessages(sessionId, allMessages);
+        return allMessages;
+      }
+    } catch (err) {
+      console.warn("Failed to fetch messages from backend, falling back to local storage", err);
+    }
+    
     return chatStorage.getMessages(sessionId);
   },
 
@@ -297,7 +332,6 @@ export const chatService = {
   },
 
   async sendTextMessage(sessionId: string, senderId: string, text: string): Promise<Message> {
-    await delay(100);
     const newMessage: Message = {
       id: `msg-${Date.now()}`,
       text,
@@ -307,8 +341,19 @@ export const chatService = {
       status: 'sent'
     };
     
-    const current = await this.getMessages(sessionId);
-    await this.saveMessages(sessionId, [...current, newMessage]);
+    // Save locally for instant UI update
+    const current = chatStorage.getMessages(sessionId);
+    chatStorage.saveMessages(sessionId, [...current, newMessage]);
+    
+    // Sync with backend
+    try {
+      await ApiClient.post(ENDPOINTS.CHAT.SEND_MESSAGE(sessionId), {
+        body: { text, client_message_id: newMessage.id }
+      });
+    } catch (err) {
+      console.warn("Failed to sync message to backend", err);
+    }
+    
     return newMessage;
   },
 
@@ -329,8 +374,19 @@ export const chatService = {
       status: 'sent'
     };
 
-    const current = await this.getMessages(sessionId);
-    await this.saveMessages(sessionId, [...current, newMessage]);
+    // Save locally
+    const current = chatStorage.getMessages(sessionId);
+    chatStorage.saveMessages(sessionId, [...current, newMessage]);
+    
+    // Sync with backend (Note: in production, you would upload the image to Supabase Storage and send the URL)
+    try {
+      await ApiClient.post(ENDPOINTS.CHAT.SEND_MESSAGE(sessionId), {
+        body: { text: "[Image Attachment]", client_message_id: newMessage.id }
+      });
+    } catch (err) {
+      console.warn("Failed to sync image message to backend", err);
+    }
+    
     return newMessage;
   },
 

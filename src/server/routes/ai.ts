@@ -56,7 +56,7 @@ export function createAiRouter(config: AiRouterConfig) {
   });
 
   router.get('/api/ai/status', (_req, res) => {
-    res.json({ configured: Boolean(ai), model: 'gemini-3.5-flash' });
+    res.json({ configured: Boolean(ai), model: 'gemini-flash-lite-latest' });
   });
 
   router.post('/api/chat', async (req, res) => {
@@ -91,7 +91,7 @@ export function createAiRouter(config: AiRouterConfig) {
 
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-3.5-flash',
+        model: 'gemini-flash-lite-latest',
         contents: conversation,
         config: {
           systemInstruction: `${CHAT_SYSTEM_INSTRUCTION}\n\nUser profile:\n${profileContext || 'Profile unavailable'}`,
@@ -137,7 +137,7 @@ export function createAiRouter(config: AiRouterConfig) {
 
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-3.5-flash',
+        model: 'gemini-flash-lite-latest',
         contents: `Explain this Kundli section in simple Hinglish, in 3 to 4 short lines (maximum 80 words). Give positive, practical guidance without guarantees.\nSection: ${section}\nDetails: ${sectionDescription}\nUser: ${String(userProfile?.name || 'User').slice(0, 100)}, DOB: ${String(userProfile?.dob || 'Unknown').slice(0, 20)}`,
         config: {
           systemInstruction: 'You are a friendly Vedic astrology guide named Acharya Dev Sharma. Never make guaranteed or harmful claims.',

@@ -14,7 +14,7 @@ export const getMessages = async (
 
     // Verify user owns the session
     const { data: session, error: sessionError } = await supabaseAdmin
-      .from('consultations')
+      .from('consultation_sessions')
       .select('user_id')
       .eq('id', sessionId)
       .single();
@@ -24,7 +24,7 @@ export const getMessages = async (
     }
 
     const { data: messages, error } = await supabaseAdmin
-      .from('messages')
+      .from('consultation_messages')
       .select('*')
       .eq('session_id', sessionId)
       .order('created_at', { ascending: true });
@@ -54,7 +54,7 @@ export const sendMessage = async (
 
     // Verify user owns the session
     const { data: session, error: sessionError } = await supabaseAdmin
-      .from('consultations')
+      .from('consultation_sessions')
       .select('user_id')
       .eq('id', sessionId)
       .single();
@@ -65,13 +65,11 @@ export const sendMessage = async (
 
     // Insert message (RLS handles exact verification but we pre-verified above for safety too)
     const { data: message, error } = await supabaseAdmin
-      .from('messages')
+      .from('consultation_messages')
       .insert({
         session_id: sessionId,
-        sender_id: userId,
-        sender_type: 'user',
-        text: text,
-        metadata: { client_message_id },
+        sender: 'user',
+        message_text: text,
       })
       .select()
       .single();

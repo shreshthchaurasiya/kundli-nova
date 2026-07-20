@@ -5,7 +5,8 @@ import { Screen } from '../types';
 import { ASTROLOGERS } from '../data';
 import { ApiConsultationRepository } from '../repositories/api/apiConsultationRepository';
 import { chatStorage } from '../services/storage/chatStorage';
-import CelestialChatBackground from '../components/chat/CelestialChatBackground';
+import { chatService } from '../services/astrologyServices';
+
 
 interface ChatHistoryScreenProps {
   onNavigate: (screen: Screen, params?: unknown) => void;
@@ -61,10 +62,11 @@ export default function ChatHistoryScreen({ onNavigate }: ChatHistoryScreenProps
           Promise.resolve(chatStorage.getAiHistory()),
         ]);
 
-        const paidItems: HistoryItem[] = await Promise.all(sessions.map(async session => {
+        const paidItems: HistoryItem[] = await Promise.all((sessions || []).map(async session => {
           const astrologer = ASTROLOGERS.find(item => item.id === session.astrologerId) || ASTROLOGERS[0];
-          const messages = chatStorage.getMessages(session.id).filter(message => message.sender !== 'system');
-          const lastMessage = messages[messages.length - 1];
+          const rawMessages = await chatService.getMessages(session.id);
+          const messages = Array.isArray(rawMessages) ? rawMessages.filter(message => message?.sender !== 'system') : [];
+          const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
           return {
             id: session.id,
             kind: 'paid',
@@ -77,8 +79,8 @@ export default function ChatHistoryScreen({ onNavigate }: ChatHistoryScreenProps
           };
         }));
 
-        const savedItems: HistoryItem[] = savedThreads
-          .filter(thread => thread.messages.length > 0)
+        const savedItems: HistoryItem[] = (savedThreads || [])
+          .filter(thread => thread && Array.isArray(thread.messages) && thread.messages.length > 0)
           .map(thread => ({
             id: thread.id,
             kind: thread.kind === 'free' ? 'free' : 'nova',
@@ -90,9 +92,9 @@ export default function ChatHistoryScreen({ onNavigate }: ChatHistoryScreenProps
         if (active) {
           setItems([...paidItems, ...savedItems].sort((a, b) => timestampValue(b.timestamp) - timestampValue(a.timestamp)));
         }
-      } catch (loadError) {
+      } catch (loadError: any) {
         console.error('Unable to load chat history', loadError);
-        if (active) setError('Chat history could not be loaded. Please retry.');
+        if (active) setError(`Chat history could not be loaded. Please retry. (${loadError.message || String(loadError)})`);
       } finally {
         if (active) setLoading(false);
       }
@@ -126,8 +128,7 @@ export default function ChatHistoryScreen({ onNavigate }: ChatHistoryScreenProps
   };
 
   return (
-    <div className="relative flex h-full flex-col overflow-hidden bg-[#FCFBF8] font-sans">
-      <CelestialChatBackground />
+    <div className="relative flex h-full flex-col overflow-hidden bg-white font-sans">
 
       <header className="relative z-20 bg-white/85 px-5 pb-4 pt-[max(18px,env(safe-area-inset-top))] backdrop-blur-md">
         <div className="flex items-center gap-2">
