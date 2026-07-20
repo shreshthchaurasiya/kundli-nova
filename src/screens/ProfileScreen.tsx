@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   User, Calendar, Clock, MapPin, Compass, FileText, Wallet, 
-  ChevronRight, Sparkles, Share2, CheckCircle2, X, Camera, Info, Shield
+  ChevronRight, Sparkles, Share2, CheckCircle2, X, Camera, Info, Shield,
+  Handshake, BadgeCheck
 } from 'lucide-react';
 import { Screen } from '../types';
 import { useAuth } from '../auth';
 import { useProfile } from '../contexts/ProfileContext';
 import { useWallet } from '../contexts/WalletContext';
+import { APPLICATION_STATUS_CONTENT, useAstrologerPartner } from '../features/astrologer';
 
 interface ProfileScreenProps {
   onNavigate: (screen: Screen) => void;
@@ -26,6 +28,7 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
   const { user } = useAuth();
   const { profile: profileData, isLoadingProfile } = useProfile();
   const { wallet, isLoadingWallet } = useWallet();
+  const { application: astrologerApplication, publicProfile: astrologerProfile } = useAstrologerPartner();
   const loading = isLoadingProfile || isLoadingWallet;
   const walletBalance = wallet.balance;
   const [isKundliOpen, setIsKundliOpen] = useState(false);
@@ -293,6 +296,31 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
               <ProfileInfoRow label="Notification Preference" value="Enabled" />
             </div>
           </div>
+
+          {/* Kundli Status Card */}
+          <motion.button
+            whileTap={{ scale: 0.985 }}
+            onClick={() => onNavigate(astrologerProfile ? 'manage-astrologer-profile' : 'partner-with-us')}
+            className="flex w-full items-center gap-4 rounded-[18px] border border-orange-100 bg-orange-50/40 p-5 text-left"
+          >
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#FF8A00] text-white">
+              {astrologerProfile ? <BadgeCheck size={22} /> : <Handshake size={22} />}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#FF8A00]">Professional account</span>
+              <span className="mt-1 block text-sm font-extrabold text-neutral-900">
+                {astrologerProfile
+                  ? 'Manage Astrologer Profile'
+                  : astrologerApplication
+                    ? APPLICATION_STATUS_CONTENT[astrologerApplication.status].title
+                    : 'Become a Verified Astrologer'}
+              </span>
+              <span className="mt-1 block text-[11px] font-medium leading-relaxed text-neutral-500">
+                {astrologerProfile ? 'Preview and update what customers see in Kundli Nova.' : 'Apply using the same Kundli Nova account.'}
+              </span>
+            </span>
+            <ChevronRight size={17} className="shrink-0 text-neutral-300" />
+          </motion.button>
 
           {/* Kundli Status Card */}
           <div className="bg-neutral-900 rounded-[18px] p-5 text-white shadow-xl shadow-neutral-900/10 flex items-center justify-between relative overflow-hidden">

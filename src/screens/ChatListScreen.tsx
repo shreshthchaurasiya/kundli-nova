@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Search, Menu, Wallet, Filter, Sparkles, Plus, MessageCircle, ArrowLeft, X, History } from 'lucide-react';
-import { ASTROLOGERS } from '../data';
 import { Screen } from '../types';
-import { walletService } from '../services/astrologyServices';
 import { TopAstrologerCard } from './HomeScreen';
+import { useWallet } from '../contexts/WalletContext';
+import { useAstrologerPartner } from '../features/astrologer';
 
 interface ChatListScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
@@ -12,18 +12,12 @@ interface ChatListScreenProps {
 }
 
 export default function ChatListScreen({ onNavigate, onOpenDrawer }: ChatListScreenProps) {
-  const [walletBalance, setWalletBalance] = useState<number>(0);
+  const { wallet } = useWallet();
+  const { directory: astrologers } = useAstrologerPartner();
+  const walletBalance = wallet.balance;
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-
-  useEffect(() => {
-    const loadWallet = async () => {
-      const bal = await walletService.getBalance();
-      setWalletBalance(bal);
-    };
-    loadWallet();
-  }, []);
 
   const listContainerVariants = {
     hidden: { opacity: 0 },
@@ -57,7 +51,7 @@ export default function ChatListScreen({ onNavigate, onOpenDrawer }: ChatListScr
     }
   };
 
-  const filteredAstrologers = ASTROLOGERS.filter((astro) => {
+  const filteredAstrologers = astrologers.filter((astro) => {
     const query = searchQuery.toLowerCase().trim();
     const matchesSearch = query === '' || 
       astro.name.toLowerCase().includes(query) || 

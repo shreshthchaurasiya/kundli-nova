@@ -2,10 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { ChevronRight, MessageCircle, Search, Sparkles, UserRound } from 'lucide-react';
 import { Screen } from '../types';
-import { ASTROLOGERS } from '../data';
 import { ApiConsultationRepository } from '../repositories/api/apiConsultationRepository';
 import { chatStorage } from '../services/storage/chatStorage';
 import { chatService } from '../services/astrologyServices';
+import { useAstrologerPartner } from '../features/astrologer';
 
 
 interface ChatHistoryScreenProps {
@@ -45,6 +45,7 @@ const displayTime = (value: string) => {
 };
 
 export default function ChatHistoryScreen({ onNavigate }: ChatHistoryScreenProps) {
+  const { directory: astrologers } = useAstrologerPartner();
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'all' | ChatKind>('all');
@@ -63,18 +64,18 @@ export default function ChatHistoryScreen({ onNavigate }: ChatHistoryScreenProps
         ]);
 
         const paidItems: HistoryItem[] = await Promise.all((sessions || []).map(async session => {
-          const astrologer = ASTROLOGERS.find(item => item.id === session.astrologerId) || ASTROLOGERS[0];
+          const astrologer = astrologers.find(item => item.id === session.astrologerId);
           const rawMessages = await chatService.getMessages(session.id);
           const messages = Array.isArray(rawMessages) ? rawMessages.filter(message => message?.sender !== 'system') : [];
           const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
           return {
             id: session.id,
             kind: 'paid',
-            title: astrologer.name,
+            title: astrologer?.name || 'Astrologer',
             preview: lastMessage?.text || (OPEN_STATUSES.has(session.status) ? 'Consultation in progress' : 'Consultation completed'),
             timestamp: session.endedAt || session.startedAt || session.requestedAt,
             astrologerId: session.astrologerId,
-            image: astrologer.image,
+            image: astrologer?.image,
             active: OPEN_STATUSES.has(session.status),
           };
         }));
@@ -84,7 +85,7 @@ export default function ChatHistoryScreen({ onNavigate }: ChatHistoryScreenProps
           .map(thread => ({
             id: thread.id,
             kind: thread.kind === 'free' ? 'free' : 'nova',
-            title: thread.kind === 'free' ? 'Acharya Dev Sharma' : thread.topic || 'Nova AI',
+            title: thread.kind === 'free' ? 'Free Astrology Chat' : thread.topic || 'Nova AI',
             preview: thread.lastMessage || 'Open conversation',
             timestamp: thread.timestamp,
           }));
@@ -102,7 +103,7 @@ export default function ChatHistoryScreen({ onNavigate }: ChatHistoryScreenProps
 
     void loadHistory();
     return () => { active = false; };
-  }, []);
+  }, [astrologers]);
 
   const visibleItems = useMemo(() => items.filter(item => {
     const matchesFilter = filter === 'all' || item.kind === filter;

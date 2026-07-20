@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Wallet, Search, Menu, X, ChevronRight, Phone, MessageCircle, Star, Sparkles, BookHeart, BookOpen, Compass, Sun, Map, ShieldCheck, HelpCircle, FileText, Share2, LogOut, Heart, Clock, SlidersHorizontal, SunMoon, LayoutGrid, Hash, Grid3x3, Languages, Plus, Zap, Briefcase, Palette, TrendingUp, Quote, History } from 'lucide-react';
-import { ASTROLOGERS } from '../data';
 import { Screen, Astrologer } from '../types';
 import { useProfile } from '../contexts/ProfileContext';
 import { useWallet } from '../contexts/WalletContext';
+import { useAstrologerPartner } from '../features/astrologer';
 
 interface HomeScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
@@ -27,6 +27,7 @@ const BANNERS = [
 export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps) {
   const { profile } = useProfile();
   const { wallet } = useWallet();
+  const { directory: astrologers, isLoadingDirectory } = useAstrologerPartner();
   const [currentBanner, setCurrentBanner] = useState(0);
   // profileData removed
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
@@ -337,8 +338,8 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
               <h3 className="text-[13px] font-[800] text-[#111827] uppercase tracking-wider">Recommended For You</h3>
               <div className="flex items-center space-x-[12px]">
                 <div className="flex space-x-[4px]">
-                  {ASTROLOGERS.slice(0, 3).map((_, idx) => (
-                    <div key={idx} className={`h-[4px] rounded-full transition-all duration-300 ${currentBanner % 3 === idx ? 'w-[12px] bg-[#FF8A00]' : 'w-[4px] bg-[#E5E7EB]'}`} />
+                  {astrologers.slice(0, 3).map((_, idx) => (
+                    <div key={idx} className={`h-[4px] rounded-full transition-all duration-300 ${currentBanner % Math.min(3, astrologers.length || 1) === idx ? 'w-[12px] bg-[#FF8A00]' : 'w-[4px] bg-[#E5E7EB]'}`} />
                   ))}
                 </div>
                 <button
@@ -349,21 +350,25 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
                 </button>
               </div>
             </div>
-            <AnimatePresence mode="wait">
+            {isLoadingDirectory ? (
+              <div className="h-[142px] animate-pulse rounded-[20px] bg-neutral-100" />
+            ) : astrologers.length > 0 ? <AnimatePresence mode="wait">
               <motion.div
-                key={currentBanner % 3}
+                key={currentBanner % Math.min(3, astrologers.length)}
                 initial={{ opacity: 0, scale: 0.97, y: 4 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.97, y: -4 }}
                 transition={{ duration: 0.35, ease: "easeInOut" }}
               >
                 <TopAstrologerCard
-                  astro={ASTROLOGERS[currentBanner % 3]}
-                  onClick={() => onNavigate('astrologer-profile', { astrologerId: ASTROLOGERS[currentBanner % 3].id })}
-                  onChat={() => onNavigate('consultation-chat', { astrologerId: ASTROLOGERS[currentBanner % 3].id })}
+                  astro={astrologers[currentBanner % Math.min(3, astrologers.length)]}
+                  onClick={() => onNavigate('astrologer-profile', { astrologerId: astrologers[currentBanner % Math.min(3, astrologers.length)].id })}
+                  onChat={() => onNavigate('consultation-chat', { astrologerId: astrologers[currentBanner % Math.min(3, astrologers.length)].id })}
                 />
               </motion.div>
-            </AnimatePresence>
+            </AnimatePresence> : (
+              <div className="rounded-[18px] border border-neutral-100 bg-white p-5 text-center text-xs font-semibold text-neutral-500">Verified astrologers will appear here.</div>
+            )}
           </motion.div>
 
           {/* Normal Astrologers List */}
@@ -376,7 +381,7 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
               exit="hidden"
               className="flex flex-col space-y-[14px] pb-4"
             >
-              {ASTROLOGERS.filter(a => !activeFilter || a.skills.includes(activeFilter)).map((astro) => (
+              {astrologers.filter(a => !activeFilter || a.skills.includes(activeFilter)).map((astro) => (
                 <motion.div
                   key={astro.id}
                   variants={listCardVariants}
@@ -734,7 +739,7 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
 }
 
 export const TopAstrologerCard: React.FC<{ astro: Astrologer, onClick: () => void, onChat: () => void }> = ({ astro, onClick, onChat }) => {
-  const trustSignal = astro.id % 2 === 0 ? "5000+ Chats" : "Replies in <1 min";
+  const trustSignal = astro.consultations > 0 ? `${astro.consultations.toLocaleString('en-IN')} Consultations` : 'New on Kundli Nova';
 
   return (
     <motion.div
@@ -745,12 +750,12 @@ export const TopAstrologerCard: React.FC<{ astro: Astrologer, onClick: () => voi
     >
       {/* Left Portrait Block - nested with elevation & premium cropping */}
       <div className="relative shrink-0 w-[110px] h-[122px] rounded-[16px] overflow-hidden bg-gray-50 border border-gray-100/65 shadow-sm group">
-        <img
+        {astro.image ? <img
           src={astro.image}
           alt={astro.name}
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-104"
           loading="lazy"
-        />
+        /> : <div className="flex h-full w-full items-center justify-center bg-neutral-100 text-3xl font-black text-neutral-400">{astro.name.charAt(0)}</div>}
       </div>
 
       {/* Right Details Section */}
@@ -788,9 +793,6 @@ export const TopAstrologerCard: React.FC<{ astro: Astrologer, onClick: () => voi
           <div className="flex flex-col justify-center">
             <span className="text-[15.5px] font-[900] text-[#16A34A] tracking-tight leading-none">
               ₹{astro.pricePerMinute}<span className="text-[10px] font-[600] text-[#9CA3AF] lowercase">/min</span>
-            </span>
-            <span className="text-[10.5px] text-[#9CA3AF] line-through font-[500] leading-none mt-[3px]">
-              ₹{astro.pricePerMinute + 20}/min
             </span>
           </div>
 

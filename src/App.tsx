@@ -23,6 +23,10 @@ import CategoryDetailScreen from './screens/CategoryDetailScreen';
 import NovaAIScreen from './screens/NovaAIScreen';
 import NovaAIChatScreen from './screens/NovaAIChatScreen';
 import NovaKundliScreen from './screens/NovaKundliScreen';
+import PartnerWithUsScreen from './screens/PartnerWithUsScreen';
+import AstrologerApplicationScreen from './screens/AstrologerApplicationScreen';
+import ManageAstrologerProfileScreen from './screens/ManageAstrologerProfileScreen';
+import HelpSupportScreen from './screens/HelpSupportScreen';
 import BottomNav from './components/BottomNav';
 import { Screen, Tab } from './types';
 import { AnimatePresence, motion } from 'motion/react';
@@ -152,7 +156,7 @@ export default function App() {
         setToast({ message: 'Settings will be available in the next release.' });
         break;
       case 'help':
-        setToast({ message: 'Connecting with Customer Support...' });
+        navigate('help-support');
         break;
       case 'logout':
         await signOut();
@@ -193,6 +197,10 @@ export default function App() {
       case 'astrologers': return <AstrologersScreen onNavigate={navigate} />;
       case 'profile': return <ProfileScreen onNavigate={navigate} />;
       case 'astrologer-profile': return <AstrologerProfileScreen astrologerId={routeParams?.astrologerId} onNavigate={navigate} />;
+      case 'partner-with-us': return <PartnerWithUsScreen onNavigate={navigate} />;
+      case 'astrologer-application': return <AstrologerApplicationScreen onNavigate={navigate} />;
+      case 'manage-astrologer-profile': return <ManageAstrologerProfileScreen onNavigate={navigate} />;
+      case 'help-support': return <HelpSupportScreen onNavigate={navigate} routeParams={routeParams} />;
       case 'category-detail': return <CategoryDetailScreen category={routeParams?.category} onNavigate={navigate} />;
       default: return <HomeScreen onNavigate={navigate} onOpenDrawer={() => setIsDrawerOpen(true)} />;
     }
