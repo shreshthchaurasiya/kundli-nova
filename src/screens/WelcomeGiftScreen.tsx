@@ -31,19 +31,12 @@ export default function WelcomeGiftScreen({ onNavigate }: WelcomeGiftScreenProps
       </div>
 
       {/* Top Header */}
-      <div className="w-full flex justify-between items-center px-[20px] sm:px-[24px] pt-[24px] sm:pt-[32px] z-20">
+      <div className="w-full flex items-center px-[20px] sm:px-[24px] pt-[24px] sm:pt-[32px] z-20">
         <button 
           onClick={() => onNavigate('create-profile')}
           className="p-[10px] -ml-[10px] rounded-full hover:bg-gray-50 active:bg-gray-100 transition-colors text-[#111827]"
         >
           <ArrowLeft size={24} strokeWidth={2} />
-        </button>
-
-        <button 
-          onClick={() => onNavigate('home')}
-          className="text-[14px] font-medium text-[#6B7280] hover:text-[#374151] active:scale-[0.98] transition-all px-[16px] py-[6px] border border-[#E5E7EB] rounded-full bg-white shadow-sm"
-        >
-          Skip
         </button>
       </div>
 
@@ -112,13 +105,6 @@ export default function WelcomeGiftScreen({ onNavigate }: WelcomeGiftScreenProps
               <ArrowRight size={20} strokeWidth={2.5} />
             </button>
             
-            <button 
-              onClick={() => onNavigate('home')}
-              className="h-[44px] px-[24px] rounded-[12px] text-[#6B7280] font-medium text-[15px] hover:bg-gray-50 active:bg-gray-100 transition-colors flex items-center justify-center"
-            >
-              <span className="mr-[8px]">Start Later</span>
-              <ArrowRight size={18} strokeWidth={2} />
-            </button>
           </motion.div>
           
         </div>

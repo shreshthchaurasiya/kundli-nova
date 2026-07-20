@@ -29,6 +29,7 @@ const InputWrapper = ({ label, children, delay = 0 }: any) => (
 
 import { useAuth } from '../auth';
 import { useProfile } from '../contexts/ProfileContext';
+import { supabase } from '../lib/supabase';
 
 export default function CreateProfileScreen({ onNavigate }: CreateProfileScreenProps) {
   const repositories = useRepositories();
@@ -48,6 +49,19 @@ export default function CreateProfileScreen({ onNavigate }: CreateProfileScreenP
   
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const cancelProvisionalSignup = async () => {
+    if (!window.confirm('Leave signup? You can continue your details after signing in again.')) return;
+    setSaving(true);
+    setError('');
+    const { error: signOutError } = await supabase.auth.signOut();
+    setSaving(false);
+    if (signOutError) {
+      setError(signOutError.message);
+      return;
+    }
+    onNavigate('login');
+  };
   
   // Sheet state
   const [activeSheet, setActiveSheet] = useState<'state' | null>(null);
@@ -87,7 +101,8 @@ export default function CreateProfileScreen({ onNavigate }: CreateProfileScreenP
       {/* Top Navigation */}
       <div className="absolute top-0 left-0 w-full px-[20px] pt-[24px] sm:pt-[32px] z-20 flex items-center bg-gradient-to-b from-white/90 to-transparent pb-4">
         <button 
-          onClick={() => onNavigate('otp')}
+          onClick={() => void cancelProvisionalSignup()}
+          disabled={saving}
           className="p-[10px] -ml-[10px] rounded-full hover:bg-gray-50 active:bg-gray-100 transition-colors text-[#111827]"
         >
           <ArrowLeft size={24} strokeWidth={2} />
@@ -374,4 +389,3 @@ function BottomSheet({ title, options, selectedValue, onSelect, onClose }: any) 
     </div>
   );
 }
-

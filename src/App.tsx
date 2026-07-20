@@ -67,8 +67,9 @@ export default function App() {
         setProfileLoading(true);
         try {
           const profile = await repositories.profile.getProfile();
-          // Profile is complete if it exists and has a date of birth (since Guest trigger profile doesn't have dob)
-          if (profile && profile.dob) {
+          // OAuth creates only a provisional Auth identity. App access starts
+          // after the birth-details transaction explicitly completes onboarding.
+          if (profile?.onboardingCompletedAt) {
             setIsProfileComplete(true);
           } else {
             setIsProfileComplete(false);
@@ -92,16 +93,11 @@ export default function App() {
     if (isLoading || profileLoading) return; // Wait for session and profile check to resolve
 
     if (isAuthenticated) {
-      // Only redirect from initial auth flow screens
-      if (AUTH_SCREENS.includes(currentScreen)) {
-        if (isProfileComplete) {
-          if (currentScreen !== 'welcome-gift') {
-            setCurrentScreen('home');
-          }
-        } else {
-          // If they haven't filled their details, direct them to Create Profile
-          setCurrentScreen('create-profile');
-        }
+      if (!isProfileComplete) {
+        // A provisional OAuth identity cannot enter any application screen.
+        if (currentScreen !== 'create-profile') setCurrentScreen('create-profile');
+      } else if (AUTH_SCREENS.includes(currentScreen) && currentScreen !== 'welcome-gift') {
+        setCurrentScreen('home');
       }
     } else {
       // Profile creation, welcome gift, and all application screens are protected.
@@ -139,7 +135,7 @@ export default function App() {
     setCurrentScreen(tab);
   };
 
-  const showBottomNav = isAuthenticated && NAV_SCREENS.includes(currentScreen);
+  const showBottomNav = isAuthenticated && isProfileComplete && NAV_SCREENS.includes(currentScreen);
 
   const getGreeting = () => {
     const hour = new Date().getHours();

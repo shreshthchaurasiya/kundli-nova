@@ -12,6 +12,7 @@ type ProfileRow = {
   birth_state: string | null;
   birth_district: string | null;
   birth_city: string | null;
+  onboarding_completed_at: string | null;
 };
 
 const toProfile = (row: ProfileRow): UserProfile => ({
@@ -24,6 +25,7 @@ const toProfile = (row: ProfileRow): UserProfile => ({
   state: row.birth_state ?? undefined,
   district: row.birth_district ?? undefined,
   city: row.birth_city ?? undefined,
+  onboardingCompletedAt: row.onboarding_completed_at ?? undefined,
 });
 
 export class SupabaseProfileRepository implements IProfileRepository {
@@ -34,7 +36,7 @@ export class SupabaseProfileRepository implements IProfileRepository {
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('phone,email,name,gender,dob,tob,birth_state,birth_district,birth_city')
+      .select('phone,email,name,gender,dob,tob,birth_state,birth_district,birth_city,onboarding_completed_at')
       .eq('id', user.id)
       .maybeSingle<ProfileRow>();
 
@@ -46,6 +48,26 @@ export class SupabaseProfileRepository implements IProfileRepository {
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError) throw userError;
     if (!user) throw new Error('Please sign in before saving your profile.');
+
+    const isOnboardingSubmission = Boolean(
+      profile.name && profile.gender && profile.dob && profile.tob &&
+      profile.state && profile.district && profile.city
+    );
+
+    if (isOnboardingSubmission) {
+      const { data, error } = await supabase.rpc('complete_onboarding', {
+        p_name: profile.name,
+        p_phone: profile.phone || null,
+        p_gender: profile.gender,
+        p_dob: profile.dob,
+        p_tob: profile.tob,
+        p_state: profile.state,
+        p_district: profile.district,
+        p_city: profile.city,
+      });
+      if (error) throw error;
+      return toProfile(data as ProfileRow);
+    }
 
     const updates: Record<string, unknown> = {};
     const fields: Array<[keyof UserProfile, string]> = [
@@ -61,7 +83,7 @@ export class SupabaseProfileRepository implements IProfileRepository {
       .from('profiles')
       .update(updates)
       .eq('id', user.id)
-      .select('phone,email,name,gender,dob,tob,birth_state,birth_district,birth_city')
+      .select('phone,email,name,gender,dob,tob,birth_state,birth_district,birth_city,onboarding_completed_at')
       .single<ProfileRow>();
 
     if (error) throw error;
