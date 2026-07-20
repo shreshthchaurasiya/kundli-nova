@@ -6,7 +6,7 @@ import {
   Message 
 } from '../types';
 import { ASTROLOGERS } from '../data';
-import { walletStorage } from './storage/walletStorage';
+import { SupabaseWalletRepository } from '../repositories/supabase/supabaseWalletRepository';
 import { consultationStorage } from './storage/consultationStorage';
 import { chatStorage } from './storage/chatStorage';
 import { kundliProfileStorage } from './storage/kundliProfileStorage';
@@ -34,6 +34,7 @@ export interface DemoConsultationKundliData {
 
 // Helper to delay simulation (making it asynchronous like real networks)
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const walletRepository = new SupabaseWalletRepository();
 
 // --- IndexedDB Configuration for Chat Images ---
 const DB_NAME = 'KundliNovaChatDB';
@@ -103,25 +104,21 @@ export async function retrieveImageFromIndexedDB(idbUrl: string): Promise<string
 // --- 1. Wallet Service ---
 export const walletService = {
   async getBalance(): Promise<number> {
-    await delay(300);
-    return walletStorage.getBalance();
+    return (await walletRepository.getWalletState()).balance;
   },
 
   async recharge(amount: number): Promise<number> {
-    await delay(400);
-    const updatedState = walletStorage.recharge(amount, 'Wallet Recharge (Demo)');
+    const updatedState = await walletRepository.recharge(amount, 'Wallet Recharge (Demo)');
     return updatedState.balance;
   },
 
   async debit(amount: number): Promise<number> {
-    await delay(200);
-    const updatedState = walletStorage.debit(amount, 'Consultation Session Charge');
+    const updatedState = await walletRepository.debit(amount, 'Consultation Session Charge');
     return updatedState.balance;
   },
 
   async getTransactions(): Promise<WalletTransaction[]> {
-    await delay(200);
-    return walletStorage.getTransactions();
+    return walletRepository.getTransactions();
   }
 };
 
@@ -175,7 +172,7 @@ export const consultationService = {
       req.lastBilledAt = new Date().toISOString();
       req.billedMinutes = 1;
       req.totalCharged = req.ratePerMinute;
-      walletStorage.debit(req.ratePerMinute, 'Consultation Session Start');
+      await walletService.debit(req.ratePerMinute);
       consultationStorage.setActiveRequest(req);
       return req;
     }
@@ -202,7 +199,7 @@ export const consultationService = {
       req.lastBilledAt = new Date().toISOString();
       req.billedMinutes = 1;
       req.totalCharged = req.ratePerMinute;
-      walletStorage.debit(req.ratePerMinute, 'Consultation Session Start');
+      await walletService.debit(req.ratePerMinute);
       consultationStorage.setActiveRequest(req);
       return req;
     }

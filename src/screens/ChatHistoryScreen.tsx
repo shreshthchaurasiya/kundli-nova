@@ -33,7 +33,7 @@ export default function ChatHistoryScreen({ onNavigate }: ChatHistoryScreenProps
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<'All' | 'Active' | 'Completed' | 'Cancelled'>('All');
-  const [walletBalance, setWalletBalance] = useState<number>(150);
+  const [walletBalance, setWalletBalance] = useState<number>(0);
 
   // Helper to format duration
   const formatSeconds = (totalSeconds: number) => {

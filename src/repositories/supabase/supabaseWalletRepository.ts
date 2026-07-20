@@ -1,7 +1,7 @@
 import { supabase } from '../../lib/supabase';
 import { WalletState, WalletTransaction } from '../../types/wallet';
 import { IWalletRepository } from '../interfaces/wallet';
-import { ApiWalletRepository } from '../api/apiWalletRepository';
+import { v4 as uuidv4 } from 'uuid';
 
 type TransactionRow = {
   id: string;
@@ -14,8 +14,6 @@ type TransactionRow = {
   reference_type: WalletTransaction['referenceType'] | null;
   reference_id: string | null;
 };
-
-const apiWallet = new ApiWalletRepository();
 
 export class SupabaseWalletRepository implements IWalletRepository {
   async getWalletState(): Promise<WalletState> {
@@ -61,12 +59,22 @@ export class SupabaseWalletRepository implements IWalletRepository {
     }));
   }
 
-  recharge(amount: number, title: string, referenceId?: string): Promise<WalletState> {
-    return apiWallet.recharge(amount, title, referenceId);
+  async recharge(amount: number, _title: string, referenceId?: string): Promise<WalletState> {
+    const { error } = await supabase.rpc('demo_recharge_wallet', {
+      p_amount: amount,
+      p_idempotency_key: referenceId || uuidv4(),
+    });
+    if (error) throw error;
+    return this.getWalletState();
   }
 
-  async debit(): Promise<WalletState> {
-    throw new Error('Direct frontend wallet debit is not allowed.');
+  async debit(amount: number, _title: string, referenceId?: string): Promise<WalletState> {
+    const { error } = await supabase.rpc('demo_debit_wallet', {
+      p_amount: amount,
+      p_idempotency_key: referenceId || uuidv4(),
+    });
+    if (error) throw error;
+    return this.getWalletState();
   }
 
   async refund(): Promise<WalletState> {

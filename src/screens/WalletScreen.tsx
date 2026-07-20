@@ -39,8 +39,8 @@ export default function WalletScreen({ onNavigate }: WalletScreenProps) {
     }
   };
 
-  // Recharge remains a secure backend operation; successful writes are then
-  // reflected everywhere by the Supabase Realtime subscription.
+  // Until a payment gateway is connected, recharge uses the explicitly enabled
+  // Supabase demo-wallet endpoint and is still recorded in the shared ledger.
   const executeRecharge = async (amount: number) => {
     if (isNaN(amount) || amount <= 0) return;
     try {
@@ -54,7 +54,7 @@ export default function WalletScreen({ onNavigate }: WalletScreenProps) {
       }, 2800);
     } catch (e) {
       console.error('[WalletScreen] Recharge failed', e);
-      setErrorToast('Recharge needs the secure API/payment server. Your balance was not changed.');
+      setErrorToast('Recharge failed. Please check your Supabase connection and try again.');
       setTimeout(() => setErrorToast(null), 3500);
     }
   };
