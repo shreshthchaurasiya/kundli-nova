@@ -1,88 +1,81 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import LoginScreen from '../LoginScreen';
 
-// vi.mock is hoisted — do NOT reference outer variables inside factory
-vi.mock('../../services/auth/phoneAuth', () => ({
-  normalizeIndianPhone: (raw: string) => {
-    const digits = raw.replace(/\D/g, '').slice(0, 10);
-    if (digits.length !== 10) return null;
-    if (!/^[6-9]/.test(digits)) return null;
-    return `+91${digits}`;
-  },
-  sendOtp: vi.fn(),
+vi.mock('../../services/auth/emailAuth', () => ({
+  signInWithEmail: vi.fn(),
 }));
 
-import { sendOtp } from '../../services/auth/phoneAuth';
+vi.mock('../../services/auth/oauthAuth', () => ({
+  signInWithOAuth: vi.fn(),
+}));
+
+import { signInWithEmail } from '../../services/auth/emailAuth';
+import { signInWithOAuth } from '../../services/auth/oauthAuth';
 
 const mockNavigate = vi.fn();
-
-function renderLogin() {
-  return render(<LoginScreen onNavigate={mockNavigate} />);
-}
 
 describe('LoginScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('renders the phone input', () => {
-    renderLogin();
-    expect(screen.getByPlaceholderText(/enter mobile number/i)).toBeInTheDocument();
+  it('renders the current email and password login fields', () => {
+    render(<LoginScreen onNavigate={mockNavigate} />);
+
+    expect(screen.getByPlaceholderText(/email address/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/^password$/i)).toBeInTheDocument();
   });
 
-  it('shows error for a phone number with fewer than 10 digits', async () => {
-    renderLogin();
-    const input = screen.getByPlaceholderText(/enter mobile number/i);
-    await userEvent.type(input, '99999');
-    fireEvent.click(screen.getByRole('button', { name: /continue/i }));
-    expect(
-      await screen.findByText(/valid 10-digit indian mobile number/i)
-    ).toBeInTheDocument();
+  it('keeps Continue disabled until both fields have values', async () => {
+    render(<LoginScreen onNavigate={mockNavigate} />);
+    const continueButton = screen.getByRole('button', { name: /^continue$/i });
+
+    expect(continueButton).toBeDisabled();
+    await userEvent.type(screen.getByPlaceholderText(/email address/i), 'user@example.com');
+    expect(continueButton).toBeDisabled();
+    await userEvent.type(screen.getByPlaceholderText(/^password$/i), 'secure-password');
+    expect(continueButton).toBeEnabled();
   });
 
-  it('shows error for a number starting with 0 (invalid prefix)', async () => {
-    renderLogin();
-    const input = screen.getByPlaceholderText(/enter mobile number/i);
-    await userEvent.type(input, '0123456789');
-    fireEvent.click(screen.getByRole('button', { name: /continue/i }));
-    expect(
-      await screen.findByText(/valid 10-digit indian mobile number/i)
-    ).toBeInTheDocument();
-  });
+  it('signs in with the submitted email and password', async () => {
+    vi.mocked(signInWithEmail).mockResolvedValueOnce({ error: null });
+    render(<LoginScreen onNavigate={mockNavigate} />);
 
-  it('calls sendOtp with normalized number for a valid 10-digit phone', async () => {
-    vi.mocked(sendOtp).mockResolvedValueOnce({ error: null });
-    renderLogin();
-    const input = screen.getByPlaceholderText(/enter mobile number/i);
-    await userEvent.type(input, '9876543210');
-    fireEvent.click(screen.getByRole('button', { name: /continue/i }));
+    await userEvent.type(screen.getByPlaceholderText(/email address/i), 'user@example.com');
+    await userEvent.type(screen.getByPlaceholderText(/^password$/i), 'secure-password');
+    fireEvent.click(screen.getByRole('button', { name: /^continue$/i }));
+
     await waitFor(() => {
-      expect(sendOtp).toHaveBeenCalledWith('+919876543210');
+      expect(signInWithEmail).toHaveBeenCalledWith('user@example.com', 'secure-password');
     });
   });
 
-  it('navigates to otp screen with phone in params on success', async () => {
-    vi.mocked(sendOtp).mockResolvedValueOnce({ error: null });
-    renderLogin();
-    const input = screen.getByPlaceholderText(/enter mobile number/i);
-    await userEvent.type(input, '9876543210');
-    fireEvent.click(screen.getByRole('button', { name: /continue/i }));
-    await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith('otp', { phone: '+919876543210' });
+  it('shows the Supabase login error', async () => {
+    vi.mocked(signInWithEmail).mockResolvedValueOnce({
+      error: { code: 'LOGIN_FAILED', message: 'Invalid login credentials' },
     });
+    render(<LoginScreen onNavigate={mockNavigate} />);
+
+    await userEvent.type(screen.getByPlaceholderText(/email address/i), 'user@example.com');
+    await userEvent.type(screen.getByPlaceholderText(/^password$/i), 'wrong-password');
+    fireEvent.click(screen.getByRole('button', { name: /^continue$/i }));
+
+    expect(await screen.findByText(/invalid login credentials/i)).toBeInTheDocument();
   });
 
-  it('shows API error message on sendOtp failure', async () => {
-    vi.mocked(sendOtp).mockResolvedValueOnce({
-      error: { code: 'SEND_OTP_FAILED', message: 'Rate limit exceeded' },
-    });
-    renderLogin();
-    const input = screen.getByPlaceholderText(/enter mobile number/i);
-    await userEvent.type(input, '9876543210');
-    fireEvent.click(screen.getByRole('button', { name: /continue/i }));
-    expect(await screen.findByText(/rate limit exceeded/i)).toBeInTheDocument();
-    expect(mockNavigate).not.toHaveBeenCalled();
+  it('starts Google OAuth from the existing Google button', () => {
+    render(<LoginScreen onNavigate={mockNavigate} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /continue with google/i }));
+    expect(signInWithOAuth).toHaveBeenCalledWith('google');
+  });
+
+  it('opens the forgot-password flow', () => {
+    render(<LoginScreen onNavigate={mockNavigate} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /forgot password/i }));
+    expect(mockNavigate).toHaveBeenCalledWith('forgot-password');
   });
 });

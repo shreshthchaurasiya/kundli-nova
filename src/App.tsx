@@ -31,7 +31,9 @@ import { useAuth } from './auth';
 import { useRepositories } from './repositories/repositoryProvider';
 import { useProfile } from './contexts/ProfileContext';
 
-// Auth screens that should never show the bottom nav
+// Public screens may be opened without a verified Supabase session.
+const PUBLIC_SCREENS: Screen[] = ['splash', 'login', 'signup', 'forgot-password', 'otp'];
+// Auth-flow screens that should never show the bottom nav.
 const AUTH_SCREENS: Screen[] = ['splash', 'login', 'signup', 'forgot-password', 'otp', 'create-profile', 'welcome-gift'];
 // Screens that show bottom nav
 const NAV_SCREENS: Screen[] = ['home', 'chat-list', 'chat-history', 'nova-ai', 'services', 'profile', 'astrologers'];
@@ -81,7 +83,7 @@ export default function App() {
     };
 
     checkProfileCompleteness();
-  }, [isAuthenticated, user, repositories.profile, currentScreen]);
+  }, [isAuthenticated, user, repositories.profile]);
 
   // Route based on auth state and profile completeness
   useEffect(() => {
@@ -100,12 +102,12 @@ export default function App() {
         }
       }
     } else {
-      // Not authenticated — send to login (unless already on splash/login/otp)
-      if (!AUTH_SCREENS.includes(currentScreen)) {
+      // Profile creation, welcome gift, and all application screens are protected.
+      if (!PUBLIC_SCREENS.includes(currentScreen)) {
         setCurrentScreen('login');
       }
     }
-  }, [isAuthenticated, isLoading, profileLoading, isProfileComplete]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentScreen, isAuthenticated, isLoading, profileLoading, isProfileComplete]);
 
   // Subscribe to wallet state changes reactively
   useEffect(() => {
@@ -124,16 +126,27 @@ export default function App() {
   }, [toast]);
 
   const navigate = (screen: Screen, params?: any) => {
+    if (!isAuthenticated && !PUBLIC_SCREENS.includes(screen)) {
+      setRouteParams({});
+      setCurrentScreen('login');
+      return;
+    }
+
     setCurrentScreen(screen);
-    if (params) setRouteParams(params);
+    setRouteParams(params ?? {});
   };
 
   const handleTabChange = (tab: Tab) => {
+    if (!isAuthenticated) {
+      setCurrentScreen('login');
+      return;
+    }
+
     setCurrentTab(tab);
     setCurrentScreen(tab);
   };
 
-  const showBottomNav = NAV_SCREENS.includes(currentScreen);
+  const showBottomNav = isAuthenticated && NAV_SCREENS.includes(currentScreen);
 
   const getGreeting = () => {
     const hour = new Date().getHours();

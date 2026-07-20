@@ -30,11 +30,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           console.error('Error fetching auth session:', error);
         }
 
+        if (!session) {
+          setState({
+            user: null,
+            session: null,
+            accessToken: null,
+            isAuthenticated: false,
+            isLoading: false,
+          });
+          return;
+        }
+
+        // getSession() reads persisted browser state. Verify it against Auth once
+        // on startup so a deleted user or revoked stale token cannot unlock the app.
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+        if (userError || !user) {
+          await supabase.auth.signOut({ scope: 'local' });
+          setState({
+            user: null,
+            session: null,
+            accessToken: null,
+            isAuthenticated: false,
+            isLoading: false,
+          });
+          return;
+        }
+
         setState({
-          user: session?.user ?? null,
-          session: session ?? null,
-          accessToken: session?.access_token ?? null,
-          isAuthenticated: !!session?.user,
+          user,
+          session,
+          accessToken: session.access_token,
+          isAuthenticated: true,
           isLoading: false,
         });
       } catch (err) {
@@ -64,11 +91,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOut = async () => {
     setState((prev) => ({ ...prev, isLoading: true }));
-    await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      setState((prev) => ({ ...prev, isLoading: false }));
+      throw error;
+    }
   };
 
   const refreshSession = async () => {
-    const { data: { session } } = await supabase.auth.refreshSession();
+    const { data: { session }, error } = await supabase.auth.refreshSession();
+
+    if (error || !session) {
+      setState({
+        user: null,
+        session: null,
+        accessToken: null,
+        isAuthenticated: false,
+        isLoading: false,
+      });
+      return;
+    }
+
     if (session) {
       setState({
         user: session.user,
