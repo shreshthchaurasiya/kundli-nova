@@ -282,7 +282,7 @@ begin
   select * into v_settings from public.consultation_settings where id = true;
   select * into v_wallet from public.wallets where user_id = v_session.user_id for update;
 
-  v_elapsed_seconds := pg_catalog.greatest(0, pg_catalog.floor(extract(epoch from (v_now - v_session.started_at)))::integer);
+  v_elapsed_seconds := greatest(0, pg_catalog.floor(extract(epoch from (v_now - v_session.started_at)))::integer);
   v_expected_minutes := 1 + pg_catalog.floor(v_elapsed_seconds::numeric / v_settings.billing_interval_seconds)::integer;
 
   for v_minute in (v_session.billed_minutes + 1)..v_expected_minutes loop
@@ -380,7 +380,7 @@ begin
         ended_at = v_now,
         elapsed_seconds = case
           when started_at is null then elapsed_seconds
-          else pg_catalog.greatest(0, pg_catalog.floor(extract(epoch from (v_now - started_at)))::integer)
+          else greatest(0, pg_catalog.floor(extract(epoch from (v_now - started_at)))::integer)
         end
     where id = p_session_id
     returning * into v_session;
