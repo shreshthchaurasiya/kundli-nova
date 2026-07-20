@@ -411,46 +411,11 @@ enabled = true
 # Directory under `supabase/` where declarative files are written.
 # declarative_schema_path = "./database"
 # JSON string passed through to pg-delta SQL formatting.
-# format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
-Fix the two failing Phase 2 integration tests before proceeding further.
+[functions.razorpay-create-order]
+verify_jwt = true
 
-The heartbeat requests currently use this ID:
+[functions.razorpay-verify-payment]
+verify_jwt = true
 
-11111111-1111-1111-1111-111111111111
-
-The strict UUID route validation rejects it before the ownership and billing
-logic executes, causing HTTP 400 responses.
-
-Replace test fixture IDs with valid UUID v4 values, for example:
-
-Session:
-11111111-1111-4111-8111-111111111111
-
-User A:
-22222222-2222-4222-8222-222222222222
-
-User B:
-33333333-3333-4333-8333-333333333333
-
-Review all mocked IDs in the integration suite and ensure they satisfy the
-same Zod UUID validation used by the production routes.
-
-Do not weaken production UUID validation merely to make tests pass.
-
-After correcting the fixtures, run:
-
-npx vitest run
-npm run lint
-npm run build
-
-Report the exact output.
-
-Required completion criteria:
-- 3 test files passed
-- 10 tests passed
-- TypeScript 0 errors
-- production build successful
-
-If tests still fail after using valid UUIDs, inspect and report the full 400
-response body before changing application behavior.
-Do not proceed to Phase 3.
+[functions.razorpay-webhook]
+verify_jwt = false

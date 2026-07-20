@@ -4,6 +4,25 @@ import { ArrowLeft, Wallet as WalletIcon, CreditCard, Clock, Gift, X, CheckCircl
 import { Screen } from '../types';
 import { useWallet } from '../contexts/WalletContext';
 import { useRepositories } from '../repositories/repositoryProvider';
+import { supabase } from '../lib/supabase';
+
+declare global {
+  interface Window {
+    Razorpay: any;
+  }
+}
+
+const loadRazorpay = () => new Promise<boolean>((resolve) => {
+  if (window.Razorpay) {
+    resolve(true);
+    return;
+  }
+  const script = document.createElement('script');
+  script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+  script.onload = () => resolve(true);
+  script.onerror = () => resolve(false);
+  document.body.appendChild(script);
+});
 
 interface WalletScreenProps {
   onNavigate: (screen: Screen) => void;
@@ -17,6 +36,7 @@ export default function WalletScreen({ onNavigate }: WalletScreenProps) {
   const [customAmount, setCustomAmount] = useState('');
   const [successToast, setSuccessToast] = useState<string | null>(null);
   const [errorToast, setErrorToast] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Helper to format date and time in the exact style of the mockup
   const formatTxDate = (date: Date) => {
@@ -39,22 +59,85 @@ export default function WalletScreen({ onNavigate }: WalletScreenProps) {
     }
   };
 
-  // Until a payment gateway is connected, recharge uses the explicitly enabled
-  // Supabase demo-wallet endpoint and is still recorded in the shared ledger.
   const executeRecharge = async (amount: number) => {
-    if (isNaN(amount) || amount <= 0) return;
+    if (isNaN(amount) || amount <= 0 || isProcessing) return;
+    setIsProcessing(true);
+    
+    // In demo mode without Razorpay setup, you might want to bypass this.
+    // For production-safe Razorpay flow:
     try {
-      await repositories.wallet.recharge(amount, 'Wallet Recharge');
-      await refreshWallet();
-      
-      // Show success banner
-      setSuccessToast(`₹${amount} added successfully!`);
-      setTimeout(() => {
-        setSuccessToast(null);
-      }, 2800);
-    } catch (e) {
+      const packageId = `recharge_${amount}`;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+
+      const isLoaded = await loadRazorpay();
+      if (!isLoaded) throw new Error('Failed to load Razorpay SDK');
+
+      // Create Order
+      const { data: createData, error: createError } = await supabase.functions.invoke('razorpay-create-order', {
+        body: { packageId }
+      });
+
+      if (createError || !createData || createData.error) {
+        throw new Error(createData?.error || createError?.message || 'Failed to create order');
+      }
+
+      const { key_id, order_id, amount: rzpAmount, currency, brand_name, description } = createData;
+
+      const options = {
+        key: key_id,
+        amount: rzpAmount,
+        currency,
+        name: brand_name,
+        description,
+        order_id,
+        handler: async (response: any) => {
+          try {
+            // Verify Payment
+            const { data: verifyData, error: verifyError } = await supabase.functions.invoke('razorpay-verify-payment', {
+              body: {
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+              }
+            });
+            
+            if (verifyError || !verifyData || verifyData.error) {
+               throw new Error(verifyData?.error || verifyError?.message || 'Payment verification failed');
+            }
+            
+            await refreshWallet();
+            setSuccessToast(`₹${amount} added successfully!`);
+            setTimeout(() => setSuccessToast(null), 2800);
+          } catch (verifyError: any) {
+             console.error('[WalletScreen] Verify failed', verifyError);
+             setErrorToast(verifyError.message || 'Payment verification failed. If money was deducted, it will be refunded or credited soon.');
+             setTimeout(() => setErrorToast(null), 5000);
+          } finally {
+             setIsProcessing(false);
+          }
+        },
+        theme: {
+          color: '#FF8A00'
+        },
+        modal: {
+          ondismiss: () => {
+            setIsProcessing(false);
+          }
+        }
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', (response: any) => {
+        setIsProcessing(false);
+        setErrorToast('Payment failed: ' + response.error.description);
+        setTimeout(() => setErrorToast(null), 4000);
+      });
+      rzp.open();
+    } catch (e: any) {
       console.error('[WalletScreen] Recharge failed', e);
-      setErrorToast('Recharge failed. Please check your Supabase connection and try again.');
+      setIsProcessing(false);
+      setErrorToast(e.message || 'Recharge failed. Please try again.');
       setTimeout(() => setErrorToast(null), 3500);
     }
   };

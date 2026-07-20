@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Gift, ArrowRight, Lock, Loader2 } from 'lucide-react';
+import { Gift, ArrowRight, Lock, Loader2, ArrowLeft } from 'lucide-react';
 import { Screen } from '../types';
 import { useRepositories } from '../repositories/repositoryProvider';
 import { useProfile } from '../contexts/ProfileContext';
@@ -50,6 +50,23 @@ export default function WelcomeGiftScreen({ onNavigate }: WelcomeGiftScreenProps
             <path d="M800 150 A 40 40 0 1 1 850 100 A 50 50 0 0 0 800 150" fill="currentColor" stroke="none" opacity="0.5" />
           </g>
         </svg>
+      </div>
+
+      {/* Top Header */}
+      <div className="w-full flex justify-between items-center px-[20px] sm:px-[24px] pt-[24px] sm:pt-[32px] z-20">
+        <button
+          onClick={() => onNavigate('create-profile')}
+          className="p-[10px] -ml-[10px] rounded-full hover:bg-gray-50 active:bg-gray-100 transition-colors text-[#111827]"
+        >
+          <ArrowLeft size={24} strokeWidth={2} />
+        </button>
+
+        <button
+          onClick={() => onNavigate('home')}
+          className="text-[14px] font-medium text-[#6B7280] hover:text-[#374151] active:scale-[0.98] transition-all px-[16px] py-[6px] border border-[#E5E7EB] rounded-full bg-white shadow-sm"
+        >
+          Skip
+        </button>
       </div>
 
       <div className="flex-1 w-full flex flex-col px-[28px] sm:px-[32px] pb-[32px] z-10 overflow-y-auto no-scrollbar">
@@ -129,6 +146,13 @@ export default function WelcomeGiftScreen({ onNavigate }: WelcomeGiftScreenProps
               )}
             </button>
             
+            <button
+              onClick={() => onNavigate('home')}
+              className="h-[44px] px-[24px] rounded-[12px] text-[#6B7280] font-medium text-[15px] hover:bg-gray-50 active:bg-gray-100 transition-colors flex items-center justify-center"
+            >
+              <span className="mr-[8px]">Start Later</span>
+              <ArrowRight size={18} strokeWidth={2} />
+            </button>
           </motion.div>
           
         </div>

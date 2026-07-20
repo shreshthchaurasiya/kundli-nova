@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Phone, Video, Paperclip, Send, Clock, ShieldCheck, MoreVertical, Lock } from 'lucide-react';
 import { Screen } from '../types';
 import { useProfile } from '../contexts/ProfileContext';
+import { postAiRequest } from '../services/aiClient';
 
 interface ChatScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
@@ -211,15 +212,25 @@ export default function ChatScreen({ onNavigate, routeParams }: ChatScreenProps)
     const tempMessages = [...messages, hiddenContextMessage];
     
     try {
-      // Simulate network delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      setMessages(prev => [...prev, {
-        id: Date.now().toString(),
-        text: "Main tab tak aapki Kundli dekh raha tha... Aapki rashi me ek shubh yog ban raha hai. Kya aap iske bare me vistar se janna chahenge?",
-        sender: 'astrologer',
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      }]);
+      const aiConversation = tempMessages.map(m => ({
+        sender: m.sender === 'astrologer' ? 'nova' : 'user',
+        text: m.text
+      }));
+
+      const result = await postAiRequest<{ texts: string[] }>('/api/chat', {
+        messages: aiConversation,
+        userProfile: profileData
+      });
+
+      if (result.texts && result.texts.length > 0) {
+        const aiMessages = result.texts.map((text, i) => ({
+          id: Date.now().toString() + "-ai-idle-" + i,
+          text: text,
+          sender: 'astrologer' as const,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }));
+        setMessages(prev => [...prev, ...aiMessages]);
+      }
       setIsTyping(false);
     } catch (error) {
       console.error("Chat idle error:", error);
@@ -260,31 +271,41 @@ export default function ChatScreen({ onNavigate, routeParams }: ChatScreenProps)
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
-    setMessages(prev => [...prev, newUserMessage]);
+    const newMessages = [...messages, newUserMessage];
+    setMessages(newMessages);
     setIsTyping(true);
 
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000));
-    
-    let aiText = "Mujhe aapki pareshani samajh aa rahi hai. Kripya thoda aur vistar se batayein.";
-    const q = userText.toLowerCase();
-    
-    if (q.includes('career') || q.includes('job') || q.includes('work')) {
-      aiText = "Aapki kundli me 10th house strong hai. Career me jald hi nayi opportunity aane wali hai.";
-    } else if (q.includes('love') || q.includes('marriage') || q.includes('shaadi')) {
-      aiText = "7th house par Guru ki drishti hai. Relationships me sudhaar aayega, thoda patience rakhein.";
-    } else if (q.includes('money') || q.includes('finance') || q.includes('paisa')) {
-      aiText = "Financial growth thodi slow hai, par aane wale 3 mahino me dhan laabh ke yog ban rahe hain.";
-    } else if (q.includes('family') || q.includes('health')) {
-      aiText = "Parivar me shanti ka aagman hoga. Health ke liye thoda dhyan rakhein, subah jaldi uthne ka prayas karein.";
-    }
+    try {
+      const aiConversation = newMessages.map(m => ({
+        sender: m.sender === 'astrologer' ? 'nova' : 'user',
+        text: m.text
+      }));
 
-    setMessages(prev => [...prev, {
-      id: Date.now().toString() + "-ai",
-      text: aiText,
-      sender: 'astrologer',
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    }]);
+      const result = await postAiRequest<{ texts: string[] }>('/api/chat', {
+        messages: aiConversation,
+        userProfile: profileData
+      });
+
+      if (result.texts && result.texts.length > 0) {
+        const aiMessages = result.texts.map((text, i) => ({
+          id: Date.now().toString() + "-ai-" + i,
+          text: text,
+          sender: 'astrologer' as const,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }));
+        setMessages(prev => [...prev, ...aiMessages]);
+      } else {
+        throw new Error('Empty response');
+      }
+    } catch (error) {
+      console.error(error);
+      setMessages(prev => [...prev, {
+        id: Date.now().toString() + "-ai-error",
+        text: "Kshama karein, network issue ki wajah se main abhi connect nahi kar pa raha hoon. Kripya dobara try karein.",
+        sender: 'astrologer',
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }]);
+    }
     
     setIsTyping(false);
   };
