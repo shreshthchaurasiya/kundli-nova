@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Menu, Search, Wallet, X, ChevronRight, Phone, BookHeart, BookOpen, Share2, Star, Heart, HelpCircle, FileText, LogOut } from 'lucide-react';
+import { Menu, Search, Wallet, X, ChevronRight, Phone, BookHeart, BookOpen, Share2, Star, Heart, HelpCircle, FileText, LogOut, Handshake, BadgeCheck } from 'lucide-react';
 import { Screen } from '../types';
 import { useProfile } from '../contexts/ProfileContext';
 import { useWallet } from '../contexts/WalletContext';
@@ -135,6 +135,22 @@ export default function CategoryScreen({ onNavigate }: CategoryScreenProps) {
           ))}
         </div>
 
+        <div className="mx-[20px] mt-[28px] overflow-hidden rounded-[20px] bg-neutral-950 p-[20px] text-white shadow-[0_10px_30px_rgba(17,24,39,0.08)]">
+          <div className="flex items-start gap-[14px]">
+            <div className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-[14px] bg-[#FF8A00]">
+              <Handshake size={22} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#FF8A00]"><BadgeCheck size={12} /> Professional Network</div>
+              <h3 className="mt-1.5 text-[18px] font-extrabold tracking-tight">Partner with Kundli Nova</h3>
+              <p className="mt-1.5 text-[11px] font-medium leading-relaxed text-neutral-400">Apply as a verified astrologer or connect with us for a business partnership.</p>
+            </div>
+          </div>
+          <button onClick={() => onNavigate('partner-with-us')} className="mt-[16px] flex h-[44px] w-full items-center justify-center gap-1 rounded-[13px] bg-white text-[12px] font-extrabold text-neutral-900 active:scale-[0.99]">
+            Explore partnership <ChevronRight size={15} />
+          </button>
+        </div>
+
         {renderSectionHeader('Language', true)}
         <div className="grid grid-cols-4 gap-y-[20px] gap-x-[12px] px-[20px] mb-[16px]">
           {LANGUAGES.map((lang) => (
@@ -198,7 +214,7 @@ export default function CategoryScreen({ onNavigate }: CategoryScreenProps) {
                 <DrawerItem icon={<Share2 size={20} />} label="Share app" />
                 <DrawerItem icon={<Star size={20} />} label="Rate app" />
                 <DrawerItem icon={<Heart size={20} />} label="Follow us" />
-                <DrawerItem icon={<HelpCircle size={20} />} label="Customer Support" />
+                <DrawerItem icon={<HelpCircle size={20} />} label="Customer Support" onClick={() => { setIsDrawerOpen(false); onNavigate('help-support'); }} />
                 <DrawerItem icon={<FileText size={20} />} label="Privacy Policy" />
                 
                 <div className="h-[1px] bg-[#F3F4F6] my-[8px] mx-[24px]" />

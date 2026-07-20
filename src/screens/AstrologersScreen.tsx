@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { Search, Filter, Star, Phone, MessageCircle, X, Check, SlidersHorizontal, ArrowUpDown, Globe2, Award } from 'lucide-react';
-import { ASTROLOGERS } from '../data';
 import { Screen } from '../types';
 import { TopAstrologerCard } from './HomeScreen';
 import { motion, AnimatePresence } from 'motion/react';
+import { useAstrologerPartner } from '../features/astrologer';
 
 interface AstrologersScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
 }
 
 export default function AstrologersScreen({ onNavigate }: AstrologersScreenProps) {
+  const { directory: astrologers, isLoadingDirectory } = useAstrologerPartner();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeSkill, setActiveSkill] = useState<string | null>(null);
   const [activeLang, setActiveLang] = useState<string | null>(null);
@@ -17,13 +18,13 @@ export default function AstrologersScreen({ onNavigate }: AstrologersScreenProps
   const [showFilters, setShowFilters] = useState(false);
 
   // List of all unique skills/categories
-  const ALL_SKILLS = ['Vedic', 'Tarot', 'Career', 'Marriage', 'Vastu', 'Numerology', 'Love'];
+  const ALL_SKILLS = Array.from(new Set(astrologers.flatMap(astro => astro.skills))).sort();
   
   // List of all unique languages
-  const ALL_LANGUAGES = ['English', 'Hindi', 'Marathi', 'Sanskrit'];
+  const ALL_LANGUAGES = Array.from(new Set(astrologers.flatMap(astro => astro.languages))).sort();
 
   // Filter and sort logic
-  const filteredAstrologers = ASTROLOGERS.filter((astro) => {
+  const filteredAstrologers = astrologers.filter((astro) => {
     const query = searchQuery.toLowerCase().trim();
     
     const matchesSearch = query === '' || 
@@ -116,7 +117,11 @@ export default function AstrologersScreen({ onNavigate }: AstrologersScreenProps
       
       {/* Scrollable Astrologers List */}
       <div className="flex-1 overflow-y-auto no-scrollbar p-[20px] pb-24 space-y-4">
-        {sortedAstrologers.length > 0 ? (
+        {isLoadingDirectory ? (
+          <div className="space-y-3.5 animate-pulse">
+            {[0, 1, 2].map(item => <div key={item} className="h-[132px] rounded-[18px] bg-neutral-100" />)}
+          </div>
+        ) : sortedAstrologers.length > 0 ? (
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

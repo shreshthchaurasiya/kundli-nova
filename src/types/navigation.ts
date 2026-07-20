@@ -20,6 +20,10 @@ export type Screen =
   | 'services'
   | 'profile' 
   | 'astrologer-profile'
+  | 'partner-with-us'
+  | 'astrologer-application'
+  | 'manage-astrologer-profile'
+  | 'help-support'
   | 'category-detail'
   | 'nova-ai';
 

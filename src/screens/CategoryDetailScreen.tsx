@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Menu, Search, Wallet, X, ChevronRight, Phone, BookHeart, BookOpen, Share2, Star, Heart, HelpCircle, FileText, LogOut, ArrowLeft, Sparkles, Clock } from 'lucide-react';
-import { Screen, Astrologer } from '../types';
+import { Screen } from '../types';
 import { useProfile } from '../contexts/ProfileContext';
-import { ASTROLOGERS } from '../data';
 import { TopAstrologerCard } from './HomeScreen';
+import { useWallet } from '../contexts/WalletContext';
+import { useAstrologerPartner } from '../features/astrologer';
 
 interface CategoryDetailScreenProps {
   category: string;
@@ -13,6 +14,8 @@ interface CategoryDetailScreenProps {
 
 export default function CategoryDetailScreen({ category, onNavigate }: CategoryDetailScreenProps) {
   const { profile } = useProfile();
+  const { wallet } = useWallet();
+  const { directory: astrologers } = useAstrologerPartner();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [profileData, setProfileData] = useState<any>(null);
 
@@ -41,7 +44,7 @@ export default function CategoryDetailScreen({ category, onNavigate }: CategoryD
               className="flex items-center space-x-[6px] bg-[#FFFFFF] border border-[#E5E7EB] rounded-full px-[12px] py-[6px] active:bg-gray-50 transition-colors shadow-[0_2px_8px_rgba(0,0,0,0.03)]"
             >
               <Wallet size={18} strokeWidth={2} className="text-[#111827]" />
-              <span className="text-[13px] font-bold text-[#111827]">₹0</span>
+              <span className="text-[13px] font-bold text-[#111827]">₹{wallet.balance}</span>
             </button>
           </div>
         </div>
@@ -64,7 +67,9 @@ export default function CategoryDetailScreen({ category, onNavigate }: CategoryD
         </div>
 
         <div className="px-[20px] space-y-[16px] pb-[20px]">
-          {ASTROLOGERS.map(astro => (
+          {astrologers
+            .filter(astro => !category || astro.skills.some(skill => skill.toLowerCase() === category.toLowerCase()))
+            .map(astro => (
             <TopAstrologerCard 
               key={astro.id} 
               astro={astro} 

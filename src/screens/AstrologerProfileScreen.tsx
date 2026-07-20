@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { 
   ArrowLeft, 
   Star, 
@@ -7,17 +7,9 @@ import {
   BadgeCheck, 
   Heart, 
   Lock, 
-  ChevronRight, 
-  Sparkles, 
-  Languages, 
-  Calendar,
-  Briefcase,
-  Clock,
-  MessageSquare,
-  Sparkle
 } from 'lucide-react';
-import { ASTROLOGERS } from '../data';
 import { Screen } from '../types';
+import { useAstrologerPartner } from '../features/astrologer';
 
 interface AstrologerProfileScreenProps {
   astrologerId: string;
@@ -27,8 +19,13 @@ interface AstrologerProfileScreenProps {
 export default function AstrologerProfileScreen({ astrologerId, onNavigate }: AstrologerProfileScreenProps) {
   const [isFavorite, setIsFavorite] = useState(false);
   const [isAboutExpanded, setIsAboutExpanded] = useState(false);
+  const { directory, isLoadingDirectory } = useAstrologerPartner();
   
-  const astro = ASTROLOGERS.find(a => a.id === astrologerId);
+  const astro = directory.find(a => a.id === astrologerId);
+
+  if (isLoadingDirectory) {
+    return <div className="h-full bg-white p-5 animate-pulse"><div className="h-[280px] rounded-[22px] bg-neutral-100" /><div className="mt-6 h-7 w-2/3 rounded bg-neutral-100" /><div className="mt-3 h-4 w-1/2 rounded bg-neutral-100" /><div className="mt-7 h-24 rounded-[18px] bg-neutral-100" /></div>;
+  }
   
   if (!astro) {
     return (
@@ -45,9 +42,7 @@ export default function AstrologerProfileScreen({ astrologerId, onNavigate }: As
     );
   }
 
-  const bioText = astro.about && astro.about.length > 50 
-    ? astro.about 
-    : `I am a certified Vedic Astrologer and Tarot Practitioner with over ${astro.experience || '10 years'} of deep experience. My consultations offer clear, straightforward insights into your career transitions, personal relationship blocks, and future pathways. I specialize in offering practical, modern remedies that fit easily into your daily routine.`;
+  const bioText = astro.about || 'This verified Kundli Nova astrologer has not added a professional introduction yet.';
 
   return (
     <div id="profile-screen-root" className="flex-1 relative overflow-hidden bg-white flex flex-col h-full">
@@ -97,13 +92,9 @@ export default function AstrologerProfileScreen({ astrologerId, onNavigate }: As
 
           {/* Bottom Left Floating Pills */}
           <div className="absolute bottom-4 left-4 z-10 flex items-center space-x-1.5">
-            <span className="inline-flex items-center space-x-1.5 bg-[#16A34A] text-white text-[11px] font-bold px-3 py-1 rounded-full shadow-sm">
+            <span className={`inline-flex items-center space-x-1.5 text-white text-[11px] font-bold px-3 py-1 rounded-full shadow-sm ${astro.isOnline ? 'bg-[#16A34A]' : 'bg-neutral-600'}`}>
               <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse"></span>
-              <span>Online</span>
-            </span>
-            <span className="inline-flex items-center space-x-1.5 bg-[#FF8A00] text-white text-[11px] font-bold px-3 py-1 rounded-full shadow-sm">
-              <span>⚡</span>
-              <span>Replies &lt; 1 min</span>
+              <span>{astro.isOnline ? 'Online' : 'Offline'}</span>
             </span>
           </div>
 
@@ -141,7 +132,7 @@ export default function AstrologerProfileScreen({ astrologerId, onNavigate }: As
             </div>
 
             <p id="astrologer-skills-sub" className="text-[13px] font-medium text-neutral-500 mt-1 leading-none">
-              Vedic • Tarot • Career Guidance
+              {astro.skills.slice(0, 3).join(' • ')}
             </p>
 
             <div id="astrologer-meta-sub" className="flex items-center space-x-2 text-[12px] font-normal text-neutral-400 mt-2 leading-none">
@@ -162,8 +153,6 @@ export default function AstrologerProfileScreen({ astrologerId, onNavigate }: As
               <span className="text-2xl font-[800] text-neutral-900 leading-none">₹{astro.pricePerMinute}</span>
               <span className="text-[11px] text-neutral-400 font-semibold lowercase">/min</span>
             </div>
-            <span className="text-xs text-neutral-400 line-through pl-1 decoration-neutral-300">₹{astro.pricePerMinute + 20}/min</span>
-            <span className="bg-orange-50/70 text-[#FF8A00] border border-orange-100/40 text-[9px] font-[800] px-1.5 py-0.5 rounded tracking-wider uppercase ml-1">40% OFF</span>
           </div>
 
           {/* 3. Perfect iOS-style equal width buttons */}
@@ -214,11 +203,11 @@ export default function AstrologerProfileScreen({ astrologerId, onNavigate }: As
             </div>
             <div className="space-y-1 border-l border-neutral-100/70">
               <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">Response</span>
-              <p className="text-[13px] font-bold text-[#16A34A] leading-none">&lt; 1 min</p>
+              <p className="text-[13px] font-bold text-[#16A34A] leading-none">{astro.isOnline ? 'Online' : 'Offline'}</p>
             </div>
             <div className="space-y-1 border-l border-neutral-100/70">
               <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">Languages</span>
-              <p className="text-[12.5px] font-bold text-neutral-800 leading-none truncate px-1">Hindi, Eng</p>
+              <p className="text-[12.5px] font-bold text-neutral-800 leading-none truncate px-1">{astro.languages.slice(0, 2).join(', ')}</p>
             </div>
           </div>
 
@@ -247,17 +236,9 @@ export default function AstrologerProfileScreen({ astrologerId, onNavigate }: As
           <div id="expertise-section" className="space-y-2.5">
             <h3 className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">Expertise</h3>
             <div className="flex flex-wrap gap-1.5">
-              {[
-                'Career', 
-                'Love & Marriage', 
-                'Finance', 
-                'Business', 
-                'Health', 
-                'Education', 
-                'Numerology'
-              ].map((name, i) => (
+              {astro.skills.map((name) => (
                 <span 
-                  key={i} 
+                  key={name}
                   className="bg-neutral-50 text-neutral-700 border border-neutral-100 px-3 py-1 rounded-lg text-xs font-semibold cursor-default"
                 >
                   {name}
@@ -268,93 +249,16 @@ export default function AstrologerProfileScreen({ astrologerId, onNavigate }: As
 
           <div className="h-[1px] bg-neutral-100" />
 
-          {/* 7. Ratings and Reviews (LinkedIn recommendation-like elegance) */}
-          <div id="reviews-section" className="space-y-5 pt-1">
+          <div id="reviews-section" className="rounded-[16px] border border-neutral-100 bg-neutral-50/50 p-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">Ratings & Reviews</h3>
-              <button className="text-xs font-bold text-[#FF8A00] hover:underline focus:outline-none flex items-center">
-                <span>View All ({astro.consultations})</span>
-                <ChevronRight size={13} />
-              </button>
-            </div>
-
-            {/* Clean layout */}
-            <div className="grid grid-cols-12 gap-5 items-center">
-              {/* Left Score */}
-              <div className="col-span-4 flex flex-col items-center justify-center text-center py-1">
-                <span className="text-3xl font-[900] text-neutral-900 leading-none">{astro.rating}</span>
-                <div className="flex items-center space-x-0.5 mt-2">
-                  {[1, 2, 3, 4, 5].map((s) => (
-                    <Star key={s} size={10} className="fill-[#FF8A00] text-[#FF8A00] stroke-none" />
-                  ))}
-                </div>
-                <span className="text-[10px] font-medium text-neutral-400 mt-1">
-                  Overall Score
-                </span>
+              <div>
+                <h3 className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">Customer trust</h3>
+                <p className="mt-1 text-xs font-medium text-neutral-500">Verified consultation activity from Kundli Nova.</p>
               </div>
-
-              {/* Right Bars */}
-              <div className="col-span-8 space-y-1.5 pl-2">
-                {[
-                  { star: '5', percentage: '85%' },
-                  { star: '4', percentage: '10%' },
-                  { star: '3', percentage: '3%' },
-                  { star: '2', percentage: '1%' },
-                  { star: '1', percentage: '1%' }
-                ].map((row, idx) => (
-                  <div key={idx} className="flex items-center space-x-2">
-                    <span className="text-[9px] font-bold text-neutral-400 w-2.5 text-right">{row.star}</span>
-                    <div className="flex-1 h-[3.5px] bg-neutral-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-[#FF8A00] rounded-full" style={{ width: row.percentage }} />
-                    </div>
-                    <span className="text-[9px] font-semibold text-neutral-400 w-6 text-right">{row.percentage}</span>
-                  </div>
-                ))}
+              <div className="text-right">
+                <p className="flex items-center justify-end gap-1 text-lg font-black text-neutral-900"><Star size={13} className="fill-[#FF8A00] text-[#FF8A00]" />{astro.rating}</p>
+                <p className="text-[10px] font-semibold text-neutral-400">{astro.consultations.toLocaleString('en-IN')} consultations</p>
               </div>
-            </div>
-
-            {/* Conversational Realistic Review Items */}
-            <div className="space-y-3 pt-1">
-              {[
-                {
-                  name: "Priya Sharma",
-                  avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=120&auto=format&fit=crop&q=80",
-                  rating: 5,
-                  time: "2 days ago",
-                  text: "Extremely articulate and direct predictions. Rahul did not sugarcoat anything and gave clear guidance for my career transition. Highly recommended."
-                },
-                {
-                  name: "Rohit Verma",
-                  avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=120&auto=format&fit=crop&q=80",
-                  rating: 5,
-                  time: "5 days ago",
-                  text: "He accurately pointed out the timelines of my marriage blockages. His remedies are simple, practical, and very easy to follow."
-                }
-              ].map((rev, idx) => (
-                <div 
-                  key={idx} 
-                  className="bg-neutral-50/40 border border-neutral-100/60 p-4 rounded-xl flex items-start gap-3.5"
-                >
-                  <img src={rev.avatar} alt={rev.name} className="w-8.5 h-8.5 rounded-full object-cover shrink-0" />
-                  
-                  <div className="flex-1 min-w-0 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-neutral-900">{rev.name}</span>
-                      <span className="text-[10px] text-neutral-400 font-medium">{rev.time}</span>
-                    </div>
-
-                    <div className="flex items-center space-x-0.5 pb-0.5">
-                      {Array.from({ length: rev.rating }).map((_, i) => (
-                        <Star key={i} size={9} className="fill-[#FF8A00] text-[#FF8A00] stroke-none" />
-                      ))}
-                    </div>
-
-                    <p className="text-xs text-neutral-600 leading-relaxed font-normal">
-                      {rev.text}
-                    </p>
-                  </div>
-                </div>
-              ))}
             </div>
           </div>
 
