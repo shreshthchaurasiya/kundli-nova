@@ -21,8 +21,8 @@ import {
   Star
 } from 'lucide-react';
 import { Screen } from '../types';
-import { walletStorage } from '../services/storage/walletStorage';
 import { useProfile } from '../contexts/ProfileContext';
+import { useWallet } from '../contexts/WalletContext';
 
 interface NovaAIScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
@@ -38,7 +38,8 @@ interface SavedConversation {
 
 export default function NovaAIScreen({ onNavigate, onOpenDrawer }: NovaAIScreenProps) {
   const { profile } = useProfile();
-  const [walletBalance, setWalletBalance] = useState<number>(0);
+  const { wallet } = useWallet();
+  const walletBalance = wallet.balance;
   const [userName, setUserName] = useState<string>('Shreshth');
   const [inputVal, setInputVal] = useState<string>('');
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
@@ -47,14 +48,6 @@ export default function NovaAIScreen({ onNavigate, onOpenDrawer }: NovaAIScreenP
 
   // Load wallet balance & user profile
   useEffect(() => {
-    // Sync initial state
-    setWalletBalance(walletStorage.getBalance());
-
-    // Subscribe to updates reactively
-    const unsubscribe = walletStorage.subscribe((state) => {
-      setWalletBalance(state.balance);
-    });
-
     const loadProfile = () => {
       // profile is accessed from useProfile
       if (profile && profile.name) {
@@ -75,8 +68,7 @@ export default function NovaAIScreen({ onNavigate, onOpenDrawer }: NovaAIScreenP
     loadProfile();
     loadHistory();
 
-    return unsubscribe;
-  }, []);
+  }, [profile]);
 
   const getGreeting = () => {
     const hour = new Date().getHours();

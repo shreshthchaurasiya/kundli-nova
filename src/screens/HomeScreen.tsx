@@ -4,7 +4,7 @@ import { Wallet, Search, Menu, X, ChevronRight, Phone, MessageCircle, Star, Spar
 import { ASTROLOGERS } from '../data';
 import { Screen, Astrologer } from '../types';
 import { useProfile } from '../contexts/ProfileContext';
-import { walletStorage } from '../services/storage/walletStorage';
+import { useWallet } from '../contexts/WalletContext';
 
 interface HomeScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
@@ -26,24 +26,17 @@ const BANNERS = [
 
 export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps) {
   const { profile } = useProfile();
+  const { wallet } = useWallet();
   const [currentBanner, setCurrentBanner] = useState(0);
   // profileData removed
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
-  const [walletBalance, setWalletBalance] = useState<number>(0);
+  const walletBalance = wallet.balance;
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [onlineCount, setOnlineCount] = useState<number>(327);
 
   useEffect(() => {
     // profile is accessed from useProfile
     // setProfileData removed
-
-    // Sync initial state
-    setWalletBalance(walletStorage.getBalance());
-
-    // Subscribe to updates reactively
-    const unsubscribe = walletStorage.subscribe((state) => {
-      setWalletBalance(state.balance);
-    });
 
     const interval = setInterval(() => {
       setCurrentBanner((prev) => (prev + 1) % BANNERS.length);
@@ -84,7 +77,6 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
       clearInterval(interval);
       clearInterval(countInterval);
       clearInterval(timerInterval);
-      unsubscribe();
     };
   }, []);
 

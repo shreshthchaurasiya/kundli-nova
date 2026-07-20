@@ -1,19 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Wallet as WalletIcon, CreditCard, Clock, Gift, X, CheckCircle2 } from 'lucide-react';
-import { Screen, WalletTransaction } from '../types';
-import { walletStorage } from '../services/storage/walletStorage';
+import { Screen } from '../types';
+import { useWallet } from '../contexts/WalletContext';
+import { useRepositories } from '../repositories/repositoryProvider';
 
 interface WalletScreenProps {
   onNavigate: (screen: Screen) => void;
 }
 
 export default function WalletScreen({ onNavigate }: WalletScreenProps) {
-  const [balance, setBalance] = useState<number>(0);
-  const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
+  const repositories = useRepositories();
+  const { wallet, refreshWallet } = useWallet();
+  const { balance, transactions } = wallet;
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   const [customAmount, setCustomAmount] = useState('');
   const [successToast, setSuccessToast] = useState<string | null>(null);
+  const [errorToast, setErrorToast] = useState<string | null>(null);
 
   // Helper to format date and time in the exact style of the mockup
   const formatTxDate = (date: Date) => {
@@ -36,25 +39,13 @@ export default function WalletScreen({ onNavigate }: WalletScreenProps) {
     }
   };
 
-  // Initialize and load the wallet data from WalletRepository on component mount
-  useEffect(() => {
-    const walletState = walletStorage.getWalletState();
-    setBalance(walletState.balance);
-    setTransactions(walletState.transactions);
-
-    const unsubscribe = walletStorage.subscribe((newState) => {
-      setBalance(newState.balance);
-      setTransactions(newState.transactions);
-    });
-
-    return unsubscribe;
-  }, []);
-
-  // Recharge Logic - Scalable function that updates state via Repository
-  const executeRecharge = (amount: number) => {
+  // Recharge remains a secure backend operation; successful writes are then
+  // reflected everywhere by the Supabase Realtime subscription.
+  const executeRecharge = async (amount: number) => {
     if (isNaN(amount) || amount <= 0) return;
     try {
-      walletStorage.recharge(amount, 'Wallet Recharge');
+      await repositories.wallet.recharge(amount, 'Wallet Recharge');
+      await refreshWallet();
       
       // Show success banner
       setSuccessToast(`₹${amount} added successfully!`);
@@ -63,6 +54,8 @@ export default function WalletScreen({ onNavigate }: WalletScreenProps) {
       }, 2800);
     } catch (e) {
       console.error('[WalletScreen] Recharge failed', e);
+      setErrorToast('Recharge needs the secure API/payment server. Your balance was not changed.');
+      setTimeout(() => setErrorToast(null), 3500);
     }
   };
 
@@ -72,7 +65,7 @@ export default function WalletScreen({ onNavigate }: WalletScreenProps) {
     } else {
       const numericAmount = parseInt(amtStr.replace(/[^\d]/g, ''), 10);
       if (!isNaN(numericAmount)) {
-        executeRecharge(numericAmount);
+        void executeRecharge(numericAmount);
       }
     }
   };
@@ -137,7 +130,7 @@ export default function WalletScreen({ onNavigate }: WalletScreenProps) {
             <h4 className="font-bold text-indigo-900">Get 100% Extra!</h4>
             <p className="text-xs text-indigo-700">On your first recharge of ₹500 or more.</p>
           </div>
-          <button onClick={() => executeRecharge(500)} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold cursor-pointer transition-colors hover:bg-indigo-700 active:scale-95">
+          <button onClick={() => void executeRecharge(500)} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold cursor-pointer transition-colors hover:bg-indigo-700 active:scale-95">
             Apply
           </button>
         </div>
@@ -194,6 +187,19 @@ export default function WalletScreen({ onNavigate }: WalletScreenProps) {
               <p className="text-xs font-semibold text-emerald-100/80 leading-none">Success</p>
               <p className="text-[13px] font-bold tracking-tight mt-1">{successToast}</p>
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {errorToast && (
+          <motion.div
+            initial={{ opacity: 0, y: -30 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="absolute top-20 left-6 right-6 bg-red-600 text-white px-4 py-3 rounded-2xl z-50 shadow-xl text-sm font-semibold"
+          >
+            {errorToast}
           </motion.div>
         )}
       </AnimatePresence>
@@ -267,7 +273,7 @@ export default function WalletScreen({ onNavigate }: WalletScreenProps) {
                     onClick={() => {
                       const parsed = parseInt(customAmount, 10);
                       if (!isNaN(parsed) && parsed > 0) {
-                        executeRecharge(parsed);
+                        void executeRecharge(parsed);
                         setIsCustomModalOpen(false);
                         setCustomAmount('');
                       }

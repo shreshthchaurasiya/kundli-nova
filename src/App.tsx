@@ -26,10 +26,11 @@ import NovaKundliScreen from './screens/NovaKundliScreen';
 import BottomNav from './components/BottomNav';
 import { Screen, Tab } from './types';
 import { AnimatePresence, motion } from 'motion/react';
-import { runMigrations, walletStorage } from './services/storage';
+import { runMigrations } from './services/storage';
 import { useAuth } from './auth';
 import { useRepositories } from './repositories/repositoryProvider';
 import { useProfile } from './contexts/ProfileContext';
+import { useWallet } from './contexts/WalletContext';
 
 // Public screens may be opened without a verified Supabase session.
 const PUBLIC_SCREENS: Screen[] = ['splash', 'login', 'signup', 'forgot-password', 'otp'];
@@ -41,13 +42,14 @@ const NAV_SCREENS: Screen[] = ['home', 'chat-list', 'chat-history', 'nova-ai', '
 export default function App() {
   const { isAuthenticated, isLoading, user, signOut } = useAuth();
   const repositories = useRepositories();
+  const { wallet } = useWallet();
 
   const [currentScreen, setCurrentScreen] = useState<Screen>('splash');
   const [currentTab, setCurrentTab] = useState<Tab>('home');
   const [routeParams, setRouteParams] = useState<any>({});
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string } | null>(null);
-  const [walletBalance, setWalletBalance] = useState<number>(0);
+  const walletBalance = wallet.balance;
 
   // Track if profile check is loading and if profile is complete
   const [profileLoading, setProfileLoading] = useState(false);
@@ -108,15 +110,6 @@ export default function App() {
       }
     }
   }, [currentScreen, isAuthenticated, isLoading, profileLoading, isProfileComplete]);
-
-  // Subscribe to wallet state changes reactively
-  useEffect(() => {
-    setWalletBalance(walletStorage.getBalance());
-    const unsubscribe = walletStorage.subscribe((state) => {
-      setWalletBalance(state.balance);
-    });
-    return unsubscribe;
-  }, [isDrawerOpen, currentScreen]);
 
   useEffect(() => {
     if (toast) {

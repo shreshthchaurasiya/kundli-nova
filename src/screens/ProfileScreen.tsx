@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   User, Calendar, Clock, MapPin, Compass, FileText, Wallet, 
@@ -6,7 +6,8 @@ import {
 } from 'lucide-react';
 import { Screen } from '../types';
 import { useAuth } from '../auth';
-import { useRepositories } from '../repositories/repositoryProvider';
+import { useProfile } from '../contexts/ProfileContext';
+import { useWallet } from '../contexts/WalletContext';
 
 interface ProfileScreenProps {
   onNavigate: (screen: Screen) => void;
@@ -23,31 +24,12 @@ interface AstrologyDetails {
 
 export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
   const { user } = useAuth();
-  const repositories = useRepositories();
-  const [loading, setLoading] = useState(true);
-  const [profileData, setProfileData] = useState<any>(null);
-  const [walletBalance, setWalletBalance] = useState<number>(0);
+  const { profile: profileData, isLoadingProfile } = useProfile();
+  const { wallet, isLoadingWallet } = useWallet();
+  const loading = isLoadingProfile || isLoadingWallet;
+  const walletBalance = wallet.balance;
   const [isKundliOpen, setIsKundliOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const [profile, wallet] = await Promise.all([
-          repositories.profile.getProfile(),
-          repositories.wallet.getWalletState(),
-        ]);
-        if (profile) setProfileData(profile);
-        if (wallet) setWalletBalance(wallet.balance);
-      } catch (err) {
-        console.error('Failed to load profile data:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadData();
-  }, [repositories.profile, repositories.wallet]);
 
   // Helper to show premium feedback toasts
   const showToast = (msg: string) => {

@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useCallback, useContext, useState, useEffect } from 'react';
 import { UserProfile } from '../types/profile';
 import { useRepositories } from '../repositories/repositoryProvider';
 import { useAuth } from '../auth';
+import { supabase } from '../lib/supabase';
 
 interface ProfileContextType {
   profile: UserProfile | null;
@@ -16,12 +17,12 @@ const ProfileContext = createContext<ProfileContextType>({
 });
 
 export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const repositories = useRepositories();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
 
-  const refreshProfile = async () => {
+  const refreshProfile = useCallback(async () => {
     setIsLoadingProfile(true);
     try {
       if (isAuthenticated) {
@@ -35,11 +36,19 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } finally {
       setIsLoadingProfile(false);
     }
-  };
+  }, [isAuthenticated, repositories.profile]);
 
   useEffect(() => {
-    refreshProfile();
-  }, [isAuthenticated, repositories.profile]);
+    void refreshProfile();
+    if (!isAuthenticated || !user) return;
+
+    const channel = supabase
+      .channel(`profile:${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` }, refreshProfile)
+      .subscribe();
+
+    return () => { void supabase.removeChannel(channel); };
+  }, [isAuthenticated, user, refreshProfile]);
 
   return (
     <ProfileContext.Provider value={{ profile, isLoadingProfile, refreshProfile }}>
