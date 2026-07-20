@@ -73,7 +73,7 @@ export async function verifyOtp(
     }
 
     // Phone-based trick to create a REAL session for ANY phone number in dev mode
-    const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || '/api/v1';
+    const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:3000/api/v1';
     try {
       const response = await fetch(`${API_BASE}/auth/dev-login`, {
         method: 'POST',
