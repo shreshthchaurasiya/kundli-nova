@@ -1,591 +1,222 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { MessageCircle, ChevronRight, Search, MessageSquare, ArrowRight, ShieldCheck, Clock, Sparkles, Filter } from 'lucide-react';
-import { Screen, ConsultationSession, Message } from '../types';
+import { ChevronRight, MessageCircle, Search, Sparkles, UserRound } from 'lucide-react';
+import { Screen } from '../types';
 import { ASTROLOGERS } from '../data';
-import { consultationService, chatService, walletService } from '../services/astrologyServices';
-import { consultationStorage } from '../services/storage/consultationStorage';
+import { ApiConsultationRepository } from '../repositories/api/apiConsultationRepository';
 import { chatStorage } from '../services/storage/chatStorage';
+import CelestialChatBackground from '../components/chat/CelestialChatBackground';
 
 interface ChatHistoryScreenProps {
-  onNavigate: (screen: Screen, params?: any) => void;
+  onNavigate: (screen: Screen, params?: unknown) => void;
 }
 
-interface ChatItem {
+type ChatKind = 'paid' | 'free' | 'nova';
+
+interface HistoryItem {
   id: string;
-  astrologerId: string;
-  astrologerName: string;
-  astrologerImage: string;
-  astrologerSkills: string[];
-  lastMessageText: string;
-  lastMessageTime: string;
-  status: 'Active' | 'Completed' | 'Cancelled';
-  totalCharged: number;
-  elapsedSeconds: number;
-  createdAt: string;
-  isActive: boolean;
-  unreadCount?: number;
-  walletBalance?: number;
+  kind: ChatKind;
+  title: string;
+  preview: string;
+  timestamp: string;
+  astrologerId?: string;
+  image?: string;
+  active?: boolean;
 }
+
+const consultationRepository = new ApiConsultationRepository();
+const OPEN_STATUSES = new Set(['CHECKING_WALLET', 'PREPARING_KUNDLI', 'WAITING_FOR_ASTROLOGER', 'ACTIVE', 'LOW_BALANCE', 'RECHARGING']);
+
+const timestampValue = (value: string) => {
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
+
+const displayTime = (value: string) => {
+  const parsed = timestampValue(value);
+  if (!parsed) return value;
+  const date = new Date(parsed);
+  const today = new Date();
+  if (date.toDateString() === today.toDateString()) {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+};
 
 export default function ChatHistoryScreen({ onNavigate }: ChatHistoryScreenProps) {
-  const [chats, setChats] = useState<ChatItem[]>([]);
+  const [items, setItems] = useState<HistoryItem[]>([]);
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<'all' | ChatKind>('all');
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedFilter, setSelectedFilter] = useState<'All' | 'Active' | 'Completed' | 'Cancelled'>('All');
-  const [walletBalance, setWalletBalance] = useState<number>(0);
-
-  // Helper to format duration
-  const formatSeconds = (totalSeconds: number) => {
-    if (!totalSeconds) return '0m 0s';
-    const mins = Math.floor(totalSeconds / 60);
-    const secs = totalSeconds % 60;
-    return `${mins}m ${secs}s`;
-  };
-
-  // Helper to get group name based on createdAt date
-  const getGroupHeader = (dateStr: string) => {
-    const d = new Date(dateStr);
-    const now = new Date();
-    
-    // Reset hours to compare calendar days
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-    const targetDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-
-    if (targetDate.getTime() === today.getTime()) {
-      return 'Today';
-    } else if (targetDate.getTime() === yesterday.getTime()) {
-      return 'Yesterday';
-    } else {
-      return 'Earlier';
-    }
-  };
-
-  // Seed development data if empty
-  const seedDevData = async () => {
-    if ((import.meta as any).env.DEV) {
-      const alreadySeeded = consultationStorage.isSessionSeeded();
-      if (!alreadySeeded) {
-        const now = new Date();
-        
-        const seed1Date = new Date(now.getTime() - 2 * 60 * 60 * 1000); // 2 hours ago (Today)
-        const seed2Date = new Date(now.getTime() - 28 * 60 * 60 * 1000); // 28 hours ago (Yesterday)
-        const seed3Date = new Date(now.getTime() - 4 * 24 * 60 * 60 * 1000); // 4 days ago (Earlier)
-
-        const seedSessions: ConsultationSession[] = [
-          {
-            id: 'session-seed-1',
-            astrologerId: '22222222-2222-2222-2222-222222222222', // Tarot Priya
-            userId: 'dev-user',
-            status: 'ENDED',
-            createdAt: seed1Date.toISOString(),
-            requestedAt: seed1Date.toISOString(),
-            acceptedAt: seed1Date.toISOString(),
-            endedAt: new Date(seed1Date.getTime() + 8 * 60 * 1000).toISOString(),
-            elapsedSeconds: 480,
-            billingMode: 'wallet',
-            ratePerMin: 15,
-            ratePerMinute: 15,
-            totalCharged: 120,
-            billedMinutes: 8
-          },
-          {
-            id: 'session-seed-2',
-            astrologerId: '33333333-3333-3333-3333-333333333333', // Pandit Sharma
-            userId: 'dev-user',
-            status: 'ENDED',
-            createdAt: seed2Date.toISOString(),
-            requestedAt: seed2Date.toISOString(),
-            acceptedAt: seed2Date.toISOString(),
-            endedAt: new Date(seed2Date.getTime() + 12 * 60 * 1000).toISOString(),
-            elapsedSeconds: 720,
-            billingMode: 'wallet',
-            ratePerMin: 50,
-            ratePerMinute: 50,
-            totalCharged: 600,
-            billedMinutes: 12
-          },
-          {
-            id: 'session-seed-3',
-            astrologerId: '11111111-1111-1111-1111-111111111111', // Astro Rahul
-            userId: 'dev-user',
-            status: 'ENDED',
-            createdAt: seed3Date.toISOString(),
-            requestedAt: seed3Date.toISOString(),
-            acceptedAt: seed3Date.toISOString(),
-            endedAt: new Date(seed3Date.getTime()).toISOString(),
-            elapsedSeconds: 0,
-            billingMode: 'wallet',
-            ratePerMin: 25,
-            ratePerMinute: 25,
-            totalCharged: 0,
-            billedMinutes: 0
-          }
-        ];
-
-        // Save to session history
-        const existingHistory = consultationStorage.getSessionHistory();
-        
-        // Filter out seed IDs just in case to be idempotent
-        const filteredExisting = existingHistory.filter((s: any) => !s.id.startsWith('session-seed-'));
-        consultationStorage.saveSessionHistory([...filteredExisting, ...seedSessions]);
-
-        // Save messages for Seed 1
-        const msgs1: Message[] = [
-          {
-            id: 'msg-seed1-1',
-            text: 'Hello Priya, can you help me check my relationship compatibility?',
-            sender: 'user',
-            time: seed1Date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            type: 'text',
-            status: 'sent'
-          },
-          {
-            id: 'msg-seed1-2',
-            text: 'Hello! Sure, let me draw a Tarot card for you. It shows the Lovers card! Excellent energy.',
-            sender: 'astrologer',
-            time: new Date(seed1Date.getTime() + 2 * 60 * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            type: 'text',
-            status: 'sent'
-          },
-          {
-            id: 'msg-seed1-3',
-            text: 'That is amazing to hear.',
-            sender: 'user',
-            time: new Date(seed1Date.getTime() + 4 * 60 * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            type: 'text',
-            status: 'sent'
-          },
-          {
-            id: 'msg-seed1-4',
-            text: 'Perfect! Keep wearing the white quartz for inner stability.',
-            sender: 'astrologer',
-            time: new Date(seed1Date.getTime() + 7 * 60 * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            type: 'text',
-            status: 'sent'
-          }
-        ];
-        chatStorage.saveMessages('session-seed-1', msgs1);
-
-        // Save messages for Seed 2
-        const msgs2: Message[] = [
-          {
-            id: 'msg-seed2-1',
-            text: 'Pranam Pandit ji, my career growth has stalled since January.',
-            sender: 'user',
-            time: seed2Date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            type: 'text',
-            status: 'sent'
-          },
-          {
-            id: 'msg-seed2-2',
-            text: 'Pranam. Saptam Shani is transiting, causing delays. Do not worry.',
-            sender: 'astrologer',
-            time: new Date(seed2Date.getTime() + 3 * 60 * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            type: 'text',
-            status: 'sent'
-          },
-          {
-            id: 'msg-seed2-3',
-            text: 'What remedy is advised?',
-            sender: 'user',
-            time: new Date(seed2Date.getTime() + 6 * 60 * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            type: 'text',
-            status: 'sent'
-          },
-          {
-            id: 'msg-seed2-4',
-            text: 'You should perform the Vishnu Puja on coming Thursday.',
-            sender: 'astrologer',
-            time: new Date(seed2Date.getTime() + 10 * 60 * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            type: 'text',
-            status: 'sent'
-          }
-        ];
-        chatStorage.saveMessages('session-seed-2', msgs2);
-
-        // Save messages for Seed 3 (Cancelled)
-        chatStorage.saveMessages('session-seed-3', []);
-
-        consultationStorage.setSessionSeeded(true);
-      }
-    }
-  };
-
-  const loadChatHistory = async () => {
-    try {
-      await seedDevData();
-      const currentBal = await walletService.getBalance();
-      setWalletBalance(currentBal);
-
-      const fetchedHistory = await consultationService.getSessionHistory();
-      const items: ChatItem[] = [];
-
-      // 1. Process Active Request (if any)
-      const activeReq = consultationStorage.getActiveRequest();
-      if (activeReq) {
-        const astro = ASTROLOGERS.find(a => a.id === activeReq.astrologerId) || ASTROLOGERS[0];
-        if (['ACTIVE', 'LOW_BALANCE', 'RECHARGING', 'PREPARING_KUNDLI', 'WAITING_FOR_ASTROLOGER'].includes(activeReq.status)) {
-            const msgs = await chatService.getMessages(activeReq.id);
-            // Filter out system messages so user doesn't see "₹25 deducted..." in preview
-            const chatMsgs = msgs.filter(m => m.sender !== 'system');
-            const lastMsg = chatMsgs[chatMsgs.length - 1];
-            
-            let previewText = 'Waiting for connection...';
-            if (activeReq.status === 'PREPARING_KUNDLI') {
-              previewText = 'Vedic Computations Active...';
-            } else if (activeReq.status === 'WAITING_FOR_ASTROLOGER') {
-              previewText = 'Astrologer reviewing your Kundli...';
-            } else if (lastMsg) {
-              previewText = lastMsg.type === 'image' ? '📷 Photo attachment' : (lastMsg.text || 'New message');
-            }
-
-            const lastTime = lastMsg 
-              ? lastMsg.time 
-              : new Date(activeReq.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-            items.push({
-              id: activeReq.id,
-              astrologerId: activeReq.astrologerId,
-              astrologerName: astro.name,
-              astrologerImage: astro.image,
-              astrologerSkills: astro.skills,
-              lastMessageText: previewText,
-              lastMessageTime: lastTime,
-              status: 'Active',
-              totalCharged: activeReq.totalCharged || 0,
-              elapsedSeconds: activeReq.elapsedSeconds || 0,
-              createdAt: activeReq.createdAt,
-              isActive: true,
-              unreadCount: msgs.filter(m => m.sender === 'astrologer' && m.status !== 'read').length || 1,
-              walletBalance: currentBal
-            });
-          }
-      }
-
-      // 2. Process Completed History
-      const historyWithMsgs = await Promise.all(fetchedHistory.map(async (session) => {
-        const astro = ASTROLOGERS.find(a => a.id === session.astrologerId) || ASTROLOGERS[0];
-        const msgs = await chatService.getMessages(session.id);
-        
-        // Filter out system messages so user doesn't see "₹25 deducted..." in preview
-        const chatMsgs = msgs.filter(m => m.sender !== 'system');
-        const lastMsg = chatMsgs[chatMsgs.length - 1];
-
-        // Is cancelled if duration is 0 and amount charged is 0
-        const isCancelled = session.elapsedSeconds === 0 && session.totalCharged === 0;
-
-        let previewText = isCancelled ? 'Consultation cancelled before connecting' : 'Session Completed';
-        if (lastMsg) {
-          previewText = lastMsg.type === 'image' ? '📷 Photo attachment' : (lastMsg.text || 'Photo attachment');
-        }
-
-        const lastTime = lastMsg 
-          ? lastMsg.time 
-          : new Date(session.endedAt || session.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-        return {
-          id: session.id,
-          astrologerId: session.astrologerId,
-          astrologerName: astro.name,
-          astrologerImage: astro.image,
-          astrologerSkills: astro.skills,
-          lastMessageText: previewText,
-          lastMessageTime: lastTime,
-          status: (isCancelled ? 'Cancelled' : 'Completed') as 'Completed' | 'Cancelled',
-          totalCharged: session.totalCharged,
-          elapsedSeconds: session.elapsedSeconds,
-          createdAt: session.createdAt,
-          isActive: false,
-          unreadCount: 0
-        };
-      }));
-
-      // Merge items, active first, then history sorted latest first
-      const allChats = [...items, ...historyWithMsgs];
-      setChats(allChats);
-    } catch (error) {
-      console.error("Error loading chats in chat screen:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    loadChatHistory();
-    // Poll chat history to catch live updates automatically
-    const interval = setInterval(loadChatHistory, 3000);
-    return () => clearInterval(interval);
-  }, []);
+    let active = true;
 
-  const handleCardClick = (chat: ChatItem) => {
-    if (chat.isActive) {
-      // Resume the active consultation chat
-      onNavigate('consultation-chat', { astrologerId: chat.astrologerId });
-    } else {
-      // Open completed conversation in read-only mode
-      onNavigate('consultation-chat', { 
-        astrologerId: chat.astrologerId, 
-        readOnlySessionId: chat.id 
-      });
-    }
-  };
+    const loadHistory = async () => {
+      try {
+        setError('');
+        const [sessions, savedThreads] = await Promise.all([
+          consultationRepository.listSessions(),
+          Promise.resolve(chatStorage.getAiHistory()),
+        ]);
 
-  // Filter lists based on Search bar and Filter chips
-  const filteredChats = chats.filter(chat => {
-    const matchesSearch = chat.astrologerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      chat.astrologerSkills.some(skill => skill.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (chat.lastMessageText && chat.lastMessageText.toLowerCase().includes(searchQuery.toLowerCase()));
+        const paidItems: HistoryItem[] = await Promise.all(sessions.map(async session => {
+          const astrologer = ASTROLOGERS.find(item => item.id === session.astrologerId) || ASTROLOGERS[0];
+          const messages = chatStorage.getMessages(session.id).filter(message => message.sender !== 'system');
+          const lastMessage = messages[messages.length - 1];
+          return {
+            id: session.id,
+            kind: 'paid',
+            title: astrologer.name,
+            preview: lastMessage?.text || (OPEN_STATUSES.has(session.status) ? 'Consultation in progress' : 'Consultation completed'),
+            timestamp: session.endedAt || session.startedAt || session.requestedAt,
+            astrologerId: session.astrologerId,
+            image: astrologer.image,
+            active: OPEN_STATUSES.has(session.status),
+          };
+        }));
 
-    if (!matchesSearch) return false;
+        const savedItems: HistoryItem[] = savedThreads
+          .filter(thread => thread.messages.length > 0)
+          .map(thread => ({
+            id: thread.id,
+            kind: thread.kind === 'free' ? 'free' : 'nova',
+            title: thread.kind === 'free' ? 'Acharya Dev Sharma' : thread.topic || 'Nova AI',
+            preview: thread.lastMessage || 'Open conversation',
+            timestamp: thread.timestamp,
+          }));
 
-    if (selectedFilter === 'All') return true;
-    if (selectedFilter === 'Active') return chat.isActive;
-    if (selectedFilter === 'Completed') return !chat.isActive && chat.status === 'Completed';
-    if (selectedFilter === 'Cancelled') return !chat.isActive && chat.status === 'Cancelled';
-    return true;
-  });
-
-  // Separate active from completed
-  const activeChats = filteredChats.filter(chat => chat.isActive);
-  const completedChats = filteredChats.filter(chat => !chat.isActive);
-
-  // Group completed chats by date: Today, Yesterday, Earlier
-  const groupAndSortChats = (chatsList: ChatItem[]) => {
-    const groups: { [key in 'Today' | 'Yesterday' | 'Earlier']: ChatItem[] } = {
-      'Today': [],
-      'Yesterday': [],
-      'Earlier': []
+        if (active) {
+          setItems([...paidItems, ...savedItems].sort((a, b) => timestampValue(b.timestamp) - timestampValue(a.timestamp)));
+        }
+      } catch (loadError) {
+        console.error('Unable to load chat history', loadError);
+        if (active) setError('Chat history could not be loaded. Please retry.');
+      } finally {
+        if (active) setLoading(false);
+      }
     };
 
-    // Sort newest first
-    const sorted = [...chatsList].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    void loadHistory();
+    return () => { active = false; };
+  }, []);
 
-    sorted.forEach(chat => {
-      const group = getGroupHeader(chat.createdAt);
-      groups[group].push(chat);
-    });
+  const visibleItems = useMemo(() => items.filter(item => {
+    const matchesFilter = filter === 'all' || item.kind === filter;
+    const normalizedQuery = query.trim().toLowerCase();
+    const matchesQuery = !normalizedQuery
+      || item.title.toLowerCase().includes(normalizedQuery)
+      || item.preview.toLowerCase().includes(normalizedQuery);
+    return matchesFilter && matchesQuery;
+  }), [filter, items, query]);
 
-    return groups;
+  const openChat = (item: HistoryItem) => {
+    if (item.kind === 'nova') {
+      onNavigate('nova-ai-chat', { conversationId: item.id });
+      return;
+    }
+    if (item.kind === 'free') {
+      onNavigate('chat', { conversationId: item.id, readOnly: true });
+      return;
+    }
+    onNavigate('consultation-chat', item.active
+      ? { astrologerId: item.astrologerId }
+      : { astrologerId: item.astrologerId, readOnlySessionId: item.id });
   };
 
-  const groupedChats = groupAndSortChats(completedChats);
-
   return (
-    <div className="flex flex-col h-full bg-[#FAFAFA] font-sans">
-      {/* Header */}
-      <div className="px-5 py-4 bg-white sticky top-0 z-30 shadow-[0_1px_4px_rgba(0,0,0,0.02)] border-b border-neutral-100 flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <MessageCircle className="text-[#FF8A00]" size={22} />
-          <h1 className="text-sm font-[900] text-neutral-900 tracking-tight uppercase">My Consultations</h1>
+    <div className="relative flex h-full flex-col overflow-hidden bg-[#FCFBF8] font-sans">
+      <CelestialChatBackground />
+
+      <header className="relative z-20 bg-white/85 px-5 pb-4 pt-[max(18px,env(safe-area-inset-top))] backdrop-blur-md">
+        <div className="flex items-center gap-2">
+          <MessageCircle size={21} className="text-[#FF8A00]" />
+          <h1 className="text-base font-black tracking-tight text-neutral-900">Chats</h1>
         </div>
-        <span className="text-[9px] font-black text-neutral-400 bg-neutral-100 border border-neutral-200/60 px-2 py-0.5 rounded-full uppercase tracking-wider">
-          History
-        </span>
-      </div>
 
-      {/* Main Container */}
-      <div className="flex-1 overflow-y-auto no-scrollbar pb-32 px-4 py-4 space-y-4">
-        {loading && chats.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 space-y-3">
-            <div className="w-8 h-8 rounded-full border-2 border-neutral-200 border-t-[#FF8A00] animate-spin" />
-            <p className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">Loading history...</p>
-          </div>
-        ) : filteredChats.length === 0 ? (
-          /* Empty State after filtering */
-          <div className="flex flex-col items-center justify-center pt-24 pb-12 px-6 text-center select-none">
-            <div className="w-16 h-16 rounded-full bg-[#FFF5ED] text-[#FF8A00] flex items-center justify-center mb-5 border border-[#FF8A00]/10">
-              <MessageSquare size={26} className="stroke-[1.8]" />
-            </div>
-            
-            <div className="space-y-1.5 max-w-xs">
-              <h3 className="text-base font-black text-neutral-900 tracking-tight">No consultations yet</h3>
-              <p className="text-neutral-400 text-xs font-semibold leading-relaxed">
-                Your completed and active consultations will appear here.
-              </p>
-            </div>
+        <div className="relative mt-4">
+          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
+          <input
+            value={query}
+            onChange={event => setQuery(event.target.value)}
+            placeholder="Search chats"
+            className="h-11 w-full rounded-2xl border-0 bg-white/90 pl-10 pr-4 text-sm text-neutral-800 shadow-[0_3px_16px_rgba(17,24,39,0.06)] outline-none placeholder:text-neutral-400 focus:ring-2 focus:ring-[#FF8A00]/20"
+          />
+        </div>
 
-            <button 
-              onClick={() => onNavigate('astrologers')}
-              className="mt-8 h-11 px-6 bg-[#FF8A00] hover:bg-[#E07A00] text-white font-extrabold text-xs rounded-xl shadow-[0_4px_16px_rgba(255,138,0,0.15)] flex items-center justify-center space-x-2 border-none transition-all cursor-pointer"
+        <div className="mt-3 flex gap-2 overflow-x-auto no-scrollbar">
+          {([
+            ['all', 'All'],
+            ['paid', 'Astrologers'],
+            ['free', 'Free Chat'],
+            ['nova', 'Nova AI'],
+          ] as const).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setFilter(value)}
+              className={`shrink-0 rounded-full px-3.5 py-1.5 text-[11px] font-bold transition-colors ${
+                filter === value ? 'bg-[#FF8A00] text-white' : 'bg-white/75 text-neutral-500'
+              }`}
             >
-              <span>Browse Astrologers</span>
-              <ArrowRight size={14} />
+              {label}
             </button>
+          ))}
+        </div>
+      </header>
+
+      <main className="relative z-10 flex-1 overflow-y-auto px-3 pb-28 pt-2 no-scrollbar">
+        {loading ? (
+          <div className="flex h-40 items-center justify-center">
+            <span className="h-7 w-7 animate-spin rounded-full border-2 border-[#FF8A00]/20 border-t-[#FF8A00]" />
+          </div>
+        ) : error ? (
+          <div className="mx-2 mt-8 rounded-2xl bg-white/85 p-5 text-center text-sm font-semibold text-neutral-600 shadow-sm">{error}</div>
+        ) : visibleItems.length === 0 ? (
+          <div className="flex flex-col items-center px-8 pt-20 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/85 text-[#FF8A00] shadow-sm">
+              <MessageCircle size={24} />
+            </div>
+            <h2 className="mt-4 text-sm font-black text-neutral-900">No chats yet</h2>
+            <p className="mt-1 text-xs leading-relaxed text-neutral-500">Your Nova AI, free and astrologer conversations will appear here.</p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {/* Elegant Search and Filter Section */}
-            <div className="space-y-3 bg-white p-3 border border-neutral-200/50 rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.01)]">
-              {/* Search bar */}
-              <div className="relative">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search by Astrologer or Expertise..."
-                  className="w-full h-10 pl-10 pr-4 bg-[#FAFAFA] border border-neutral-200 rounded-xl text-xs font-semibold text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:border-[#FF8A00]/40 transition-colors"
-                />
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" size={14} />
-              </div>
-
-              {/* Compact Filter Chips */}
-              <div className="flex items-center space-x-1.5 overflow-x-auto no-scrollbar pt-1">
-                {(['All', 'Active', 'Completed', 'Cancelled'] as const).map((filter) => {
-                  const isSelected = selectedFilter === filter;
-                  return (
-                    <button
-                      key={filter}
-                      onClick={() => setSelectedFilter(filter)}
-                      className={`px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider rounded-lg transition-all border shrink-0 cursor-pointer ${
-                        isSelected
-                          ? 'bg-[#FF8A00] border-[#FF8A00] text-white'
-                          : 'bg-white border-neutral-200 text-neutral-500 hover:text-neutral-800 hover:border-neutral-300'
-                      }`}
-                    >
-                      {filter}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Active Consultation Distinct Card */}
-            {activeChats.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center space-x-1.5 px-1 pt-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                  <h2 className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">Active Consultation</h2>
+          <div className="space-y-1.5">
+            {visibleItems.map(item => (
+              <motion.button
+                key={`${item.kind}-${item.id}`}
+                type="button"
+                whileTap={{ scale: 0.985 }}
+                onClick={() => openChat(item)}
+                className="flex w-full items-center gap-3 rounded-2xl bg-white/82 px-3 py-3 text-left shadow-[0_3px_14px_rgba(17,24,39,0.045)] backdrop-blur-sm"
+              >
+                <div className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#FFF4E8] text-[#FF8A00]">
+                  {item.image ? (
+                    <img src={item.image} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                  ) : item.kind === 'nova' ? (
+                    <Sparkles size={21} />
+                  ) : (
+                    <UserRound size={21} />
+                  )}
+                  {item.active && <span className="absolute bottom-0.5 right-0.5 h-3 w-3 rounded-full border-2 border-white bg-green-500" />}
                 </div>
-                
-                <div className="space-y-2.5">
-                  {activeChats.map((chat) => (
-                    <motion.div
-                      key={chat.id}
-                      onClick={() => handleCardClick(chat)}
-                      whileTap={{ scale: 0.985 }}
-                      className="bg-white border-2 border-[#FF8A00]/40 hover:border-[#FF8A00]/60 p-4 rounded-2xl flex items-center space-x-4 shadow-[0_2px_12px_rgba(255,138,0,0.05)] cursor-pointer relative overflow-hidden transition-all duration-200"
-                    >
-                      {/* Left color bar */}
-                      <div className="absolute top-0 bottom-0 left-0 w-1 bg-[#FF8A00]" />
 
-                      {/* Avatar */}
-                      <div className="relative shrink-0">
-                        <div className="w-12 h-12 rounded-full overflow-hidden border border-neutral-100 bg-neutral-50">
-                          <img src={chat.astrologerImage} alt={chat.astrologerName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                        </div>
-                        <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full animate-pulse" />
-                      </div>
-
-                      {/* Center Content */}
-                      <div className="flex-1 min-w-0">
-                        <h3 className="text-xs font-black text-neutral-900 truncate tracking-tight">{chat.astrologerName}</h3>
-                        <p className="text-[9.5px] text-neutral-400 font-bold uppercase tracking-wider truncate mt-0.5">
-                          {chat.astrologerSkills.slice(0, 2).join(' • ')}
-                        </p>
-                        
-                        {/* Live indicators */}
-                        <div className="flex items-center space-x-2 mt-2 flex-wrap gap-y-1">
-                          <span className="text-[8px] font-black text-green-600 bg-green-50 border border-green-100 px-1.5 py-0.5 rounded uppercase tracking-wider flex items-center space-x-1">
-                            <span className="w-1 h-1 rounded-full bg-green-500 animate-ping" />
-                            <span>Live</span>
-                          </span>
-                          <span className="text-[10px] text-neutral-400 font-bold font-mono">{formatSeconds(chat.elapsedSeconds)}</span>
-                          <span className="text-neutral-200 text-xs">•</span>
-                          <span className="text-[10px] text-neutral-500 font-bold">Wallet: ₹{walletBalance.toFixed(0)}</span>
-                        </div>
-                      </div>
-
-                      {/* Right Action */}
-                      <div className="shrink-0">
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleCardClick(chat);
-                          }}
-                          className="h-9 px-3 bg-[#FF8A00] hover:bg-[#E07A00] text-white font-extrabold text-[11px] rounded-xl border-none flex items-center justify-center space-x-1 uppercase transition-colors shadow-sm shadow-[#FF8A00]/10"
-                        >
-                          <span>Continue Chat</span>
-                          <ChevronRight size={11} strokeWidth={2.5} />
-                        </button>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Completed & Cancelled grouped lists */}
-            {Object.entries(groupedChats).map(([groupName, groupItems]) => {
-              if (groupItems.length === 0) return null;
-              return (
-                <div key={groupName} className="space-y-2">
-                  <h2 className="text-[10px] font-black text-neutral-400 uppercase tracking-widest px-1 pt-1">
-                    {groupName}
-                  </h2>
-                  <div className="space-y-2.5">
-                    {groupItems.map((chat) => (
-                      <motion.div
-                        key={chat.id}
-                        onClick={() => handleCardClick(chat)}
-                        whileTap={{ scale: 0.99 }}
-                        className="bg-white border border-neutral-150 rounded-2xl p-3.5 flex items-start space-x-3 shadow-[0_1px_3px_rgba(0,0,0,0.01)] hover:shadow-sm hover:border-neutral-200 transition-all duration-200 cursor-pointer"
-                      >
-                        {/* Left: Avatar */}
-                        <div className="relative shrink-0">
-                          <div className="w-11 h-11 rounded-full overflow-hidden border border-neutral-100 bg-neutral-50">
-                            <img src={chat.astrologerImage} alt={chat.astrologerName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                          </div>
-                        </div>
-
-                        {/* Center: Info */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center space-x-1.5">
-                            <h3 className="text-xs font-black text-neutral-900 truncate tracking-tight">{chat.astrologerName}</h3>
-                            <span className="text-[10px] text-neutral-400 font-bold truncate">• {chat.astrologerSkills.slice(0, 1).join('')}</span>
-                          </div>
-
-                          {/* Message preview - clamp 1 line */}
-                          <p className="text-neutral-500 text-xs font-semibold mt-1 truncate max-w-full">
-                            {chat.lastMessageText}
-                          </p>
-
-                          {/* Metadata Row */}
-                          <div className="flex items-center space-x-2 mt-1.5 flex-wrap gap-y-0.5">
-                            <span className="text-[10.5px] text-neutral-400 font-bold font-mono">{formatSeconds(chat.elapsedSeconds)}</span>
-                            <span className="text-neutral-200 text-xs">•</span>
-                            <span className="text-[10.5px] text-neutral-700 font-extrabold font-mono">₹{chat.totalCharged} charged</span>
-                          </div>
-                        </div>
-
-                        {/* Right: Actions / Status */}
-                        <div className="shrink-0 flex flex-col items-end justify-between self-stretch min-h-[44px] w-24">
-                          {/* Time */}
-                          <span className="text-[9.5px] text-neutral-400 font-bold font-mono">{chat.lastMessageTime}</span>
-
-                          {/* Status badge and Action */}
-                          <div className="flex flex-col items-end space-y-1 mt-1">
-                            {chat.status === 'Completed' ? (
-                              <span className="text-[8px] font-black text-green-600 bg-green-50 border border-green-100 px-1.5 py-0.5 rounded uppercase tracking-wider">COMPLETED</span>
-                            ) : (
-                              <span className="text-[8px] font-black text-red-500 bg-red-50 border border-red-100 px-1.5 py-0.5 rounded uppercase tracking-wider">CANCELLED</span>
-                            )}
-                            <div className="text-[10px] text-[#FF8A00] font-bold hover:underline flex items-center space-x-0.5 mt-0.5">
-                              <span>View Chat</span>
-                              <ChevronRight size={11} strokeWidth={2.5} />
-                            </div>
-                          </div>
-                        </div>
-                      </motion.div>
-                    ))}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-3">
+                    <h2 className="truncate text-[13px] font-black text-neutral-900">{item.title}</h2>
+                    <span className="shrink-0 text-[10px] font-semibold text-neutral-400">{displayTime(item.timestamp)}</span>
+                  </div>
+                  <div className="mt-1 flex items-center gap-2">
+                    <p className="min-w-0 flex-1 truncate text-xs font-medium text-neutral-500">{item.preview}</p>
+                    <ChevronRight size={15} className="shrink-0 text-neutral-300" />
                   </div>
                 </div>
-              );
-            })}
+              </motion.button>
+            ))}
           </div>
         )}
-      </div>
+      </main>
     </div>
   );
 }

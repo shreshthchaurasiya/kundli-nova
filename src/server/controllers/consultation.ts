@@ -102,6 +102,25 @@ export const getActiveSession = async (req: AuthenticatedRequest, res: Response,
   }
 };
 
+export const listSessions = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('consultation_sessions')
+      .select('*')
+      .eq('user_id', req.user!.id)
+      .order('requested_at', { ascending: false })
+      .limit(100);
+
+    if (error) throw new ApiError(500, 'Database error loading consultation history');
+    res.status(200).json({
+      status: 'success',
+      data: (data ?? []).map(row => serializeSession(row as SessionRow)),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getSessionById = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const session = await requireOwnedSession(req.params.id, req.user!.id);

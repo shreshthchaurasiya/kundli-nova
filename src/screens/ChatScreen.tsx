@@ -4,12 +4,16 @@ import { ArrowLeft, Phone, Video, Paperclip, Send, Clock, ShieldCheck, MoreVerti
 import { Screen } from '../types';
 import { useProfile } from '../contexts/ProfileContext';
 import { postAiRequest } from '../services/aiClient';
+import CelestialChatBackground from '../components/chat/CelestialChatBackground';
+import { chatStorage } from '../services/storage/chatStorage';
 
 interface ChatScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
   routeParams?: {
     initialQuery?: string;
     serviceContext?: string;
+    conversationId?: string;
+    readOnly?: boolean;
   };
 }
 
@@ -30,12 +34,59 @@ export default function ChatScreen({ onNavigate, routeParams }: ChatScreenProps)
 
   const [isTyping, setIsTyping] = useState(false);
   const [profileData, setProfileData] = useState<any>(null);
+  const [conversationId] = useState(
+    () => routeParams?.conversationId || `free-session-${crypto.randomUUID()}`,
+  );
+  const isReadOnly = Boolean(routeParams?.readOnly);
+
+  useEffect(() => {
+    if (isReadOnly || messages.length === 0) return;
+
+    const history = chatStorage.getAiHistory();
+    const storedMessages = messages.map(message => ({
+      ...message,
+      type: 'text' as const,
+      status: 'sent' as const,
+    }));
+    const lastMessage = storedMessages[storedMessages.length - 1]?.text || 'Free astrology chat';
+    const nextThread = {
+      id: conversationId,
+      kind: 'free' as const,
+      topic: 'Free Chat with Acharya Dev',
+      lastMessage,
+      timestamp: new Date().toISOString(),
+      messages: storedMessages,
+    };
+    const existingIndex = history.findIndex(thread => thread.id === conversationId);
+    const nextHistory = [...history];
+    if (existingIndex >= 0) nextHistory[existingIndex] = nextThread;
+    else nextHistory.unshift(nextThread);
+    chatStorage.saveAiHistory(nextHistory);
+  }, [conversationId, isReadOnly, messages]);
 
   // Load profile data and set initial message sequence
   useEffect(() => {
     let isMounted = true;
 
     const runGreetingSequence = async () => {
+      if (routeParams?.conversationId) {
+        const savedThread = chatStorage
+          .getAiHistory()
+          .find(thread => thread.id === routeParams.conversationId && thread.kind === 'free');
+        if (savedThread) {
+          setMessages(savedThread.messages
+            .filter(message => message.sender === 'user' || message.sender === 'astrologer')
+            .map(message => ({
+              id: message.id,
+              text: message.text || '',
+              sender: message.sender as 'user' | 'astrologer',
+              time: message.time,
+            })));
+          if (isReadOnly) setTimeLeft(0);
+          return;
+        }
+      }
+
       // profile is accessed from useProfile
       let pData = null;
       let name = 'User';
@@ -164,7 +215,7 @@ export default function ChatScreen({ onNavigate, routeParams }: ChatScreenProps)
     return () => {
       isMounted = false;
     };
-  }, [routeParams]);
+  }, [isReadOnly, routeParams]);
 
   // Timer logic
   useEffect(() => {
@@ -313,14 +364,7 @@ export default function ChatScreen({ onNavigate, routeParams }: ChatScreenProps)
   return (
     <div className="relative flex flex-col h-full w-full bg-[#FAFAFA] font-sans antialiased selection:bg-[#FF8A00]/20">
       
-      {/* Background Image Pattern */}
-      <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden opacity-[0.04] flex items-center justify-center bg-[#FAFAFA]">
-        <img 
-          src="https://i.ibb.co/4ZrDyD6C/image.png" 
-          alt="Celestial Background" 
-          className="w-full h-full object-cover sm:object-contain opacity-50 blur-[1px]"
-        />
-      </div>
+      <CelestialChatBackground />
 
       {/* Header */}
       <div className="bg-[#FFFFFF] px-[16px] sm:px-[20px] pt-[max(16px,env(safe-area-inset-top))] sm:pt-[24px] pb-[16px] shadow-[0_2px_10px_rgba(0,0,0,0.04)] z-20 flex items-center justify-between border-b border-[#F3F4F6] relative">
@@ -477,7 +521,7 @@ export default function ChatScreen({ onNavigate, routeParams }: ChatScreenProps)
       </div>
 
       {/* Message Input Bar or Premium Message */}
-      {timeLeft > 0 ? (
+      {timeLeft > 0 && !isReadOnly ? (
         <div className="bg-[#FFFFFF] px-[20px] py-[12px] pb-[max(20px,env(safe-area-inset-bottom))] border-t border-[#F3F4F6] z-20 flex items-center space-x-[12px] shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
           
           <button className="w-[40px] h-[40px] flex items-center justify-center rounded-full hover:bg-gray-50 active:bg-gray-100 transition-colors text-[#9CA3AF] opacity-50 shrink-0" disabled>

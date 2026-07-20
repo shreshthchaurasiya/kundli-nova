@@ -1,6 +1,7 @@
 import { ConsultationHeartbeatResult, ConsultationRequestResult, ConsultationSession } from '../../types/consultation';
 
 export interface IConsultationRepository {
+  listSessions(): Promise<ConsultationSession[]>;
   getActiveRequest(): Promise<ConsultationSession | null>;
   createSession(astrologerId: string): Promise<ConsultationRequestResult>;
   getSession(id: string): Promise<ConsultationSession>;

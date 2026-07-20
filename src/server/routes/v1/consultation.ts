@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { 
   createSession, 
+  listSessions,
   getActiveSession, 
   getSessionById, 
   heartbeatSession, 
@@ -17,6 +18,7 @@ const router = Router();
 
 router.use(requireAuth);
 
+router.get('/', listSessions);
 router.post('/', validateRequest(createConsultationSchema), createSession);
 router.get('/active', getActiveSession);
 router.get('/:id', validateRequest(consultationIdSchema), getSessionById);

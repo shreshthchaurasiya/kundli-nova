@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ApiProfileRepository } from '../apiProfileRepository';
 import { ApiWalletRepository } from '../apiWalletRepository';
 import { ApiKundliProfileRepository } from '../apiKundliProfileRepository';
+import { ApiConsultationRepository } from '../apiConsultationRepository';
 import { ApiClient } from '../../../services/api/apiClient';
 
 vi.mock('../../../services/api/apiClient', () => ({
@@ -18,6 +19,7 @@ vi.mock('../../../services/api/endpoints', () => ({
     PROFILE: { GET: '/profile', UPDATE: '/profile' },
     WALLET: { GET: '/wallet', TRANSACTIONS: '/wallet/transactions', RECHARGE: '/wallet/recharge' },
     KUNDLI: { LIST: '/kundli-profiles', CREATE: '/kundli-profiles' },
+    CONSULTATION: { LIST: '/consultations' },
   }
 }));
 
@@ -69,6 +71,18 @@ describe('API Repositories', () => {
       (ApiClient.post as any).mockResolvedValueOnce({ id: 'k1', name: 'Self' });
       const profile = await repo.createProfile({ name: 'Self' });
       expect(profile.id).toBe('k1');
+    });
+  });
+
+  describe('ApiConsultationRepository', () => {
+    it('loads consultation history from the authenticated API', async () => {
+      const repo = new ApiConsultationRepository();
+      (ApiClient.get as any).mockResolvedValueOnce([{ id: 'session-1', status: 'ENDED' }]);
+
+      const sessions = await repo.listSessions();
+
+      expect(sessions).toHaveLength(1);
+      expect(ApiClient.get).toHaveBeenCalledWith('/consultations');
     });
   });
 });

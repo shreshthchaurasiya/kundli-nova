@@ -6,6 +6,10 @@ import { ENDPOINTS } from '../../services/api/endpoints';
 export class ApiConsultationRepository implements IConsultationRepository {
   private activeSubscriptions = new Set<(session: ConsultationSession | null) => void>();
 
+  async listSessions(): Promise<ConsultationSession[]> {
+    return await ApiClient.get<ConsultationSession[]>(ENDPOINTS.CONSULTATION.LIST);
+  }
+
   async getActiveRequest(): Promise<ConsultationSession | null> {
     try {
       return await ApiClient.get<ConsultationSession>(ENDPOINTS.CONSULTATION.GET_ACTIVE);

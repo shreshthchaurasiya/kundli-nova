@@ -49,6 +49,7 @@ import {
 import { chatStorage } from '../services/storage/chatStorage';
 import { ApiConsultationRepository } from '../repositories/api/apiConsultationRepository';
 import { ApiError, NetworkError, TimeoutError } from '../services/api/apiErrors';
+import CelestialChatBackground from '../components/chat/CelestialChatBackground';
 
 const consultationRepository = new ApiConsultationRepository();
 
@@ -170,9 +171,8 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
 
       // 0. CHECK IF READ-ONLY SESSION IS REQUESTED
       if (readOnlySessionId) {
-        const history = await consultationService.getSessionHistory();
-        const pastSession = history.find(s => s.id === readOnlySessionId);
-        if (pastSession) {
+        try {
+          const pastSession = await consultationRepository.getSession(readOnlySessionId);
           const pastAstro = await astrologerService.getAstrologer(pastSession.astrologerId);
           if (pastAstro) setAstro(pastAstro);
           
@@ -189,6 +189,10 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
           
           // Set to ACTIVE so we render the chat loop but we are in read-only mode
           setCurrentState('ACTIVE');
+          return;
+        } catch (error) {
+          console.error('Unable to load consultation transcript', error);
+          setVerificationError('This consultation transcript could not be loaded.');
           return;
         }
       }
@@ -1192,7 +1196,8 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
   const totalAvailableSeconds = remainingMinutes * 60;
 
   return (
-    <div className="relative flex flex-col h-full w-full bg-white font-sans antialiased select-none">
+    <div className="relative flex flex-col h-full w-full bg-[#FCFBF8] font-sans antialiased select-none">
+      <CelestialChatBackground />
       
       {/* Voice/Video Call Overlay modal */}
       <AnimatePresence>
@@ -1599,7 +1604,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
       )}
 
       {/* Main Chat Scroll Frame */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 z-10 flex flex-col no-scrollbar bg-[#FAFAFA]/40">
+      <div className="flex-1 overflow-y-auto px-4 py-4 z-10 flex flex-col no-scrollbar bg-white/10">
         
         {/* Paid consultation details summary header block */}
         {readOnlySessionId ? (

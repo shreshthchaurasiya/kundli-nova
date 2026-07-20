@@ -22,6 +22,7 @@ export interface ChatState {
 
 export interface AiChatThread {
   id: string;
+  kind?: 'nova' | 'free';
   topic: string;
   lastMessage: string;
   timestamp: string;

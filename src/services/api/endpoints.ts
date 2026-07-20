@@ -11,6 +11,7 @@ export const ENDPOINTS = {
   },
   CONSULTATION: {
     CREATE: `${API_BASE}/consultations`,
+    LIST: `${API_BASE}/consultations`,
     GET_ACTIVE: `${API_BASE}/consultations/active`,
     GET_BY_ID: (id: string) => `${API_BASE}/consultations/${id}`,
     HEARTBEAT: (id: string) => `${API_BASE}/consultations/${id}/heartbeat`,

@@ -24,6 +24,8 @@ import { generateKundli } from '../services/kundliService';
 import { generateKundliPdf } from '../services/kundliPdfService';
 import KundliPreviewMessage from '../components/KundliPreviewMessage';
 import { postAiRequest } from '../services/aiClient';
+import CelestialChatBackground from '../components/chat/CelestialChatBackground';
+import { chatStorage } from '../services/storage/chatStorage';
 
 interface NovaAIChatScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
@@ -46,6 +48,7 @@ interface Message {
 
 interface SavedConversation {
   id: string;
+  kind?: 'nova';
   topic: string;
   lastMessage: string;
   timestamp: string;
@@ -102,13 +105,7 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
       const profile = await repositories.profile.getProfile();
       setProfileData(profile);
       // 2. Determine if loading existing conversation or creating new
-    const savedHistoryStr = localStorage.getItem('kundli_nova_ai_history');
-    let historyList: SavedConversation[] = [];
-    if (savedHistoryStr) {
-      try {
-        historyList = JSON.parse(savedHistoryStr);
-      } catch (e) {}
-    }
+    const historyList = chatStorage.getAiHistory() as SavedConversation[];
 
     const { conversationId, initialQuery, serviceContext } = routeParams || {};
 
@@ -291,13 +288,7 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
   }, [messages, isTyping]);
 
   const saveToHistory = (id: string, topic: string, currentMsgs: Message[]) => {
-    const savedHistoryStr = localStorage.getItem('kundli_nova_ai_history');
-    let historyList: SavedConversation[] = [];
-    if (savedHistoryStr) {
-      try {
-        historyList = JSON.parse(savedHistoryStr);
-      } catch (e) {}
-    }
+    let historyList = chatStorage.getAiHistory() as SavedConversation[];
 
     const shortTimestamp = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
     const lastMsg = currentMsgs[currentMsgs.length - 1];
@@ -314,6 +305,7 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
     } else {
       const newConv: SavedConversation = {
         id,
+        kind: 'nova',
         topic,
         lastMessage: lastMsgText,
         timestamp: shortTimestamp,
@@ -322,8 +314,7 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
       historyList = [newConv, ...historyList];
     }
 
-    // Keep top 6 in list to make it clean & compact
-    localStorage.setItem('kundli_nova_ai_history', JSON.stringify(historyList.slice(0, 6)));
+    chatStorage.saveAiHistory(historyList as import('../types/chat').AiChatThread[]);
   };
 
   const getFormattedTime = () => {
@@ -446,16 +437,7 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
   return (
     <div className="relative flex flex-col h-full w-full bg-[#FCFBF8] font-sans antialiased selection:bg-[#FF8A00]/20">
       
-      {/* Locked Celestial Watermark Background Image (full width and full height coverage) */}
-      <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden flex items-center justify-center select-none">
-        <img 
-          src="https://i.ibb.co/DHDVBJSZ/unnamed.png" 
-          alt="Celestial Watermark" 
-          className="w-full h-full object-cover select-none pointer-events-none opacity-100"
-          draggable="false"
-          referrerPolicy="no-referrer"
-        />
-      </div>
+      <CelestialChatBackground />
 
       {/* Top Header */}
       <div className="bg-[#FFFFFF]/85 backdrop-blur-md px-[16px] sm:px-[20px] pt-[max(16px,env(safe-area-inset-top))] sm:pt-[24px] pb-[16px] shadow-[0_2px_12px_rgba(0,0,0,0.02)] z-20 flex items-center justify-between border-b border-[#F3F4F6] relative">

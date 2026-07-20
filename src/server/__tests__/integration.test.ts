@@ -82,6 +82,44 @@ describe('API Integration Tests', () => {
   });
 
   describe('Consultation Endpoints', () => {
+    it('GET /api/v1/consultations lists only the authenticated user sessions', async () => {
+      const token = mockValidToken();
+      const mockSelect = vi.fn().mockReturnThis();
+      const mockEq = vi.fn().mockReturnThis();
+      const mockOrder = vi.fn().mockReturnThis();
+      const mockLimit = vi.fn().mockResolvedValue({
+        data: [{
+          id: '11111111-1111-4111-8111-111111111111',
+          user_id: '22222222-2222-4222-8222-222222222222',
+          astrologer_id: '33333333-3333-4333-8333-333333333333',
+          status: 'ENDED',
+          rate_per_minute: 25,
+          requested_at: '2026-07-20T10:00:00.000Z',
+          billed_minutes: 2,
+          total_charged: 50,
+          elapsed_seconds: 120,
+        }],
+        error: null,
+      });
+      (supabaseAdmin.from as any).mockReturnValue({
+        select: mockSelect,
+        eq: mockEq,
+        order: mockOrder,
+        limit: mockLimit,
+      });
+
+      const res = await request(app)
+        .get('/api/v1/consultations')
+        .set('Authorization', token);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data).toHaveLength(1);
+      expect(res.body.data[0].totalCharged).toBe(50);
+      expect(mockEq).toHaveBeenCalledWith('user_id', '22222222-2222-4222-8222-222222222222');
+      expect(mockOrder).toHaveBeenCalledWith('requested_at', { ascending: false });
+      expect(mockLimit).toHaveBeenCalledWith(100);
+    });
+
     it('POST /api/v1/consultations resolves price on the server', async () => {
       const token = mockValidToken();
       (supabaseAdmin.rpc as any).mockResolvedValue({
