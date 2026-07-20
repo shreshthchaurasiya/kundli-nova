@@ -1,4 +1,4 @@
-import { Astrologer } from '../../types';
+import { Astrologer } from '../../../types';
 
 export type AstrologerApplicationStatus =
   | 'draft'
@@ -64,4 +64,3 @@ export interface AstrologerPartnerState {
   isLoading: boolean;
   error: string | null;
 }
-

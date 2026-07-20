@@ -8,15 +8,15 @@ import {
   Heart, 
   Lock, 
 } from 'lucide-react';
-import { Screen } from '../types';
-import { useAstrologerPartner } from '../features/astrologer';
+import { Screen } from '../../../../types';
+import { useAstrologerPartner } from '../../partner/AstrologerPartnerContext';
 
-interface AstrologerProfileScreenProps {
+interface PublicAstrologerProfileScreenProps {
   astrologerId: string;
   onNavigate: (screen: Screen, params?: any) => void;
 }
 
-export default function AstrologerProfileScreen({ astrologerId, onNavigate }: AstrologerProfileScreenProps) {
+export default function PublicAstrologerProfileScreen({ astrologerId, onNavigate }: PublicAstrologerProfileScreenProps) {
   const [isFavorite, setIsFavorite] = useState(false);
   const [isAboutExpanded, setIsAboutExpanded] = useState(false);
   const { directory, isLoadingDirectory } = useAstrologerPartner();

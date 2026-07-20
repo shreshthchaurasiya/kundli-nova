@@ -1,17 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, ArrowRight, Camera, Check, FileCheck2, LoaderCircle, Save, ShieldCheck, Upload } from 'lucide-react';
 import { motion } from 'motion/react';
-import { useAuth } from '../auth';
-import { useProfile } from '../contexts/ProfileContext';
+import { useAuth } from '../../../../auth';
+import { useProfile } from '../../../../contexts/ProfileContext';
 import {
   ASTROLOGER_LANGUAGES,
   ASTROLOGER_SKILLS,
-  AstrologerApplicationDraft,
   CONSULTATION_MODES,
-  astrologerPartnerService,
-  useAstrologerPartner,
-} from '../features/astrologer';
-import { Screen } from '../types';
+} from '../../shared/constants';
+import { useAstrologerPartner } from '../../partner/AstrologerPartnerContext';
+import { astrologerPartnerService } from '../../partner/astrologerPartnerService';
+import { AstrologerApplicationDraft } from '../../partner/types';
+import { Screen } from '../../../../types';
 
 interface AstrologerApplicationScreenProps {
   onNavigate: (screen: Screen) => void;
@@ -270,4 +270,3 @@ function ChipField({ label, values, selected, onToggle }: { label: string; value
 function DocumentUpload({ title, description, complete, onChange }: { title: string; description: string; complete: boolean; onChange: (file?: File) => void }) {
   return <label className="flex cursor-pointer items-center gap-3 rounded-[16px] border border-neutral-200 p-4 active:bg-neutral-50"><span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${complete ? 'bg-emerald-50 text-emerald-600' : 'bg-neutral-100 text-neutral-500'}`}>{complete ? <FileCheck2 size={19} /> : <Upload size={18} />}</span><span className="min-w-0 flex-1"><span className="block text-sm font-extrabold text-neutral-900">{title}</span><span className="mt-0.5 block text-[11px] font-medium text-neutral-500">{description}</span></span><input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="hidden" onChange={event => onChange(event.target.files?.[0])} /></label>;
 }
-

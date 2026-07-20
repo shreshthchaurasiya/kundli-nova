@@ -22,6 +22,7 @@ export type Screen =
   | 'astrologer-profile'
   | 'partner-with-us'
   | 'astrologer-application'
+  | 'astrologer-dashboard'
   | 'manage-astrologer-profile'
   | 'help-support'
   | 'category-detail'

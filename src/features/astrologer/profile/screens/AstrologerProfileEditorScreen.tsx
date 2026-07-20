@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft, BadgeCheck, Camera, Eye, LoaderCircle, Save } from 'lucide-react';
-import { ASTROLOGER_LANGUAGES, ASTROLOGER_SKILLS, astrologerPartnerService, useAstrologerPartner } from '../features/astrologer';
-import { Screen } from '../types';
+import { useAstrologerPartner } from '../../partner/AstrologerPartnerContext';
+import { astrologerPartnerService } from '../../partner/astrologerPartnerService';
+import { ASTROLOGER_LANGUAGES, ASTROLOGER_SKILLS } from '../../shared/constants';
+import { Screen } from '../../../../types';
 
-interface ManageAstrologerProfileScreenProps {
+interface AstrologerProfileEditorScreenProps {
   onNavigate: (screen: Screen, params?: unknown) => void;
 }
 
-export default function ManageAstrologerProfileScreen({ onNavigate }: ManageAstrologerProfileScreenProps) {
+export default function AstrologerProfileEditorScreen({ onNavigate }: AstrologerProfileEditorScreenProps) {
   const { publicProfile, updatePublicProfile } = useAstrologerPartner();
   const [name, setName] = useState('');
   const [image, setImage] = useState('');
@@ -63,7 +65,7 @@ export default function ManageAstrologerProfileScreen({ onNavigate }: ManageAstr
   return (
     <div className="flex h-full flex-col overflow-hidden bg-white">
       <header className="flex items-center gap-3 border-b border-neutral-100 px-5 py-4">
-        <button onClick={() => onNavigate('partner-with-us')} className="-ml-2 rounded-full p-2 text-neutral-700 active:bg-neutral-100"><ArrowLeft size={21} /></button>
+        <button onClick={() => onNavigate('astrologer-dashboard')} className="-ml-2 rounded-full p-2 text-neutral-700 active:bg-neutral-100"><ArrowLeft size={21} /></button>
         <div className="min-w-0 flex-1"><p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-emerald-600">Verified professional</p><h1 className="truncate text-lg font-black text-neutral-900">Manage public profile</h1></div>
         <button onClick={() => onNavigate('astrologer-profile', { astrologerId: publicProfile.id })} className="flex items-center gap-1.5 rounded-full border border-neutral-200 px-3 py-2 text-[11px] font-bold text-neutral-700"><Eye size={14} /> Preview</button>
       </header>
@@ -100,4 +102,3 @@ export default function ManageAstrologerProfileScreen({ onNavigate }: ManageAstr
 function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string }) { return <label className="block"><span className="mb-2 block text-[11px] font-extrabold uppercase tracking-wider text-neutral-500">{label}</span><input value={value} onChange={event => onChange(event.target.value)} placeholder={placeholder} className="h-[50px] w-full rounded-[14px] border border-neutral-200 px-4 text-sm font-semibold outline-none focus:border-[#FF8A00]" /></label>; }
 function Area({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <label className="block"><span className="mb-2 block text-[11px] font-extrabold uppercase tracking-wider text-neutral-500">{label}</span><textarea value={value} onChange={event => onChange(event.target.value)} rows={6} maxLength={800} className="w-full resize-none rounded-[14px] border border-neutral-200 p-4 text-sm font-medium leading-relaxed outline-none focus:border-[#FF8A00]" /></label>; }
 function Chips({ label, values, selected, onToggle }: { label: string; values: readonly string[]; selected: string[]; onToggle: (value: string) => void }) { return <div><span className="mb-2 block text-[11px] font-extrabold uppercase tracking-wider text-neutral-500">{label}</span><div className="flex flex-wrap gap-2">{values.map(value => <button key={value} onClick={() => onToggle(value)} className={`rounded-full border px-3.5 py-2 text-xs font-bold ${selected.includes(value) ? 'border-[#FF8A00] bg-[#FF8A00] text-white' : 'border-neutral-200 text-neutral-600'}`}>{value}</button>)}</div></div>; }
-

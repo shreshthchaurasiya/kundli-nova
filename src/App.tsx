@@ -18,15 +18,19 @@ import ViewKundliScreen from './screens/ViewKundliScreen';
 import ConsultationChatScreen from './screens/ConsultationChatScreen';
 import ChatHistoryScreen from './screens/ChatHistoryScreen';
 import ChatListScreen from './screens/ChatListScreen';
-import AstrologerProfileScreen from './screens/AstrologerProfileScreen';
 import CategoryDetailScreen from './screens/CategoryDetailScreen';
 import NovaAIScreen from './screens/NovaAIScreen';
 import NovaAIChatScreen from './screens/NovaAIChatScreen';
 import NovaKundliScreen from './screens/NovaKundliScreen';
-import PartnerWithUsScreen from './screens/PartnerWithUsScreen';
-import AstrologerApplicationScreen from './screens/AstrologerApplicationScreen';
-import ManageAstrologerProfileScreen from './screens/ManageAstrologerProfileScreen';
 import HelpSupportScreen from './screens/HelpSupportScreen';
+import {
+  AstrologerApplicationScreen,
+  AstrologerDashboardScreen,
+  AstrologerPartnershipScreen,
+  AstrologerProfileEditorScreen,
+  PublicAstrologerProfileScreen,
+  useAstrologerDashboard,
+} from './features/astrologer';
 import BottomNav from './components/BottomNav';
 import { Screen, Tab } from './types';
 import { AnimatePresence, motion } from 'motion/react';
@@ -46,6 +50,7 @@ export default function App() {
   const { isAuthenticated, isLoading, user, signOut } = useAuth();
   const { profile, isLoadingProfile } = useProfile();
   const { wallet } = useWallet();
+  const { profile: astrologerWorkspace, isLoading: isLoadingAstrologerDashboard } = useAstrologerDashboard();
 
   const [currentScreen, setCurrentScreen] = useState<Screen>('splash');
   const [currentTab, setCurrentTab] = useState<Tab>('home');
@@ -67,7 +72,7 @@ export default function App() {
 
   // Route based on auth state and profile completeness
   useEffect(() => {
-    if (isLoading || isLoadingProfile) return; // Wait for session and profile check to resolve
+    if (isLoading || isLoadingProfile || isLoadingAstrologerDashboard) return;
 
     if (isAuthenticated) {
       if (!isProfileComplete) {
@@ -78,7 +83,7 @@ export default function App() {
         // email confirmation cannot skip it.
         if (currentScreen !== 'welcome-gift') setCurrentScreen('welcome-gift');
       } else if (AUTH_SCREENS.includes(currentScreen)) {
-        setCurrentScreen('home');
+        setCurrentScreen(astrologerWorkspace ? 'astrologer-dashboard' : 'home');
       }
     } else {
       // Profile creation, welcome gift, and all application screens are protected.
@@ -86,7 +91,7 @@ export default function App() {
         setCurrentScreen('login');
       }
     }
-  }, [currentScreen, hasStartedWelcomeChat, isAuthenticated, isLoading, isLoadingProfile, isProfileComplete]);
+  }, [astrologerWorkspace, currentScreen, hasStartedWelcomeChat, isAuthenticated, isLoading, isLoadingAstrologerDashboard, isLoadingProfile, isProfileComplete]);
 
   useEffect(() => {
     if (toast) {
@@ -196,10 +201,11 @@ export default function App() {
       case 'services': return <CategoryScreen onNavigate={navigate} />;
       case 'astrologers': return <AstrologersScreen onNavigate={navigate} />;
       case 'profile': return <ProfileScreen onNavigate={navigate} />;
-      case 'astrologer-profile': return <AstrologerProfileScreen astrologerId={routeParams?.astrologerId} onNavigate={navigate} />;
-      case 'partner-with-us': return <PartnerWithUsScreen onNavigate={navigate} />;
+      case 'astrologer-profile': return <PublicAstrologerProfileScreen astrologerId={routeParams?.astrologerId} onNavigate={navigate} />;
+      case 'partner-with-us': return <AstrologerPartnershipScreen onNavigate={navigate} />;
       case 'astrologer-application': return <AstrologerApplicationScreen onNavigate={navigate} />;
-      case 'manage-astrologer-profile': return <ManageAstrologerProfileScreen onNavigate={navigate} />;
+      case 'astrologer-dashboard': return <AstrologerDashboardScreen onNavigate={navigate} />;
+      case 'manage-astrologer-profile': return <AstrologerProfileEditorScreen onNavigate={navigate} />;
       case 'help-support': return <HelpSupportScreen onNavigate={navigate} routeParams={routeParams} />;
       case 'category-detail': return <CategoryDetailScreen category={routeParams?.category} onNavigate={navigate} />;
       default: return <HomeScreen onNavigate={navigate} onOpenDrawer={() => setIsDrawerOpen(true)} />;
