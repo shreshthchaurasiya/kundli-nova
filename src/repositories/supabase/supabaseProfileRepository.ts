@@ -13,6 +13,7 @@ type ProfileRow = {
   birth_district: string | null;
   birth_city: string | null;
   onboarding_completed_at: string | null;
+  welcome_chat_started_at: string | null;
 };
 
 const toProfile = (row: ProfileRow): UserProfile => ({
@@ -26,6 +27,7 @@ const toProfile = (row: ProfileRow): UserProfile => ({
   district: row.birth_district ?? undefined,
   city: row.birth_city ?? undefined,
   onboardingCompletedAt: row.onboarding_completed_at ?? undefined,
+  welcomeChatStartedAt: row.welcome_chat_started_at ?? undefined,
 });
 
 export class SupabaseProfileRepository implements IProfileRepository {
@@ -36,12 +38,18 @@ export class SupabaseProfileRepository implements IProfileRepository {
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('phone,email,name,gender,dob,tob,birth_state,birth_district,birth_city,onboarding_completed_at')
+      .select('phone,email,name,gender,dob,tob,birth_state,birth_district,birth_city,onboarding_completed_at,welcome_chat_started_at')
       .eq('id', user.id)
       .maybeSingle<ProfileRow>();
 
     if (error) throw error;
     return data ? toProfile(data) : null;
+  }
+
+  async startWelcomeChat(): Promise<UserProfile> {
+    const { data, error } = await supabase.rpc('start_welcome_chat');
+    if (error) throw error;
+    return toProfile(data as ProfileRow);
   }
 
   async saveProfile(profile: Partial<UserProfile>): Promise<UserProfile> {
@@ -83,7 +91,7 @@ export class SupabaseProfileRepository implements IProfileRepository {
       .from('profiles')
       .update(updates)
       .eq('id', user.id)
-      .select('phone,email,name,gender,dob,tob,birth_state,birth_district,birth_city,onboarding_completed_at')
+      .select('phone,email,name,gender,dob,tob,birth_state,birth_district,birth_city,onboarding_completed_at,welcome_chat_started_at')
       .single<ProfileRow>();
 
     if (error) throw error;

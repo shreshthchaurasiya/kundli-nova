@@ -28,7 +28,6 @@ import { Screen, Tab } from './types';
 import { AnimatePresence, motion } from 'motion/react';
 import { runMigrations } from './services/storage';
 import { useAuth } from './auth';
-import { useRepositories } from './repositories/repositoryProvider';
 import { useProfile } from './contexts/ProfileContext';
 import { useWallet } from './contexts/WalletContext';
 
@@ -41,7 +40,7 @@ const NAV_SCREENS: Screen[] = ['home', 'chat-list', 'chat-history', 'nova-ai', '
 
 export default function App() {
   const { isAuthenticated, isLoading, user, signOut } = useAuth();
-  const repositories = useRepositories();
+  const { profile, isLoadingProfile } = useProfile();
   const { wallet } = useWallet();
 
   const [currentScreen, setCurrentScreen] = useState<Screen>('splash');
@@ -51,52 +50,30 @@ export default function App() {
   const [toast, setToast] = useState<{ message: string } | null>(null);
   const walletBalance = wallet.balance;
 
-  // Track if profile check is loading and if profile is complete
-  const [profileLoading, setProfileLoading] = useState(false);
-  const [isProfileComplete, setIsProfileComplete] = useState(false);
+  // ProfileContext is the single source of truth for the onboarding state.
+  // Keeping a second async copy here caused a completed profile to be routed
+  // straight back to the details form.
+  const isProfileComplete = Boolean(profile?.onboardingCompletedAt);
+  const hasStartedWelcomeChat = Boolean(profile?.welcomeChatStartedAt);
 
   // Initialize storage migrations once at startup
   useEffect(() => {
     runMigrations();
   }, []);
 
-  // Fetch and verify profile completeness on authentication or screen change
-  useEffect(() => {
-    const checkProfileCompleteness = async () => {
-      if (isAuthenticated && user) {
-        setProfileLoading(true);
-        try {
-          const profile = await repositories.profile.getProfile();
-          // OAuth creates only a provisional Auth identity. App access starts
-          // after the birth-details transaction explicitly completes onboarding.
-          if (profile?.onboardingCompletedAt) {
-            setIsProfileComplete(true);
-          } else {
-            setIsProfileComplete(false);
-          }
-        } catch (err) {
-          console.error('Failed to verify profile completeness:', err);
-          setIsProfileComplete(false);
-        } finally {
-          setProfileLoading(false);
-        }
-      } else {
-        setIsProfileComplete(false);
-      }
-    };
-
-    checkProfileCompleteness();
-  }, [isAuthenticated, user, repositories.profile]);
-
   // Route based on auth state and profile completeness
   useEffect(() => {
-    if (isLoading || profileLoading) return; // Wait for session and profile check to resolve
+    if (isLoading || isLoadingProfile) return; // Wait for session and profile check to resolve
 
     if (isAuthenticated) {
       if (!isProfileComplete) {
         // A provisional OAuth identity cannot enter any application screen.
         if (currentScreen !== 'create-profile') setCurrentScreen('create-profile');
-      } else if (AUTH_SCREENS.includes(currentScreen) && currentScreen !== 'welcome-gift') {
+      } else if (!hasStartedWelcomeChat) {
+        // The welcome step is durable. Refreshing the page or returning from an
+        // email confirmation cannot skip it.
+        if (currentScreen !== 'welcome-gift') setCurrentScreen('welcome-gift');
+      } else if (AUTH_SCREENS.includes(currentScreen)) {
         setCurrentScreen('home');
       }
     } else {
@@ -105,7 +82,7 @@ export default function App() {
         setCurrentScreen('login');
       }
     }
-  }, [currentScreen, isAuthenticated, isLoading, profileLoading, isProfileComplete]);
+  }, [currentScreen, hasStartedWelcomeChat, isAuthenticated, isLoading, isLoadingProfile, isProfileComplete]);
 
   useEffect(() => {
     if (toast) {
@@ -145,7 +122,6 @@ export default function App() {
   };
 
   // Derive display name + phone from the authenticated Supabase user
-  const { profile } = useProfile();
   const userName = profile?.name || user?.user_metadata?.name || user?.user_metadata?.full_name || 'User';
   const userPhone = user?.phone
     ? user.phone.replace(/^\+91(\d{5})(\d{5})$/, '+91 $1 $2')

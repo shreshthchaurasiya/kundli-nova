@@ -14,6 +14,7 @@ function toDbFields(body: Record<string, any>): Record<string, any> {
     if (key === 'state') mapped['birth_state'] = value;
     else if (key === 'district') mapped['birth_district'] = value;
     else if (key === 'city') mapped['birth_city'] = value;
+    else if (key === 'welcomeChatStartedAt') mapped['welcome_chat_started_at'] = value;
     else mapped[key] = value;
   }
   return mapped;
@@ -37,6 +38,10 @@ function fromDbFields(profile: Record<string, any>): Record<string, any> {
   if ('birth_city' in profile) {
     mapped['city'] = profile['birth_city'];
     delete mapped['birth_city'];
+  }
+  if ('welcome_chat_started_at' in profile) {
+    mapped['welcomeChatStartedAt'] = profile['welcome_chat_started_at'];
+    delete mapped['welcome_chat_started_at'];
   }
   return mapped;
 }

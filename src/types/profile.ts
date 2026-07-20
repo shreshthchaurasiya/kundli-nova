@@ -17,4 +17,5 @@ export interface UserProfile extends Partial<BirthDetails> {
   country?: string;
   birthTime?: string; // legacy support
   onboardingCompletedAt?: string;
+  welcomeChatStartedAt?: string;
 }

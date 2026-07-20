@@ -22,6 +22,12 @@ export class ApiProfileRepository implements IProfileRepository {
     });
   }
 
+  async startWelcomeChat(): Promise<UserProfile> {
+    return await ApiClient.patch<UserProfile>(ENDPOINTS.PROFILE.UPDATE, {
+      body: { welcomeChatStartedAt: new Date().toISOString() },
+    });
+  }
+
   async removeProfile(): Promise<void> {
     // There is no explicit remove profile endpoint currently,
     // in an API driven architecture logging out handles this usually,

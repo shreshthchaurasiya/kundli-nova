@@ -1,13 +1,35 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, Gift, ArrowRight, Lock } from 'lucide-react';
+import { Gift, ArrowRight, Lock, Loader2 } from 'lucide-react';
 import { Screen } from '../types';
+import { useRepositories } from '../repositories/repositoryProvider';
+import { useProfile } from '../contexts/ProfileContext';
 
 interface WelcomeGiftScreenProps {
   onNavigate: (screen: Screen) => void;
 }
 
 export default function WelcomeGiftScreen({ onNavigate }: WelcomeGiftScreenProps) {
+  const repositories = useRepositories();
+  const { refreshProfile } = useProfile();
+  const [isStarting, setIsStarting] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleContinue = async () => {
+    if (isStarting) return;
+    setIsStarting(true);
+    setError('');
+    try {
+      await repositories.profile.startWelcomeChat();
+      await refreshProfile();
+      onNavigate('chat');
+    } catch (err: any) {
+      setError(err?.message || 'Unable to start your chat. Please try again.');
+    } finally {
+      setIsStarting(false);
+    }
+  };
+
   return (
     <div className="relative flex flex-col h-[100dvh] w-full bg-[#FFFFFF] overflow-hidden font-sans antialiased selection:bg-[#FF8A00]/20">
       
@@ -28,16 +50,6 @@ export default function WelcomeGiftScreen({ onNavigate }: WelcomeGiftScreenProps
             <path d="M800 150 A 40 40 0 1 1 850 100 A 50 50 0 0 0 800 150" fill="currentColor" stroke="none" opacity="0.5" />
           </g>
         </svg>
-      </div>
-
-      {/* Top Header */}
-      <div className="w-full flex items-center px-[20px] sm:px-[24px] pt-[24px] sm:pt-[32px] z-20">
-        <button 
-          onClick={() => onNavigate('create-profile')}
-          className="p-[10px] -ml-[10px] rounded-full hover:bg-gray-50 active:bg-gray-100 transition-colors text-[#111827]"
-        >
-          <ArrowLeft size={24} strokeWidth={2} />
-        </button>
       </div>
 
       <div className="flex-1 w-full flex flex-col px-[28px] sm:px-[32px] pb-[32px] z-10 overflow-y-auto no-scrollbar">
@@ -97,12 +109,24 @@ export default function WelcomeGiftScreen({ onNavigate }: WelcomeGiftScreenProps
             transition={{ duration: 0.6, delay: 0.3, ease: "easeOut" }}
             className="w-full flex flex-col items-center mt-auto sm:mt-0"
           >
+            {error && (
+              <div className="w-full mb-[12px] p-[12px] bg-red-50 text-red-600 rounded-[12px] text-[13px] font-medium text-center border border-red-100">
+                {error}
+              </div>
+            )}
             <button 
-              onClick={() => onNavigate('chat')}
-              className="w-full h-[56px] bg-[#FF8A00] rounded-[16px] text-[#FFFFFF] flex items-center justify-center active:scale-[0.98] transition-all hover:bg-[#E97700] shadow-[0_4px_14px_rgba(255,138,0,0.25)] shrink-0 mb-[16px]"
+              onClick={handleContinue}
+              disabled={isStarting}
+              className="w-full h-[56px] bg-[#FF8A00] rounded-[16px] text-[#FFFFFF] flex items-center justify-center active:scale-[0.98] transition-all hover:bg-[#E97700] shadow-[0_4px_14px_rgba(255,138,0,0.25)] shrink-0 mb-[16px] disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              <span className="font-semibold text-[17px] tracking-wide mr-[8px]">Continue to Free Chat</span>
-              <ArrowRight size={20} strokeWidth={2.5} />
+              {isStarting ? (
+                <Loader2 size={22} className="animate-spin" />
+              ) : (
+                <>
+                  <span className="font-semibold text-[17px] tracking-wide mr-[8px]">Continue to Free Chat</span>
+                  <ArrowRight size={20} strokeWidth={2.5} />
+                </>
+              )}
             </button>
             
           </motion.div>

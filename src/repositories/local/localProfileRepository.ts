@@ -15,6 +15,10 @@ export class LocalProfileRepository implements IProfileRepository {
     return merged;
   }
 
+  async startWelcomeChat(): Promise<UserProfile> {
+    return this.saveProfile({ welcomeChatStartedAt: new Date().toISOString() });
+  }
+
   async removeProfile(): Promise<void> {
     storageAdapter.removeItem(KEYS.PROFILE);
   }
