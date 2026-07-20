@@ -145,6 +145,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
   const [heartbeatIntervalSeconds, setHeartbeatIntervalSeconds] = useState(0);
   const [requestTimeoutSeconds, setRequestTimeoutSeconds] = useState(0);
   const [rechargeGraceSeconds, setRechargeGraceSeconds] = useState(0);
+  const [verificationError, setVerificationError] = useState('');
   const minimumRequired = ratePerMin * minimumMinutes;
 
   // -----------------------------------------------------------------
@@ -202,41 +203,47 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
   // -----------------------------------------------------------------
   const runWalletVerification = async () => {
     setCurrentState('CHECKING_WALLET');
-    const result = await consultationRepository.createSession(astrologerId);
-    setWalletBalance(result.balance);
-    setRatePerMin(result.ratePerMinute);
-    setMinimumMinutes(result.minimumMinutes);
-    setHeartbeatIntervalSeconds(result.heartbeatIntervalSeconds);
-    setRequestTimeoutSeconds(result.requestTimeoutSeconds);
-    setRechargeGraceSeconds(result.rechargeGraceSeconds);
+    setVerificationError('');
+    try {
+      const result = await consultationRepository.createSession(astrologerId);
+      setWalletBalance(result.balance);
+      setRatePerMin(result.ratePerMinute);
+      setMinimumMinutes(result.minimumMinutes);
+      setHeartbeatIntervalSeconds(result.heartbeatIntervalSeconds);
+      setRequestTimeoutSeconds(result.requestTimeoutSeconds);
+      setRechargeGraceSeconds(result.rechargeGraceSeconds);
 
-    if (result.outcome === 'insufficient_balance' || !result.session) {
-      setCurrentState('INSUFFICIENT_BALANCE');
-      return;
+      if (result.outcome === 'insufficient_balance' || !result.session) {
+        setCurrentState('INSUFFICIENT_BALANCE');
+        return;
+      }
+
+      const session = result.session;
+      setActiveSessionId(session.id);
+      setElapsedSeconds(session.elapsedSeconds);
+      setTotalCharged(session.totalCharged);
+
+      if (session.startedAt) {
+        setStartTimeString(new Date(session.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      }
+
+      if (['ACTIVE', 'LOW_BALANCE', 'RECHARGING'].includes(session.status)) {
+        const heartbeat = await consultationRepository.heartbeat(session.id);
+        hydrateBillingState(heartbeat.session, heartbeat.balance);
+        setMessages(await chatService.getMessages(session.id));
+        return;
+      }
+
+      if (session.status === 'WAITING_FOR_ASTROLOGER' && result.outcome === 'existing_session') {
+        runAstrologerReviewWait(session.id, result.requestTimeoutSeconds);
+        return;
+      }
+
+      runKundliPreparation(session.id, result.requestTimeoutSeconds);
+    } catch (error) {
+      console.error('Consultation eligibility check failed', error);
+      setVerificationError('Secure consultation service could not be reached. Please retry.');
     }
-
-    const session = result.session;
-    setActiveSessionId(session.id);
-    setElapsedSeconds(session.elapsedSeconds);
-    setTotalCharged(session.totalCharged);
-
-    if (session.startedAt) {
-      setStartTimeString(new Date(session.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-    }
-
-    if (['ACTIVE', 'LOW_BALANCE', 'RECHARGING'].includes(session.status)) {
-      const heartbeat = await consultationRepository.heartbeat(session.id);
-      hydrateBillingState(heartbeat.session, heartbeat.balance);
-      setMessages(await chatService.getMessages(session.id));
-      return;
-    }
-
-    if (session.status === 'WAITING_FOR_ASTROLOGER' && result.outcome === 'existing_session') {
-      runAstrologerReviewWait(session.id, result.requestTimeoutSeconds);
-      return;
-    }
-
-    runKundliPreparation(session.id, result.requestTimeoutSeconds);
   };
 
   const hydrateBillingState = (session: import('../types').ConsultationSession, balance?: number) => {
@@ -706,6 +713,28 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
 
   // 1. CHECKING WALLET SCREEN
   if (currentState === 'CHECKING_WALLET') {
+    if (verificationError) {
+      return (
+        <div className="flex flex-col h-full w-full bg-white font-sans items-center justify-center px-6 text-center">
+          <div className="space-y-5 max-w-sm">
+            <div className="w-16 h-16 rounded-full bg-red-50 border border-red-100 flex items-center justify-center text-red-500 mx-auto">
+              <AlertCircle size={26} />
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-lg font-[900] text-neutral-900 tracking-tight">Security Check Failed</h3>
+              <p className="text-neutral-500 text-xs font-semibold leading-relaxed">{verificationError}</p>
+            </div>
+            <div className="flex gap-3 justify-center">
+              <button onClick={() => onNavigate('astrologers')} className="h-11 px-5 rounded-xl bg-neutral-100 text-neutral-700 text-xs font-bold border-none">Go Back</button>
+              <button onClick={() => void runWalletVerification()} className="h-11 px-5 rounded-xl bg-[#FF8A00] text-white text-xs font-black border-none flex items-center gap-2">
+                <RefreshCw size={13} />
+                Retry
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="flex flex-col h-full w-full bg-white font-sans items-center justify-center px-6 select-none text-center">
         <div className="space-y-6 max-w-sm">
