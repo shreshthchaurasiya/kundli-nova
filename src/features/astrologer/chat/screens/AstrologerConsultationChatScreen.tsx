@@ -30,7 +30,7 @@ export default function AstrologerConsultationChatScreen({
   readOnly = false,
   onNavigate,
 }: AstrologerConsultationChatScreenProps) {
-  const { messages, sessionStatus, isLoading, isSending, error, send, sendImage } = useRealtimeConsultationChat(sessionId);
+  const { messages, sessionStatus, kundliProfileId, isLoading, isSending, error, send, sendImage } = useRealtimeConsultationChat(sessionId);
   const [input, setInput] = useState('');
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
@@ -38,7 +38,6 @@ export default function AstrologerConsultationChatScreen({
   const [timer, setTimer] = useState(() => elapsedSince(startedAt));
   const [isEnding, setIsEnding] = useState(false);
   const [isWorkspaceOpen, setIsWorkspaceOpen] = useState(false);
-  const [currentKundliProfileId, setCurrentKundliProfileId] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const isEnded = readOnly || ['ENDED', 'REJECTED', 'EXPIRED', 'CANCELLED'].includes(sessionStatus);
 
@@ -200,7 +199,7 @@ export default function AstrologerConsultationChatScreen({
         </form>
       </div>
     </div>
-    <AstrologerKundliWorkspace sessionId={sessionId} isOpen={isWorkspaceOpen} onClose={() => setIsWorkspaceOpen(false)} />
+    <AstrologerKundliWorkspace sessionId={sessionId} profileId={kundliProfileId} isOpen={isWorkspaceOpen} onClose={() => setIsWorkspaceOpen(false)} />
     </>
   );
 }

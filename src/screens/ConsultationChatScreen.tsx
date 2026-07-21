@@ -93,7 +93,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { messages, sessionStatus, send, sendImage, isSending, error: hookError } = useRealtimeConsultationChat(activeSessionId);
+  const { messages, sessionStatus, kundliProfileId, send, sendImage, isSending, error: hookError } = useRealtimeConsultationChat(activeSessionId);
   const displayError = chatError || hookError;
 
   const [inputText, setInputText] = useState('');
@@ -116,7 +116,17 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
   const [reviewText, setReviewText] = useState<string>('');
 
   const [isProfileSheetOpen, setIsProfileSheetOpen] = useState(false);
-  const [currentKundliProfileId, setCurrentKundliProfileId] = useState<string | null>(null);
+  const [optimisticProfileId, setOptimisticProfileId] = useState<string | null>(null);
+  
+  // Use the realtime session value as canonical, with only a temporary optimistic fallback
+  const currentKundliProfileId = optimisticProfileId || kundliProfileId;
+  
+  // Clear optimistic fallback when realtime catches up
+  useEffect(() => {
+    if (kundliProfileId && optimisticProfileId === kundliProfileId) {
+      setOptimisticProfileId(null);
+    }
+  }, [kundliProfileId, optimisticProfileId]);
 
   // Waiting Screen State
   const [waitingTimeoutSeconds, setWaitingTimeoutSeconds] = useState(60);
@@ -1689,8 +1699,8 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
         isOpen={isProfileSheetOpen}
         onClose={() => setIsProfileSheetOpen(false)}
         sessionId={activeSessionId}
-        currentProfileId={currentKundliProfileId}
-        onProfileSwitched={(newProfileId) => setCurrentKundliProfileId(newProfileId)}
+        currentProfileId={optimisticProfileId ?? kundliProfileId}
+        onProfileSwitched={(newProfileId) => setOptimisticProfileId(newProfileId)}
       />
     </div>
   );

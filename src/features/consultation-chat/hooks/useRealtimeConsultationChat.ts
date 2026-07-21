@@ -8,6 +8,7 @@ const chatRepository = new ApiChatRepository();
 export function useRealtimeConsultationChat(sessionId: string) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [sessionStatus, setSessionStatus] = useState<string>('');
+  const [kundliProfileId, setKundliProfileId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +29,7 @@ export function useRealtimeConsultationChat(sessionId: string) {
     if (!sessionId) return;
     const { data, error: queryError } = await supabase
       .from('consultation_sessions')
-      .select('status')
+      .select('status, kundli_profile_id')
       .eq('id', sessionId)
       .single();
     if (queryError) {
@@ -36,6 +37,7 @@ export function useRealtimeConsultationChat(sessionId: string) {
       return;
     }
     setSessionStatus(data.status);
+    setKundliProfileId(data.kundli_profile_id);
   }, [sessionId]);
 
   useEffect(() => {
@@ -96,6 +98,9 @@ export function useRealtimeConsultationChat(sessionId: string) {
             if (payload.new.status) return payload.new.status;
             return prev;
           });
+          if (payload.new.kundli_profile_id !== undefined) {
+            setKundliProfileId(payload.new.kundli_profile_id);
+          }
         }
       )
       .subscribe((status) => {
@@ -165,5 +170,5 @@ export function useRealtimeConsultationChat(sessionId: string) {
     }
   }, [isSending, sessionId]);
 
-  return { messages, sessionStatus, isLoading, isSending, error, send, sendImage, refreshMessages };
+  return { messages, sessionStatus, kundliProfileId, isLoading, isSending, error, send, sendImage, refreshMessages };
 }

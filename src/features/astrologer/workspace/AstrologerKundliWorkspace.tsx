@@ -19,24 +19,32 @@ export default function AstrologerKundliWorkspace({ sessionId, isOpen, onClose, 
   const [saveMessage, setSaveMessage] = useState('');
 
   useEffect(() => {
+    let active = true;
+
+    const fetchWorkspaceData = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const res = await getWorkspaceData(sessionId);
+        if (!active) return;
+        setData(res);
+        setNotes(res.notes || '');
+      } catch (err: any) {
+        if (!active) return;
+        setError(err.message || 'Failed to load workspace data');
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
     if (isOpen) {
       void fetchWorkspaceData();
     }
-  }, [isOpen, sessionId, profileId]);
 
-  const fetchWorkspaceData = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const res = await getWorkspaceData(sessionId);
-      setData(res);
-      setNotes(res.notes || '');
-    } catch (err: any) {
-      setError(err.message || 'Failed to load workspace data');
-    } finally {
-      setLoading(false);
-    }
-  };
+    return () => {
+      active = false;
+    };
+  }, [isOpen, sessionId, profileId]);
 
   const handleSaveNotes = async () => {
     setSavingNotes(true);
