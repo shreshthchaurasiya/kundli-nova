@@ -39,6 +39,9 @@ export const ENDPOINTS = {
     GET_MESSAGES: (id: string) => `${API_BASE}/consultations/${id}/messages`,
     SEND_MESSAGE: (id: string) => `${API_BASE}/consultations/${id}/messages`,
     GET_UPLOAD_URL: (id: string) => `${API_BASE}/consultations/${id}/messages/upload-url`,
+  },
+  ASTROLOGY: {
+    DAILY_HOROSCOPE: (zodiac: string) => `${API_BASE}/astrology/horoscope/daily?zodiac=${zodiac}`,
   }
 };
 

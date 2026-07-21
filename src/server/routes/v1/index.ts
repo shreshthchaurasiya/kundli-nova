@@ -4,6 +4,7 @@ import consultationRoutes from './consultation';
 import profileRoutes from './profile';
 import kundliRoutes from './kundli';
 import astrologerWorkspaceRoutes from './astrologer_workspace';
+import astrologyRoutes from './astrology';
 
 const router = Router();
 
@@ -17,5 +18,6 @@ router.use('/consultations', consultationRoutes);
 router.use('/profile', profileRoutes);
 router.use('/kundli-profiles', kundliRoutes);
 router.use('/astrologer-workspace', astrologerWorkspaceRoutes);
+router.use('/astrology', astrologyRoutes);
 
 export default router;

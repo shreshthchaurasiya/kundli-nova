@@ -24,6 +24,7 @@ import NovaAIChatScreen from './screens/NovaAIChatScreen';
 import NovaKundliScreen from './screens/NovaKundliScreen';
 import KundliProfileFormScreen from './screens/KundliProfileFormScreen';
 import HelpSupportScreen from './screens/HelpSupportScreen';
+import HoroscopeScreen from './screens/HoroscopeScreen';
 import {
   AstrologerApplicationScreen,
   AstrologerDashboardScreen,
@@ -220,6 +221,7 @@ export default function App() {
       case 'manage-astrologer-profile': return <AstrologerProfileEditorScreen onNavigate={navigate} />;
       case 'help-support': return <HelpSupportScreen onNavigate={navigate} routeParams={routeParams} />;
       case 'category-detail': return <CategoryDetailScreen category={routeParams?.category} onNavigate={navigate} />;
+      case 'horoscope': return <HoroscopeScreen onNavigate={navigate} />;
       default: return <HomeScreen onNavigate={navigate} onOpenDrawer={() => setIsDrawerOpen(true)} />;
     }
   };
