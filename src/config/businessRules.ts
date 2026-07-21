@@ -12,6 +12,10 @@ export const BUSINESS_RULES = {
     SPEED_UP_TICK_INTERVAL_MS: 1000, // keep ticks regular, change minutes conversion
     SPEED_UP_SECONDS_PER_MINUTE: 10,
     STANDARD_SECONDS_PER_MINUTE: 60,
+    // Safe fallback boundaries if server response is missing or malformed
+    HEARTBEAT_INTERVAL_SECONDS_FALLBACK: 30,
+    HEARTBEAT_INTERVAL_MIN: 10,
+    HEARTBEAT_INTERVAL_MAX: 60,
   },
   STORAGE_VERSION: 2,
 };

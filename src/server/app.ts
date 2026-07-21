@@ -29,10 +29,15 @@ app.use(cors({
 
 // Rate limiting (basic anti-abuse)
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  windowMs: env.RATE_LIMIT_GLOBAL_WINDOW_MS,
+  max: env.RATE_LIMIT_GLOBAL_MAX,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { ip: false, xForwardedForHeader: false },
+  skip: (req) => {
+    if (env.NODE_ENV === 'test') return true;
+    return /^\/v1\/consultations\/[^\/]+\/heartbeat\/?$/.test(req.path);
+  },
 });
 app.use('/api', limiter);
 

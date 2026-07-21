@@ -42,19 +42,72 @@ export function useRealtimeConsultationChat(sessionId: string) {
     void Promise.all([refreshMessages(), refreshStatus()]);
     if (!sessionId) return;
 
+    // Prevent initial load from being treated as a reconnect.
+    // We use an object to allow mutation inside the closure.
+    const subscriptionStatus = { current: 'INITIAL' };
+
     const channel = supabase
       .channel(`consultation-chat:${sessionId}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'consultation_messages', filter: `session_id=eq.${sessionId}` },
-        () => void refreshMessages(),
+        { event: 'INSERT', schema: 'public', table: 'consultation_messages', filter: `session_id=eq.${sessionId}` },
+        (payload) => {
+          setMessages((current) => {
+            const dbMsg = payload.new;
+
+            const newMsg: Message = {
+              id: dbMsg.id,
+              clientMessageId: dbMsg.client_message_id,
+              sessionId: dbMsg.session_id,
+              sender: dbMsg.sender || (dbMsg.is_astrologer ? 'astrologer' : 'user'),
+              text: dbMsg.message_text || dbMsg.text,
+              type: dbMsg.message_type || 'text',
+              attachmentUrl: dbMsg.attachment_url,
+              attachmentName: dbMsg.attachment_name,
+              status: dbMsg.status || 'sent',
+              time: dbMsg.created_at || dbMsg.sent_at || new Date().toISOString(),
+            };
+
+            const isDuplicate = current.some((m) => {
+              if (m.id === newMsg.id) return true;
+              if (
+                newMsg.clientMessageId &&
+                newMsg.clientMessageId.trim() !== '' &&
+                m.clientMessageId === newMsg.clientMessageId
+              ) {
+                return true;
+              }
+              return false;
+            });
+
+            if (isDuplicate) return current;
+            return [...current, newMsg];
+          });
+        }
       )
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'consultation_sessions', filter: `id=eq.${sessionId}` },
-        () => void refreshStatus(),
+        (payload) => {
+          setSessionStatus((prev) => {
+            if (['ENDED', 'REJECTED', 'EXPIRED', 'CANCELLED'].includes(prev)) {
+              return prev; // terminal statuses are read-only
+            }
+            if (payload.new.status) return payload.new.status;
+            return prev;
+          });
+        }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          if (subscriptionStatus.current === 'DISCONNECTED') {
+            void refreshMessages(); // Re-sync on reconnect exactly once
+          }
+          subscriptionStatus.current = 'SUBSCRIBED';
+        } else if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status)) {
+          subscriptionStatus.current = 'DISCONNECTED';
+        }
+      });
 
     return () => {
       void supabase.removeChannel(channel);

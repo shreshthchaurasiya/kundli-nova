@@ -1,16 +1,17 @@
+import { BUSINESS_RULES } from '../config/businessRules';
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  ArrowLeft, 
-  Phone, 
-  Video, 
-  Send, 
-  Clock, 
-  BadgeCheck, 
-  Star, 
-  ShieldCheck, 
-  Check, 
-  Sparkles, 
+import {
+  ArrowLeft,
+  Phone,
+  Video,
+  Send,
+  Clock,
+  BadgeCheck,
+  Star,
+  ShieldCheck,
+  Check,
+  Sparkles,
   ChevronRight,
   Info,
   RefreshCw,
@@ -40,7 +41,7 @@ import { useAstrologerPartner } from '../features/astrologer';
 import { ApiChatRepository } from '../repositories/api/apiChatRepository';
 import { supabase } from '../lib/supabase';
 import { useProfile } from '../contexts/ProfileContext';
-import { ConsultationMessageBubble } from '../features/consultation-chat';
+import { ConsultationMessageBubble, useRealtimeConsultationChat } from '../features/consultation-chat';
 
 const consultationRepository = new ApiConsultationRepository();
 const chatRepository = new ApiChatRepository();
@@ -59,21 +60,27 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
 
   // --- Central Consultation State Machine ---
   const [currentState, setCurrentState] = useState<ConsultationState>('CHECKING_WALLET');
-  
+
   // --- Core States ---
   const [walletBalance, setWalletBalance] = useState<number>(0);
   const [userProfile, setUserProfile] = useState<any>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [chatError, setChatError] = useState<string | null>(null);
+
+  // Active Consultation tracking
+  const [activeSessionId, setActiveSessionId] = useState<string>('');
+
+  // Realtime hook replaces local messages state
+  const { messages, sessionStatus, send, error: hookError } = useRealtimeConsultationChat(activeSessionId);
+  const displayError = chatError || hookError;
+
   const [inputText, setInputText] = useState('');
   const [activeCall, setActiveCall] = useState<'voice' | 'video' | null>(null);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [startTimeString, setStartTimeString] = useState('');
-  
-  // Active Consultation tracking
-  const [activeSessionId, setActiveSessionId] = useState<string>('');
+
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [totalCharged, setTotalCharged] = useState(0);
-  
+
   // Low balance grace period state
   const [gracePeriodSeconds, setGracePeriodSeconds] = useState(30);
 
@@ -130,18 +137,16 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
         try {
           const pastSession = await consultationRepository.getSession(readOnlySessionId);
           setResolvedAstrologerId(pastSession.astrologerId);
-          
+
           setActiveSessionId(pastSession.id);
           setElapsedSeconds(pastSession.elapsedSeconds || 0);
           setTotalCharged(pastSession.totalCharged || 0);
-          
-          // Load past messages
-          const chatMsgs = await chatRepository.getMessages(pastSession.id);
-          setMessages(chatMsgs);
-          
+
+          // Hook automatically fetches past messages when activeSessionId is set
+
           const formattedStart = new Date(pastSession.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           setStartTimeString(formattedStart);
-          
+
           // Set to ACTIVE so we render the chat loop but we are in read-only mode
           setCurrentState('ACTIVE');
           return;
@@ -170,7 +175,15 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
       setWalletBalance(result.balance);
       setRatePerMin(result.ratePerMinute);
       setMinimumMinutes(result.minimumMinutes);
-      setHeartbeatIntervalSeconds(result.heartbeatIntervalSeconds);
+
+      const safeInterval = result.heartbeatIntervalSeconds || BUSINESS_RULES.CONSULTATION.HEARTBEAT_INTERVAL_SECONDS_FALLBACK;
+      setHeartbeatIntervalSeconds(
+        Math.max(
+          BUSINESS_RULES.CONSULTATION.HEARTBEAT_INTERVAL_MIN,
+          Math.min(BUSINESS_RULES.CONSULTATION.HEARTBEAT_INTERVAL_MAX, safeInterval)
+        )
+      );
+
       setRequestTimeoutSeconds(result.requestTimeoutSeconds);
       setRechargeGraceSeconds(result.rechargeGraceSeconds);
 
@@ -191,7 +204,6 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
       if (['ACTIVE', 'LOW_BALANCE', 'RECHARGING'].includes(session.status)) {
         const heartbeat = await consultationRepository.heartbeat(session.id);
         hydrateBillingState(heartbeat.session, heartbeat.balance);
-        setMessages(await chatRepository.getMessages(session.id));
         return;
       }
 
@@ -239,7 +251,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
   const runKundliPreparation = async (sessionId: string, timeoutSeconds: number) => {
     setCurrentState('PREPARING_KUNDLI');
     setKundliStepIdx(0);
-    
+
     // Step through indicators with distinct intervals
     for (let i = 0; i < KUNDLI_PREP_STEPS.length; i++) {
       await new Promise(resolve => setTimeout(resolve, 800));
@@ -273,23 +285,21 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
     }, 1000);
   };
 
-  useEffect(() => {
+  const refreshSession = async () => {
     if (!activeSessionId) return;
-    const refreshSession = async () => {
-      const session = await consultationRepository.getSession(activeSessionId);
-      hydrateBillingState(session);
-      if (session.startedAt) setStartTimeString(new Date(session.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-      if (['ACTIVE', 'LOW_BALANCE', 'RECHARGING', 'ENDED'].includes(session.status)) {
-        setMessages(await chatRepository.getMessages(activeSessionId));
+    const session = await consultationRepository.getSession(activeSessionId);
+    hydrateBillingState(session);
+    if (session.startedAt) setStartTimeString(new Date(session.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+  };
+
+  useEffect(() => {
+    // If sessionStatus was updated via Realtime (from the hook), refresh session state
+    if (sessionStatus && !['ENDED', 'REJECTED', 'EXPIRED', 'CANCELLED'].includes(currentState)) {
+      if (sessionStatus !== currentState) {
+        void refreshSession();
       }
-    };
-    const channel = supabase
-      .channel(`customer-consultation:${activeSessionId}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'consultation_sessions', filter: `id=eq.${activeSessionId}` }, () => void refreshSession())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'consultation_messages', filter: `session_id=eq.${activeSessionId}` }, async () => setMessages(await chatRepository.getMessages(activeSessionId)))
-      .subscribe();
-    return () => { void supabase.removeChannel(channel); };
-  }, [activeSessionId]);
+    }
+  }, [sessionStatus, currentState]);
 
   // -----------------------------------------------------------------
   // 5. BILLING TIMER & RUNTIME ENG (ACTIVE / LOW_BALANCE / RECHARGING)
@@ -323,11 +333,16 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
       try {
         const result = await consultationRepository.heartbeat(activeSessionId);
         hydrateBillingState(result.session, result.balance);
+        setChatError(null);
         if (result.session.rechargeDeadlineAt) {
           const remaining = Math.max(0, Math.ceil((new Date(result.session.rechargeDeadlineAt).getTime() - Date.now()) / 1000));
           setGracePeriodSeconds(remaining);
         }
       } catch (error) {
+        console.error('HEARTBEAT ERROR CAUGHT:', error, (error as any)?.code);
+        if ((error as any)?.code === 'RATE_LIMITED') {
+          setChatError('Service is busy, please wait.');
+        }
         console.error('Consultation heartbeat failed', error);
       }
     };
@@ -388,9 +403,17 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
     if (!textToSend) return;
 
     setInputText('');
+    setChatError(null);
 
-    const newMsg = await chatRepository.sendMessage(activeSessionId, textToSend, crypto.randomUUID());
-    setMessages(prev => [...prev, newMsg]);
+    try {
+      await send(textToSend);
+    } catch (caught) {
+      if ((caught as any)?.code === 'RATE_LIMITED') {
+        setChatError('Service is busy, please wait.');
+      } else {
+        setChatError(caught instanceof Error ? caught.message : 'Message failed');
+      }
+    }
   };
 
   // Dynamic Scroll to Bottom on Messages List updates
@@ -469,7 +492,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
             </p>
           </div>
           <div className="h-1.5 w-32 bg-neutral-100 rounded-full overflow-hidden mx-auto">
-            <motion.div 
+            <motion.div
               initial={{ x: '-100%' }}
               animate={{ x: '100%' }}
               transition={{ repeat: Infinity, duration: 1.2, ease: 'easeInOut' }}
@@ -529,13 +552,13 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
         </div>
 
         <div className="p-6 bg-white border-t border-neutral-100 flex space-x-3">
-          <button 
+          <button
             onClick={() => onNavigate('astrologers')}
             className="flex-1 h-12 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs font-bold transition-all border-none"
           >
             Cancel Request
           </button>
-          <button 
+          <button
             onClick={handleRechargeNavigation}
             className="flex-1 h-12 rounded-xl bg-[#FF8A00] hover:bg-[#E07A00] text-white text-xs font-black flex items-center justify-center space-x-1.5 shadow-md shadow-[#FF8A00]/10 transition-all border-none"
           >
@@ -561,7 +584,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
 
         {/* Pulsing Sacred geometry mandala placeholder */}
         <div className="relative flex items-center justify-center py-2">
-          <motion.div 
+          <motion.div
             animate={{ rotate: 360 }}
             transition={{ repeat: Infinity, duration: 12, ease: 'linear' }}
             className="w-24 h-24 border border-neutral-200/80 rounded-full flex items-center justify-center p-2 opacity-50"
@@ -621,7 +644,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
   if (currentState === 'WAITING_FOR_ASTROLOGER') {
     return (
       <div className="flex flex-col h-full w-full bg-white font-sans px-6 justify-center py-6 space-y-6 text-center select-none relative">
-        
+
         {/* Header summary of profile */}
         <div className="space-y-3">
           <div className="relative inline-block mx-auto">
@@ -656,7 +679,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
 
           <div className="space-y-3 py-1">
             <p className="text-xs font-extrabold text-neutral-800">Astrologer is reviewing your Kundli...</p>
-            
+
             <div className="flex items-center justify-center space-x-1">
               <span className="w-1.5 h-1.5 rounded-full bg-[#FF8A00] animate-bounce" style={{ animationDelay: '0ms' }} />
               <span className="w-1.5 h-1.5 rounded-full bg-[#FF8A00] animate-bounce" style={{ animationDelay: '150ms' }} />
@@ -666,8 +689,8 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
             {/* Visual Countdown Progress Bar */}
             <div className="space-y-1.5 max-w-xs mx-auto">
               <div className="h-1.5 bg-neutral-100 rounded-full overflow-hidden w-full">
-                <div 
-                  className="h-full bg-[#FF8A00] transition-all duration-1000 rounded-full" 
+                <div
+                  className="h-full bg-[#FF8A00] transition-all duration-1000 rounded-full"
                   style={{ width: `${(waitingTimeoutSeconds / 60) * 100}%` }}
                 />
               </div>
@@ -683,7 +706,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
 
         {/* Customer action */}
         <div className="space-y-3 max-w-xs mx-auto w-full">
-          <button 
+          <button
             onClick={() => {
               setShowCancelConfirm(true);
             }}
@@ -697,7 +720,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
         <AnimatePresence>
           {showCancelConfirm && (
             <div className="absolute inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm">
-              <motion.div 
+              <motion.div
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
@@ -713,13 +736,13 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
                   </p>
                 </div>
                 <div className="pt-2 flex space-x-3">
-                  <button 
+                  <button
                     onClick={() => setShowCancelConfirm(false)}
                     className="flex-1 h-11 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-bold rounded-xl text-xs transition-colors cursor-pointer border-none"
                   >
                     No, Wait
                   </button>
-                  <button 
+                  <button
                     onClick={async () => {
                       if (waitingTimerRef.current) clearInterval(waitingTimerRef.current);
                       const result = await consultationRepository.cancelSession(activeSessionId);
@@ -755,7 +778,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
               Unfortunately, {astro?.name} had to decline the invitation at this moment (might have stepped away or has in-person commitments). No charges were made from your wallet.
             </p>
           </div>
-          <button 
+          <button
             onClick={() => onNavigate('astrologers')}
             className="h-11 px-6 rounded-xl bg-neutral-900 text-white text-xs font-bold"
           >
@@ -781,13 +804,13 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
             </p>
           </div>
           <div className="flex space-x-3 justify-center">
-            <button 
+            <button
               onClick={() => onNavigate('astrologers')}
               className="h-11 px-4 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs font-bold transition-all border-none"
             >
               Go Back
             </button>
-            <button 
+            <button
               onClick={() => void runWalletVerification()}
               className="h-11 px-4 rounded-xl bg-neutral-900 text-white text-xs font-bold flex items-center space-x-1.5"
             >
@@ -846,14 +869,14 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
                 <p className="text-xs font-black text-neutral-800">Rate your experience</p>
                 <div className="flex items-center justify-center space-x-1.5 mt-2">
                   {[1, 2, 3, 4, 5].map(star => (
-                    <button 
-                      key={star} 
+                    <button
+                      key={star}
                       onClick={() => setRating(star)}
                       className="p-1 focus:outline-none bg-transparent border-none"
                     >
-                      <Star 
-                        size={22} 
-                        className={rating >= star ? 'fill-[#FF8A00] text-[#FF8A00]' : 'text-neutral-200'} 
+                      <Star
+                        size={22}
+                        className={rating >= star ? 'fill-[#FF8A00] text-[#FF8A00]' : 'text-neutral-200'}
                       />
                     </button>
                   ))}
@@ -862,7 +885,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
 
               <div className="space-y-1 text-left">
                 <label className="text-[10px] font-bold text-neutral-400 uppercase block">Write review details (Optional)</label>
-                <textarea 
+                <textarea
                   value={reviewText}
                   onChange={(e) => setReviewText(e.target.value)}
                   placeholder="Share how the astrological guidance helped you..."
@@ -874,7 +897,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
         </div>
 
         <div className="p-6 bg-white border-t border-neutral-100 max-w-md mx-auto w-full">
-          <button 
+          <button
             onClick={handleReviewSubmit}
             className="w-full h-12 bg-neutral-900 hover:bg-neutral-800 text-white font-black rounded-xl text-xs flex items-center justify-center space-x-1.5 transition-all"
           >
@@ -893,11 +916,11 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
   return (
     <div className="relative flex flex-col h-full w-full bg-[#FCFBF8] font-sans antialiased select-none">
       <CelestialChatBackground />
-      
+
       {/* Voice/Video Call Overlay modal */}
       <AnimatePresence>
         {activeCall && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -935,7 +958,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
                 <span className="text-xs font-bold text-neutral-300">Astrologer is joining...</span>
               </div>
 
-              <button 
+              <button
                 onClick={() => setActiveCall(null)}
                 className="w-16 h-16 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center text-white shadow-lg transition-colors cursor-pointer border-none"
               >
@@ -950,7 +973,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
       <AnimatePresence>
         {showEndConfirm && (
           <div className="absolute inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm">
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
@@ -966,13 +989,13 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
                 </p>
               </div>
               <div className="pt-2 flex space-x-3">
-                <button 
+                <button
                   onClick={() => setShowEndConfirm(false)}
                   className="flex-1 h-11 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-bold rounded-xl text-xs transition-colors cursor-pointer border-none"
                 >
                   Cancel
                 </button>
-                <button 
+                <button
                   onClick={handleFinalizeSessionEnd}
                   className="flex-1 h-11 bg-neutral-900 hover:bg-neutral-850 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer border-none"
                 >
@@ -988,7 +1011,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
       <AnimatePresence>
         {currentState === 'RECHARGING' && (
           <div className="absolute inset-0 bg-black/60 z-40 flex items-end justify-center p-0 backdrop-blur-[2px]">
-            <motion.div 
+            <motion.div
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
@@ -1011,13 +1034,13 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
               </div>
 
               <div className="pt-2 flex space-x-3 max-w-xs mx-auto">
-                <button 
+                <button
                   onClick={handleFinalizeSessionEnd}
                   className="flex-1 h-12 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-bold rounded-xl text-xs transition-colors border-none cursor-pointer"
                 >
                   End Session
                 </button>
-                <button 
+                <button
                   onClick={handleRechargeNavigation}
                   className="flex-1 h-12 bg-[#FF8A00] hover:bg-[#E07A00] text-white font-black rounded-xl text-xs transition-colors flex items-center justify-center space-x-1 border-none cursor-pointer"
                 >
@@ -1034,7 +1057,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
       <AnimatePresence>
         {isKundliOpen && kundliData && (
           <div className="absolute inset-0 bg-black/50 z-45 flex justify-end">
-            <motion.div 
+            <motion.div
               initial={{ x: '100%' }}
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
@@ -1046,7 +1069,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
                   <Sparkles size={16} className="text-[#FF8A00]" />
                   <h3 className="text-base font-black text-neutral-900 tracking-tight">Active Janam Kundli</h3>
                 </div>
-                <button 
+                <button
                   onClick={() => setIsKundliOpen(false)}
                   className="p-1 rounded-full hover:bg-neutral-50 text-neutral-500"
                 >
@@ -1056,14 +1079,14 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
 
               {/* Drawer Content */}
               <div className="flex-1 overflow-y-auto p-5 space-y-6 no-scrollbar">
-                
+
                 {/* 1. Brief overview info */}
                 <div className="bg-neutral-50 border border-neutral-100 rounded-2xl p-4.5 space-y-3">
                   <div className="flex items-center space-x-2 text-neutral-400 text-[10px] font-bold uppercase tracking-wider border-b border-neutral-200/50 pb-2.5">
                     <User size={13} className="text-[#FF8A00]" />
                     <span>Calculated Coordinates</span>
                   </div>
-                  
+
                   <div className="grid grid-cols-2 gap-3 text-xs">
                     <div>
                       <span className="text-[9px] font-bold text-neutral-400 uppercase tracking-widest block">Lagna Sign</span>
@@ -1174,7 +1197,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
               </div>
 
               <div className="p-4 bg-neutral-50 border-t border-neutral-100 sticky bottom-0">
-                <button 
+                <button
                   onClick={() => setIsKundliOpen(false)}
                   className="w-full h-11 bg-neutral-900 hover:bg-neutral-800 text-white font-bold rounded-xl text-xs"
                 >
@@ -1189,7 +1212,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
       {/* STICKY HEADER (Updated Design according to guidelines) */}
       <div className="sticky top-0 bg-white/95 backdrop-blur-md z-30 border-b border-neutral-100 flex items-center justify-between px-4 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.01)]">
         <div className="flex items-center space-x-3 min-w-0">
-          <button 
+          <button
             onClick={() => {
               if (readOnlySessionId) {
                 onNavigate('chat-history');
@@ -1220,7 +1243,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
                 <h2 className="text-[14px] font-[900] text-neutral-900 truncate tracking-tight">{astro?.name}</h2>
                 <BadgeCheck size={14} className="text-[#FF8A00] fill-white shrink-0" />
               </div>
-              
+
               <div className="flex items-center space-x-1 text-[10.5px] text-neutral-400 font-bold leading-none mt-0.5">
                 <span className="flex items-center text-neutral-800 font-extrabold mr-1">
                   <Star size={9} className="fill-[#FF8A00] text-[#FF8A00] stroke-none mr-0.5" />
@@ -1236,14 +1259,14 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
         {/* Media call tools */}
         {!readOnlySessionId && (
           <div className="flex items-center space-x-1.5">
-            <button 
+            <button
               onClick={() => setActiveCall('voice')}
               className="p-2 rounded-full border border-neutral-200 text-neutral-700 hover:bg-neutral-50 active:bg-neutral-100 transition-all cursor-pointer"
             >
               <Phone size={15} strokeWidth={2.5} />
             </button>
-            
-            <button 
+
+            <button
               onClick={() => setActiveCall('video')}
               className="p-2 rounded-full border border-neutral-200 text-neutral-700 hover:bg-neutral-50 active:bg-neutral-100 transition-all cursor-pointer"
             >
@@ -1271,7 +1294,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
           </div>
 
           <div className="flex items-center space-x-2 shrink-0">
-            <button 
+            <button
               onClick={() => setShowEndConfirm(true)}
               className="bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-all font-extrabold text-[10px] px-3 py-1 rounded-lg uppercase tracking-wider cursor-pointer"
             >
@@ -1300,7 +1323,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
 
       {/* Main Chat Scroll Frame */}
       <div className="flex-1 overflow-y-auto px-4 py-4 z-10 flex flex-col no-scrollbar bg-white/10">
-        
+
         {/* Paid consultation details summary header block */}
         {readOnlySessionId ? (
           <div className="mb-4 bg-neutral-50 border border-neutral-200/60 rounded-2xl p-4 shadow-[0_1px_4px_rgba(0,0,0,0.01)] text-left">
@@ -1340,12 +1363,12 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
                 </span>
               </div>
             </div>
-            
+
             <div className="flex items-center justify-between pt-3 mt-3 border-t border-neutral-200/40">
               <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">
                 Securely Archived
               </span>
-              <button 
+              <button
                 onClick={() => setIsKundliOpen(true)}
                 className="flex items-center space-x-1 text-xs font-black text-[#FF8A00] hover:text-[#E07A00] bg-transparent border-none cursor-pointer p-0"
               >
@@ -1357,7 +1380,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
           </div>
         ) : (
           <div className="mb-3 bg-white border border-neutral-200/60 rounded-2xl p-3.5 shadow-[0_1px_4px_rgba(0,0,0,0.01)] text-left">
-            <div 
+            <div
               onClick={() => setIsBillingCardCollapsed(!isBillingCardCollapsed)}
               className="flex items-center justify-between cursor-pointer select-none"
             >
@@ -1370,22 +1393,22 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
                   Session #{ (activeSessionId || '7849').slice(-4).toUpperCase() }
                 </span>
               </div>
-              
+
               <div className="flex items-center space-x-2 shrink-0 ml-1.5">
                 <div className="flex items-center space-x-1.5 bg-neutral-50 border border-neutral-200 text-neutral-600 px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider truncate min-w-0">
                   <span className="w-1 h-1 rounded-full bg-green-500 shrink-0"></span>
                   <span>Kundli Shared</span>
                 </div>
-                <ChevronDown 
-                  size={16} 
-                  className={`text-neutral-400 transition-transform duration-200 shrink-0 ${isBillingCardCollapsed ? '' : 'rotate-180'}`} 
+                <ChevronDown
+                  size={16}
+                  className={`text-neutral-400 transition-transform duration-200 shrink-0 ${isBillingCardCollapsed ? '' : 'rotate-180'}`}
                 />
               </div>
             </div>
 
             <AnimatePresence initial={false}>
               {!isBillingCardCollapsed && (
-                <motion.div 
+                <motion.div
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
@@ -1416,7 +1439,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
                       <span className="truncate min-w-0">Secure & encrypted</span>
                     </div>
 
-                    <button 
+                    <button
                       onClick={() => setIsKundliOpen(true)}
                       className="flex items-center space-x-1 text-xs font-black text-[#FF8A00] hover:text-[#E07A00] bg-transparent border-none cursor-pointer p-0 shrink-0"
                     >
@@ -1433,8 +1456,13 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
 
         {/* Messages Loop */}
         <div className="flex flex-col space-y-1">
+          {displayError && (
+            <div className="bg-red-50 text-red-600 px-3 py-2 text-[10px] font-bold rounded-lg mb-2 text-center border border-red-100">
+              {displayError}
+            </div>
+          )}
           {messages.map(renderMessageBubble)}
-          
+
           <div ref={messagesEndRef} className="h-4" />
         </div>
 
@@ -1447,7 +1475,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
             <AlertTriangle size={14} className="text-amber-600 shrink-0 animate-bounce" />
             <span className="truncate">Low Balance warning — Recharge to continue consultation (₹{walletBalance.toFixed(0)} left)</span>
           </div>
-          <button 
+          <button
             onClick={handleRechargeNavigation}
             className="shrink-0 bg-amber-600 text-white font-extrabold text-[10px] px-2.5 py-1 rounded-lg uppercase tracking-wider transition-colors border-none cursor-pointer hover:bg-amber-700"
           >
@@ -1458,7 +1486,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
 
       {/* Message input field bar with real image loaders */}
       <div className="relative bg-white border-t border-neutral-100 px-4 py-3 pb-[max(16px,env(safe-area-inset-bottom))] z-20 shadow-[0_-4px_16px_rgba(0,0,0,0.01)]">
-        
+
         {readOnlySessionId ? (
           <div className="bg-neutral-50 rounded-2xl border border-neutral-150/60 p-4 text-center my-1">
             <p className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-2">This Consultation Has Ended</p>
@@ -1466,13 +1494,13 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
               The session with {astro?.name} is completed. You can view the history of messages, generated charts, and details here.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-2 mt-2">
-              <button 
+              <button
                 onClick={() => onNavigate('chat-history')}
                 className="w-full sm:w-auto inline-flex items-center justify-center space-x-1.5 h-10 px-4 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-extrabold text-[11px] rounded-xl transition-all cursor-pointer border-none"
               >
                 <span>Back to History</span>
               </button>
-              <button 
+              <button
                 onClick={() => onNavigate('astrologers')}
                 className="w-full sm:w-auto inline-flex items-center justify-center space-x-1.5 h-10 px-5 bg-[#FF8A00] hover:bg-[#E07A00] text-white font-extrabold text-[11px] rounded-xl transition-all cursor-pointer border-none shadow-sm shadow-[#FF8A00]/10"
               >
@@ -1484,25 +1512,25 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
           <>
             <div className="flex items-center space-x-3">
               <form onSubmit={handleSendMessage} className="flex-1 flex items-center bg-neutral-50 border border-neutral-100 rounded-2xl pr-1.5 pl-4 py-1">
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
                   disabled={currentState === 'RECHARGING'}
                   placeholder={
-                    currentState === 'RECHARGING' 
-                      ? "Recharge required to send message." 
+                    currentState === 'RECHARGING'
+                      ? "Recharge required to send message."
                       : "Ask regarding career, marriage, remedies..."
-                  } 
+                  }
                   className="flex-1 bg-transparent border-none focus:outline-none text-[13.5px] font-semibold text-neutral-800 placeholder:text-neutral-400 h-10 disabled:cursor-not-allowed"
                 />
-                
-                <button 
+
+                <button
                   type="submit"
                   disabled={!inputText.trim() || currentState === 'RECHARGING'}
                   className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all ${
                     inputText.trim() && currentState !== 'RECHARGING'
-                      ? 'bg-neutral-900 text-white shadow-md active:scale-95 cursor-pointer' 
+                      ? 'bg-neutral-900 text-white shadow-md active:scale-95 cursor-pointer'
                       : 'bg-neutral-100 text-neutral-400 cursor-not-allowed'
                   }`}
                 >
