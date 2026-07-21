@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   ArrowLeft, 
@@ -32,11 +32,16 @@ import { useRepositories } from '../repositories/repositoryProvider';
 import { generateKundli } from '../services/kundliService';
 import { generateKundliPdf } from '../services/kundliPdfService';
 import { postAiRequest } from '../services/aiClient';
+import { AstrologyApi } from '../services/api/astrologyApi';
+import { KundliNovaNatalChart } from '../server/types/astrologyProvider';
+import { KundliProfile } from '../types/kundli';
+import { KundliChart } from '../components/astrology/KundliChart';
+import { ApiError } from '../services/api/apiErrors';
 
 interface NovaKundliScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
   routeParams?: {
-    kundliData?: KundliData;
+    kundliData?: any; // fallback legacy
     fromScreen?: Screen;
   };
 }
@@ -45,34 +50,75 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
   const repositories = useRepositories();
   const fromScreen = routeParams?.fromScreen || 'nova-ai-chat';
 
-  const [kundliData, setKundliData] = useState<KundliData | null>(routeParams?.kundliData || null);
-  const [loadingKundli, setLoadingKundli] = useState(!routeParams?.kundliData);
+  // Profile selection
+  const [profiles, setProfiles] = useState<KundliProfile[]>([]);
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
 
+  // New API Data
+  const [apiChartData, setApiChartData] = useState<KundliNovaNatalChart | null>(null);
+  
+  // States
+  const [loadingKundli, setLoadingKundli] = useState(true);
+  const [errorState, setErrorState] = useState<{code: string, message: string} | null>(null);
+
+  // Monotonically increasing request ID guard against out-of-order responses
+  const activeRequestIdRef = useRef(0);
+
+  // Fetch profiles on mount
   useEffect(() => {
-    if (routeParams?.kundliData) {
-      setLoadingKundli(false);
-      return;
-    }
-
-    const fetchProfileAndGenerate = async () => {
-      const profile = await repositories.profile.getProfile();
-      if (profile) {
-        setKundliData(generateKundli(profile));
-      } else {
-        setKundliData(generateKundli({
-          name: 'Shreshth',
-          gender: 'male',
-          dob: '1995-10-15',
-          tob: '10:30',
-          state: 'Uttar Pradesh',
-          district: 'Varanasi',
-          city: 'Varanasi'
-        }));
+    const init = async () => {
+      try {
+        const userProfiles = await repositories.kundliProfile.getAllProfiles();
+        setProfiles(userProfiles);
+        
+        if (userProfiles.length > 0) {
+          const defaultProfile = userProfiles.find(p => p.is_default) || userProfiles[0];
+          setSelectedProfileId(defaultProfile.id);
+        } else {
+          setLoadingKundli(false);
+          setErrorState({ code: 'NO_PROFILES', message: 'No Kundli profiles found. Please create one first.' });
+        }
+      } catch (err) {
+        setLoadingKundli(false);
+        setErrorState({ code: 'PROFILE_ERROR', message: 'Failed to load profiles.' });
       }
-      setLoadingKundli(false);
     };
-    fetchProfileAndGenerate();
-  }, [routeParams, repositories.profile]);
+    init();
+  }, [repositories.kundliProfile]);
+
+  // Fetch Kundli when profile changes
+  useEffect(() => {
+    if (!selectedProfileId) return;
+    
+    const requestId = ++activeRequestIdRef.current;
+    let isMounted = true;
+    const fetchKundli = async () => {
+      setLoadingKundli(true);
+      setErrorState(null);
+      setApiChartData(null);
+      
+      try {
+        const chart = await AstrologyApi.getKundli(selectedProfileId);
+        if (isMounted && activeRequestIdRef.current === requestId) {
+          setApiChartData(chart);
+          setLoadingKundli(false);
+        }
+      } catch (err: any) {
+        if (isMounted && activeRequestIdRef.current === requestId) {
+          const apiErr = err as ApiError;
+          setErrorState({
+            code: apiErr.code || 'ERROR',
+            message: apiErr.message || 'Failed to load Kundli'
+          });
+          setLoadingKundli(false);
+        }
+      }
+    };
+    
+    fetchKundli();
+    
+    return () => { isMounted = false; };
+  }, [selectedProfileId]);
 
   const [activeTab, setActiveTab] = useState<'charts' | 'planets' | 'dasha' | 'insights' | 'basic'>('charts');
 
@@ -99,7 +145,7 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
   const [pdfModalState, setPdfModalState] = useState<'idle' | 'generating' | 'ready'>('idle');
   const [pdfUrls, setPdfUrls] = useState<{ blobUrl: string; base64: string } | null>(null);
 
-  if (loadingKundli || !kundliData) {
+  if (loadingKundli) {
     return (
       <div className="flex h-full w-full items-center justify-center bg-[#FCFBF8]">
         <div className="w-[40px] h-[40px] border-[3px] border-[#FF8A00]/20 border-t-[#FF8A00] rounded-full animate-spin" />
@@ -107,10 +153,76 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
     );
   }
 
+  if (errorState) {
+    const isNoProfiles = errorState.code === 'NO_PROFILES';
+    return (
+      <div className="flex flex-col h-full w-full bg-[#FCFBF8] items-center justify-center p-6 text-center">
+        <div className={`w-16 h-16 ${isNoProfiles ? 'bg-orange-50' : 'bg-red-50'} rounded-full flex items-center justify-center mb-4`}>
+          <Info size={28} className={isNoProfiles ? 'text-[#FF8A00]' : 'text-red-500'} />
+        </div>
+        <h2 className="text-[18px] font-[850] text-[#111827] mb-2">
+          {errorState.code === 'KUNDLI_SERVICE_NOT_CONFIGURED' ? 'Service Unavailable' : 
+           isNoProfiles ? 'No Profiles Found' : 'Error Loading Kundli'}
+        </h2>
+        <p className="text-[13px] text-neutral-500 max-w-xs leading-relaxed mb-6">
+          {errorState.message}
+        </p>
+        <button 
+          onClick={() => isNoProfiles ? onNavigate('kundli-profile-form', { fromScreen: 'nova-kundli' }) : onNavigate(fromScreen)}
+          className="px-6 py-2.5 bg-[#FF8A00] text-white rounded-full text-[13px] font-[800] active:scale-[0.98] transition-all"
+        >
+          {isNoProfiles ? 'Add Profile' : 'Go Back'}
+        </button>
+      </div>
+    );
+  }
+
+  if (!apiChartData) {
+    return null;
+  }
+
+  const selectedProfile = profiles.find(p => p.id === selectedProfileId);
+  const birthDetails = {
+    name: selectedProfile?.name || 'Unknown',
+    gender: selectedProfile?.gender || 'unknown',
+    dob: apiChartData.input.dateOfBirth,
+    tob: apiChartData.input.timeOfBirth,
+    city: selectedProfile?.birth_city || 'Unknown',
+    state: selectedProfile?.birth_state || 'Unknown',
+  };
+
+  const astrologySummary = {
+    lagna: apiChartData.ascendant.sign,
+    sunSign: apiChartData.sunSign || 'Unknown',
+    moonSign: apiChartData.moonSign || 'Unknown',
+    nakshatra: apiChartData.nakshatra || 'Unknown',
+    moolank: 1, // Fallback for demo
+    bhagyank: 1, // Fallback for demo
+  };
+
+  const planetaryPositions = apiChartData.planets;
+  
+  // Dashas and Insights are not implemented in Stage 5A, using fallbacks
+  const currentDasha = { mahadasha: 'Venus', antardasha: 'Jupiter' };
+  const lifeInsights = { 
+    career: 'Career insights will be generated by AI in upcoming stages.', 
+    marriage: 'Relationship insights will be available soon.', 
+    finance: 'Financial predictions are being calibrated.', 
+    health: 'Health indicators will be accessible in full reports.', 
+    family: 'Family dynamics will be analyzed shortly.' 
+  };
+
   const handleDownloadPdf = async () => {
     setPdfModalState('generating');
     try {
-      const result = await generateKundliPdf(kundliData);
+      const mockKundliData: any = {
+        birthDetails, 
+        astrologySummary, 
+        planetaryPositions, 
+        currentDasha, 
+        lifeInsights
+      };
+      const result = await generateKundliPdf(mockKundliData);
       setPdfUrls({
         blobUrl: result.pdfBlobUrl,
         base64: result.pdfBase64
@@ -193,9 +305,6 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
     }
   };
 
-  const { birthDetails, astrologySummary, planetaryPositions, currentDasha, lifeInsights } = kundliData;
-
-  // Astrological helper functions for North Indian Chart
   const getLagnaZodiacNumber = (): number => {
     const lagnaLower = astrologySummary.lagna.toLowerCase();
     if (lagnaLower.includes('mesh') || lagnaLower.includes('aries')) return 1;
@@ -301,26 +410,35 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
             </svg>
           </div>
           
-          <div className="flex items-center space-x-3">
-            <div className="w-11 h-11 rounded-full bg-gradient-to-tr from-[#FF8A00] to-[#FFB74D] text-white flex items-center justify-center font-[800] text-[18px] shadow-[0_3px_8px_rgba(255,138,0,0.15)] ring-2 ring-white">
+          <div className="flex items-center space-x-3 w-full">
+            <div className="w-11 h-11 rounded-full bg-gradient-to-tr from-[#FF8A00] to-[#FFB74D] text-white flex items-center justify-center font-[800] text-[18px] shadow-[0_3px_8px_rgba(255,138,0,0.15)] ring-2 ring-white shrink-0">
               {birthDetails.name.charAt(0).toUpperCase()}
             </div>
-            <div>
-              <h2 className="text-[14.5px] font-[850] text-[#111827] leading-tight flex items-center space-x-1.5">
-                <span>{birthDetails.name}</span>
-                <span className="text-[9.5px] text-[#FF8A00] bg-[#FFF3E0] px-1.5 py-0.5 rounded-full font-extrabold uppercase tracking-widest">{birthDetails.gender}</span>
-              </h2>
+            <div className="flex-1 relative">
+              <div className="flex items-center space-x-1.5 relative">
+                <select 
+                  className="appearance-none bg-transparent text-[14.5px] font-[850] text-[#111827] leading-tight outline-none focus:outline-none pr-5 cursor-pointer max-w-[150px] truncate"
+                  value={selectedProfileId || ''}
+                  onChange={(e) => setSelectedProfileId(e.target.value)}
+                >
+                  {profiles.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+                <ChevronDown size={14} className="text-neutral-400 absolute right-0 pointer-events-none" />
+                <span className="text-[9.5px] text-[#FF8A00] bg-[#FFF3E0] px-1.5 py-0.5 rounded-full font-extrabold uppercase tracking-widest ml-1">{birthDetails.gender}</span>
+              </div>
               <div className="flex items-center space-x-1.5 text-neutral-500 text-[11px] font-semibold mt-1.5">
                 <span>{birthDetails.dob}</span>
                 <span className="text-neutral-300">•</span>
                 <span>{birthDetails.tob}</span>
               </div>
             </div>
-          </div>
-          
-          <div className="text-right">
-            <span className="text-[10px] font-bold text-neutral-400 block tracking-wide uppercase">Place</span>
-            <span className="text-[11.5px] font-extrabold text-neutral-700 block truncate max-w-[100px] mt-0.5">{birthDetails.city}</span>
+            
+            <div className="text-right shrink-0 pl-2">
+              <span className="text-[10px] font-bold text-neutral-400 block tracking-wide uppercase">Place</span>
+              <span className="text-[11.5px] font-extrabold text-neutral-700 block truncate max-w-[80px] mt-0.5">{birthDetails.city}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -370,84 +488,16 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
               <p className="text-[11.5px] text-neutral-400 font-semibold leading-relaxed mt-1">This celestial map diagrams the exact rising zodiac sign and planetary coordinates at your birth moment. Tap on the chart to view fullscreen zoom.</p>
             </div>
 
-            {/* Premium Gold/Amber Styled SVG North Indian Lagna Chart */}
             <div className="flex flex-col items-center">
-              <div 
-                onClick={() => {
+              <KundliChart 
+                ascendantSign={apiChartData.ascendant.sign}
+                planets={apiChartData.planets}
+                onZoom={() => {
                   setIsFullscreenChartOpen(true);
                   setZoomScale(1.2);
                 }}
-                className="w-full aspect-square max-w-[310px] bg-[#FFFDF9] border-2 border-[#D97706] rounded-2xl p-3.5 shadow-[0_6px_24px_rgba(217,119,6,0.06)] relative select-none cursor-zoom-in hover:scale-[1.01] active:scale-[0.99] transition-all"
-              >
-                <svg className="w-full h-full text-[#B45309]" viewBox="0 0 200 200">
-                  {/* Outer boundary square */}
-                  <rect x="0" y="0" width="200" height="200" stroke="currentColor" strokeWidth="1.5" fill="none" />
-                  
-                  {/* Diagonals */}
-                  <line x1="0" y1="0" x2="200" y2="200" stroke="currentColor" strokeWidth="1.5" />
-                  <line x1="200" y1="0" x2="0" y2="200" stroke="currentColor" strokeWidth="1.5" />
-
-                  {/* Inner Diamond lines */}
-                  <line x1="100" y1="0" x2="0" y2="100" stroke="currentColor" strokeWidth="1.2" />
-                  <line x1="0" y1="100" x2="100" y2="200" stroke="currentColor" strokeWidth="1.2" />
-                  <line x1="100" y1="200" x2="200" y2="100" stroke="currentColor" strokeWidth="1.2" />
-                  <line x1="200" y1="100" x2="100" y2="0" stroke="currentColor" strokeWidth="1.2" />
-
-                  {/* Dynamic placement of Zodiac sign numbers & Planets for all 12 houses */}
-                  {/* House 1: Lagna House (Top Central Diamond) */}
-                  <text x="100" y="48" textAnchor="middle" className="text-[10px] font-[900] fill-[#D97706]">{getZodiacNumberForHouse(1)}</text>
-                  <text x="100" y="28" textAnchor="middle" className="text-[8.5px] font-[850] fill-[#111827]">{getPlanetsInHouse(1)}</text>
-
-                  {/* House 2: Upper Left corner */}
-                  <text x="55" y="30" textAnchor="middle" className="text-[8px] font-extrabold fill-neutral-400">{getZodiacNumberForHouse(2)}</text>
-                  <text x="45" y="18" textAnchor="middle" className="text-[8.5px] font-[850] fill-[#111827]">{getPlanetsInHouse(2)}</text>
-
-                  {/* House 3: Left Upper corner */}
-                  <text x="30" y="55" textAnchor="middle" className="text-[8px] font-extrabold fill-neutral-400">{getZodiacNumberForHouse(3)}</text>
-                  <text x="18" y="45" textAnchor="middle" className="text-[8.5px] font-[850] fill-[#111827]">{getPlanetsInHouse(3)}</text>
-
-                  {/* House 4: Left Central Diamond */}
-                  <text x="52" y="108" textAnchor="middle" className="text-[10px] font-[900] fill-[#D97706]">{getZodiacNumberForHouse(4)}</text>
-                  <text x="34" y="100" textAnchor="middle" className="text-[8.5px] font-[850] fill-[#111827]">{getPlanetsInHouse(4)}</text>
-
-                  {/* House 5: Left Lower corner */}
-                  <text x="30" y="145" textAnchor="middle" className="text-[8px] font-extrabold fill-neutral-400">{getZodiacNumberForHouse(5)}</text>
-                  <text x="18" y="155" textAnchor="middle" className="text-[8.5px] font-[850] fill-[#111827]">{getPlanetsInHouse(5)}</text>
-
-                  {/* House 6: Lower Left corner */}
-                  <text x="55" y="170" textAnchor="middle" className="text-[8px] font-extrabold fill-neutral-400">{getZodiacNumberForHouse(6)}</text>
-                  <text x="45" y="184" textAnchor="middle" className="text-[8.5px] font-[850] fill-[#111827]">{getPlanetsInHouse(6)}</text>
-
-                  {/* House 7: Bottom Central Diamond */}
-                  <text x="100" y="148" textAnchor="middle" className="text-[10px] font-[900] fill-[#D97706]">{getZodiacNumberForHouse(7)}</text>
-                  <text x="100" y="168" textAnchor="middle" className="text-[8.5px] font-[850] fill-[#111827]">{getPlanetsInHouse(7)}</text>
-
-                  {/* House 8: Lower Right corner */}
-                  <text x="145" y="170" textAnchor="middle" className="text-[8px] font-extrabold fill-neutral-400">{getZodiacNumberForHouse(8)}</text>
-                  <text x="155" y="184" textAnchor="middle" className="text-[8.5px] font-[850] fill-[#111827]">{getPlanetsInHouse(8)}</text>
-
-                  {/* House 9: Right Lower corner */}
-                  <text x="170" y="145" textAnchor="middle" className="text-[8px] font-extrabold fill-neutral-400">{getZodiacNumberForHouse(9)}</text>
-                  <text x="184" y="155" textAnchor="middle" className="text-[8.5px] font-[850] fill-[#111827]">{getPlanetsInHouse(9)}</text>
-
-                  {/* House 10: Right Central Diamond */}
-                  <text x="148" y="108" textAnchor="middle" className="text-[10px] font-[900] fill-[#D97706]">{getZodiacNumberForHouse(10)}</text>
-                  <text x="166" y="100" textAnchor="middle" className="text-[8.5px] font-[850] fill-[#111827]">{getPlanetsInHouse(10)}</text>
-
-                  {/* House 11: Right Upper corner */}
-                  <text x="170" y="55" textAnchor="middle" className="text-[8px] font-extrabold fill-neutral-400">{getZodiacNumberForHouse(11)}</text>
-                  <text x="184" y="45" textAnchor="middle" className="text-[8.5px] font-[850] fill-[#111827]">{getPlanetsInHouse(11)}</text>
-
-                  {/* House 12: Upper Right corner */}
-                  <text x="145" y="30" textAnchor="middle" className="text-[8px] font-extrabold fill-neutral-400">{getZodiacNumberForHouse(12)}</text>
-                  <text x="155" y="18" textAnchor="middle" className="text-[8.5px] font-[850] fill-[#111827]">{getPlanetsInHouse(12)}</text>
-                </svg>
-                <div className="absolute bottom-2.5 right-2.5 bg-black/60 backdrop-blur-md rounded-md px-1.5 py-0.5 text-[8.5px] font-bold text-white uppercase tracking-widest pointer-events-none">
-                  Tap to Zoom
-                </div>
-              </div>
+              />
             </div>
-
             {/* Outlined AI Explanation Capsule Button */}
             <div className="w-full">
               <button

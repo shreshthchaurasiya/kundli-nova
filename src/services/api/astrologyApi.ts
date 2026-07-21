@@ -1,12 +1,21 @@
 import { ApiClient } from './apiClient';
 import { ENDPOINTS } from './endpoints';
-import { KundliNovaDailyHoroscope, ZodiacSign } from '../../server/types/astrologyProvider';
+import { KundliNovaDailyHoroscope, ZodiacSign, KundliNovaNatalChart } from '../../server/types/astrologyProvider';
 
 export class AstrologyApi {
   /**
    * Fetches the daily horoscope for a given zodiac sign.
+   * @param zodiac The lowercase zodiac sign (e.g., 'aries', 'taurus')
    */
-  static async getDailyHoroscope(zodiac: ZodiacSign): Promise<KundliNovaDailyHoroscope> {
+  static async getDailyHoroscope(zodiac: ZodiacSign | string): Promise<KundliNovaDailyHoroscope> {
     return ApiClient.get<KundliNovaDailyHoroscope>(ENDPOINTS.ASTROLOGY.DAILY_HOROSCOPE(zodiac));
+  }
+  
+  /**
+   * Fetches the generated Kundli for a given profile ID.
+   * @param profileId The ID of the saved Kundli profile
+   */
+  static async getKundli(profileId: string): Promise<KundliNovaNatalChart> {
+    return ApiClient.get<KundliNovaNatalChart>(ENDPOINTS.ASTROLOGY.GET_KUNDLI(profileId));
   }
 }
