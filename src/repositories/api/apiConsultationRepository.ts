@@ -19,9 +19,9 @@ export class ApiConsultationRepository implements IConsultationRepository {
     }
   }
 
-  async createSession(astrologerId: string): Promise<ConsultationRequestResult> {
+  async createSession(astrologerId: string, kundliProfileId?: string): Promise<ConsultationRequestResult> {
     return await ApiClient.post<ConsultationRequestResult>(ENDPOINTS.CONSULTATION.CREATE, {
-      body: { astrologerId },
+      body: { astrologerId, kundliProfileId },
     });
   }
 
@@ -56,6 +56,13 @@ export class ApiConsultationRepository implements IConsultationRepository {
   async cancelSession(id: string): Promise<ConsultationHeartbeatResult> {
     return await ApiClient.post<ConsultationHeartbeatResult>(ENDPOINTS.CONSULTATION.CANCEL(id));
   }
+
+  async updateKundliProfile(id: string, kundliProfileId: string): Promise<ConsultationSession> {
+    return await ApiClient.patch<ConsultationSession>(ENDPOINTS.CONSULTATION.UPDATE_KUNDLI_PROFILE(id), {
+      body: { kundliProfileId },
+    });
+  }
+
 
   subscribe(callback: (session: ConsultationSession | null) => void): () => void {
     // In a full realtime system, this would subscribe to Supabase Postgres changes for the session.

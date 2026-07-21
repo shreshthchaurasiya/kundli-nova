@@ -57,6 +57,20 @@ export class ApiKundliProfileRepository implements IKundliProfileRepository {
     return all.length > 0 ? all[0] : null;
   }
 
+  /**
+   * Calls POST /kundli-profiles/sync-self which invokes the
+   * ensure_self_kundli_profile() SECURITY DEFINER RPC via the user's JWT.
+   * Returns the canonical self profile row, or null when birth details are
+   * incomplete (normal product state, not an error).
+   */
+  async ensureSelfProfile(): Promise<KundliProfile | null> {
+    const result = await ApiClient.post<KundliProfile | null>(ENDPOINTS.KUNDLI.SYNC_SELF, {
+      body: {},
+    });
+    // ApiClient unwraps the `data` field. result is null for INCOMPLETE_BIRTH_DETAILS.
+    return result ?? null;
+  }
+
   async setDefaultProfile(profileId: string): Promise<void> {
     storageAdapter.setItem(KEYS.KUNDLI_DEFAULT_PROFILE, profileId);
   }

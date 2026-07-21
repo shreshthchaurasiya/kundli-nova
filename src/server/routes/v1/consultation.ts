@@ -10,9 +10,10 @@ import {
   acceptAssignedSession,
   rejectAssignedSession,
   cancelWaitingSession,
+  updateSessionKundliProfile,
   endAssignedSession,
 } from '../../controllers/consultation';
-import { getMessages, sendMessage } from '../../controllers/chat';
+import { getMessages, sendMessage, getUploadUrl } from '../../controllers/chat';
 import { requireAuth } from '../../middleware/auth';
 import { validateRequest } from '../../middleware/validate';
 import { createConsultationSchema, consultationIdSchema, consultationMessageSchema } from '../../validation';
@@ -73,6 +74,8 @@ router.post('/:id/accept', validateRequest(consultationIdSchema), acceptAssigned
 router.post('/:id/reject', validateRequest(consultationIdSchema), rejectAssignedSession);
 router.post('/:id/cancel', validateRequest(consultationIdSchema), cancelWaitingSession);
 router.get('/:id/messages', validateRequest(consultationIdSchema), getMessages);
+router.post('/:id/messages/upload-url', validateRequest(consultationIdSchema), getUploadUrl);
 router.post('/:id/messages', validateRequest(consultationMessageSchema), sendMessage);
+router.patch('/:id/kundli-profile', validateRequest(consultationIdSchema), updateSessionKundliProfile);
 
 export default router;

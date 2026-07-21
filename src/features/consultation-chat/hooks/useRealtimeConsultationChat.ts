@@ -130,5 +130,40 @@ export function useRealtimeConsultationChat(sessionId: string) {
     }
   }, [isSending, sessionId]);
 
-  return { messages, sessionStatus, isLoading, isSending, error, send, refreshMessages };
+  const sendImage = useCallback(async (file: File, caption?: string) => {
+    if (isSending) return;
+    setIsSending(true);
+    setError(null);
+    try {
+      if (file.size > 5242880) {
+        throw new Error('File size exceeds the 5MB limit.');
+      }
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+        throw new Error('Unsupported image format. Please use JPEG, PNG, or WebP.');
+      }
+
+      // 1. Get signed upload URL
+      const { signedUrl, token, path } = await chatRepository.getUploadUrl(sessionId, file.type, file.size);
+
+      // 2. Upload directly to Supabase Storage using the signed URL
+      const { error: uploadError } = await supabase.storage
+        .from('chat-attachments')
+        .uploadToSignedUrl(path, token, file, { contentType: file.type });
+
+      if (uploadError) {
+        throw new Error('Failed to upload image to storage.');
+      }
+
+      // 3. Finalize the message
+      const message = await chatRepository.sendMessage(sessionId, caption || '', crypto.randomUUID(), 'image', path);
+      setMessages(current => current.some(item => item.id === message.id) ? current : [...current, message]);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unable to send this image.');
+      throw caught;
+    } finally {
+      setIsSending(false);
+    }
+  }, [isSending, sessionId]);
+
+  return { messages, sessionStatus, isLoading, isSending, error, send, sendImage, refreshMessages };
 }

@@ -20,6 +20,7 @@ vi.mock('../../../services/api/endpoints', () => ({
     WALLET: { GET: '/wallet', TRANSACTIONS: '/wallet/transactions', RECHARGE: '/wallet/recharge' },
     KUNDLI: { LIST: '/kundli-profiles', CREATE: '/kundli-profiles' },
     CONSULTATION: {
+      CREATE: '/consultations',
       LIST: '/consultations',
       ACCEPT: (id: string) => `/consultations/${id}/accept`,
       REJECT: (id: string) => `/consultations/${id}/reject`,
@@ -100,6 +101,38 @@ describe('API Repositories', () => {
 
       expect(ApiClient.post).toHaveBeenNthCalledWith(1, '/consultations/session-1/accept');
       expect(ApiClient.post).toHaveBeenNthCalledWith(2, '/consultations/session-2/reject');
+    });
+
+    it('sends kundliProfileId in the request body when provided to createSession', async () => {
+      const repo = new ApiConsultationRepository();
+      (ApiClient.post as any).mockResolvedValue({
+        outcome: 'created',
+        session: { id: 'session-1', status: 'WAITING_FOR_ASTROLOGER' },
+        balance: 500,
+      });
+
+      await repo.createSession('astrologer-xyz', 'profile-aaa-001');
+
+      expect(ApiClient.post).toHaveBeenCalledWith(
+        expect.stringContaining('/consultations'),
+        { body: { astrologerId: 'astrologer-xyz', kundliProfileId: 'profile-aaa-001' } },
+      );
+    });
+
+    it('omits kundliProfileId from request body when not provided to createSession', async () => {
+      const repo = new ApiConsultationRepository();
+      (ApiClient.post as any).mockResolvedValue({
+        outcome: 'created',
+        session: { id: 'session-2', status: 'WAITING_FOR_ASTROLOGER' },
+        balance: 500,
+      });
+
+      await repo.createSession('astrologer-xyz');
+
+      expect(ApiClient.post).toHaveBeenCalledWith(
+        expect.stringContaining('/consultations'),
+        { body: { astrologerId: 'astrologer-xyz', kundliProfileId: undefined } },
+      );
     });
   });
 });

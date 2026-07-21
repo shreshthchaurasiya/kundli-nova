@@ -22,6 +22,7 @@ import CategoryDetailScreen from './screens/CategoryDetailScreen';
 import NovaAIScreen from './screens/NovaAIScreen';
 import NovaAIChatScreen from './screens/NovaAIChatScreen';
 import NovaKundliScreen from './screens/NovaKundliScreen';
+import KundliProfileFormScreen from './screens/KundliProfileFormScreen';
 import HelpSupportScreen from './screens/HelpSupportScreen';
 import {
   AstrologerApplicationScreen,
@@ -198,6 +199,7 @@ export default function App() {
       case 'nova-ai': return <NovaAIScreen onNavigate={navigate} onOpenDrawer={() => setIsDrawerOpen(true)} />;
       case 'nova-ai-chat': return <NovaAIChatScreen onNavigate={navigate} routeParams={routeParams} />;
       case 'nova-kundli': return <NovaKundliScreen onNavigate={navigate} routeParams={routeParams} />;
+      case 'kundli-profile-form': return <KundliProfileFormScreen onNavigate={navigate} routeParams={routeParams} />;
       case 'chat-history': return <ChatHistoryScreen onNavigate={navigate} />;
       case 'services': return <CategoryScreen onNavigate={navigate} />;
       case 'astrologers': return <AstrologersScreen onNavigate={navigate} />;

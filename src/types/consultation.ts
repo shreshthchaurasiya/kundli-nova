@@ -1,4 +1,5 @@
 export type ConsultationState =
+  | 'SELECTING_KUNDLI'
   | 'CHECKING_WALLET'
   | 'INSUFFICIENT_BALANCE'
   | 'PREPARING_KUNDLI'

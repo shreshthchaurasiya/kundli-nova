@@ -29,12 +29,15 @@ import {
   Heart,
   ChevronDown,
   ChevronUp,
-  Image
+  Image,
+  ImagePlus,
+  Loader2
 } from 'lucide-react';
 import { Screen, Message, ConsultationState, KundliData } from '../types';
 import { walletBalanceService } from '../services/wallet/walletBalanceService';
 import { chatStorage } from '../services/storage/chatStorage';
 import { ApiConsultationRepository } from '../repositories/api/apiConsultationRepository';
+import { ApiKundliProfileRepository } from '../repositories/api/apiKundliProfileRepository';
 import { ApiError, NetworkError, TimeoutError } from '../services/api/apiErrors';
 import CelestialChatBackground from '../components/chat/CelestialChatBackground';
 import { useAstrologerPartner } from '../features/astrologer';
@@ -42,9 +45,14 @@ import { ApiChatRepository } from '../repositories/api/apiChatRepository';
 import { supabase } from '../lib/supabase';
 import { useProfile } from '../contexts/ProfileContext';
 import { ConsultationMessageBubble, useRealtimeConsultationChat } from '../features/consultation-chat';
+import ConsultationProfileSheet from '../features/consultation-chat/components/ConsultationProfileSheet';
+import KundliProfileSelector from '../features/consultation-chat/components/KundliProfileSelector';
 
 const consultationRepository = new ApiConsultationRepository();
+const kundliProfileRepository = new ApiKundliProfileRepository();
 const chatRepository = new ApiChatRepository();
+
+const inflightSessionRequests = new Set<string>();
 
 interface ConsultationChatScreenProps {
   astrologerId?: string;
@@ -59,7 +67,18 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
   const astro = directory.find(item => item.id === resolvedAstrologerId) ?? null;
 
   // --- Central Consultation State Machine ---
-  const [currentState, setCurrentState] = useState<ConsultationState>('CHECKING_WALLET');
+  // For new sessions we start at SELECTING_KUNDLI; readOnly sessions skip to ACTIVE.
+  const [currentState, setCurrentState] = useState<ConsultationState>(
+    readOnlySessionId ? 'CHECKING_WALLET' : 'SELECTING_KUNDLI'
+  );
+
+  // The Kundli profile ID chosen by the customer. Persisted across retries and
+  // recharge flows so it is never lost during state transitions.
+  const [selectedKundliProfileId, setSelectedKundliProfileId] = useState<string | null>(null);
+
+  // Tracks whether the "Start Consultation" button is mid-flight.
+  const [isSubmittingSession, setIsSubmittingSession] = useState(false);
+  const hasRequestedRef = useRef(false);
 
   // --- Core States ---
   const [walletBalance, setWalletBalance] = useState<number>(0);
@@ -70,7 +89,11 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
   const [activeSessionId, setActiveSessionId] = useState<string>('');
 
   // Realtime hook replaces local messages state
-  const { messages, sessionStatus, send, error: hookError } = useRealtimeConsultationChat(activeSessionId);
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { messages, sessionStatus, send, sendImage, isSending, error: hookError } = useRealtimeConsultationChat(activeSessionId);
   const displayError = chatError || hookError;
 
   const [inputText, setInputText] = useState('');
@@ -91,6 +114,9 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
   // Review states (For ENDED Screen)
   const [rating, setRating] = useState<number>(5);
   const [reviewText, setReviewText] = useState<string>('');
+
+  const [isProfileSheetOpen, setIsProfileSheetOpen] = useState(false);
+  const [currentKundliProfileId, setCurrentKundliProfileId] = useState<string | null>(null);
 
   // Waiting Screen State
   const [waitingTimeoutSeconds, setWaitingTimeoutSeconds] = useState(60);
@@ -119,20 +145,14 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
   useEffect(() => {
     async function loadInitialData() {
       if (!astrologerId && !readOnlySessionId) {
-        setVerificationError('No astrologer was selected for this consultation.');
+        onNavigate('astrologers');
         return;
       }
 
-      // 2. Load wallet balance
-      const balance = await walletBalanceService.getBalance();
-      setWalletBalance(balance);
-
-      // Use only the authenticated profile. Kundli data is attached once the
-      // production Kundli engine supplies it; no synthetic chart is generated.
       setUserProfile(authenticatedProfile);
       setKundliData(null);
 
-      // 0. CHECK IF READ-ONLY SESSION IS REQUESTED
+      // READ-ONLY PATH — bypass Kundli selector entirely.
       if (readOnlySessionId) {
         try {
           const pastSession = await consultationRepository.getSession(readOnlySessionId);
@@ -142,22 +162,24 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
           setElapsedSeconds(pastSession.elapsedSeconds || 0);
           setTotalCharged(pastSession.totalCharged || 0);
 
-          // Hook automatically fetches past messages when activeSessionId is set
-
           const formattedStart = new Date(pastSession.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           setStartTimeString(formattedStart);
 
-          // Set to ACTIVE so we render the chat loop but we are in read-only mode
           setCurrentState('ACTIVE');
           return;
         } catch (error) {
           console.error('Unable to load consultation transcript', error);
           setVerificationError('This consultation transcript could not be loaded.');
+          setCurrentState('CHECKING_WALLET');
           return;
         }
       }
 
-      await runWalletVerification();
+      // NEW SESSION PATH
+      if (!hasRequestedRef.current) {
+        hasRequestedRef.current = true;
+        void runWalletVerification();
+      }
     }
 
     loadInitialData();
@@ -166,11 +188,22 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
   // -----------------------------------------------------------------
   // 1. WALLET VERIFICATION FLOW
   // -----------------------------------------------------------------
+  /**
+   * runWalletVerification accepts the confirmed Kundli profile ID.
+   * It is always called after the customer has explicitly selected a profile.
+   * The profileId is preserved across retries so it is never re-asked.
+   */
   const runWalletVerification = async () => {
+    // We do not pass kundliProfileId from client anymore for auto-resolution.
     setCurrentState('CHECKING_WALLET');
     setVerificationError('');
+    setIsSubmittingSession(true);
+    
+    if (!astrologerId) return;
+    if (inflightSessionRequests.has(astrologerId)) return;
+    inflightSessionRequests.add(astrologerId);
+
     try {
-      if (!astrologerId) throw new Error('No astrologer selected');
       const result = await consultationRepository.createSession(astrologerId);
       setWalletBalance(result.balance);
       setRatePerMin(result.ratePerMinute);
@@ -225,6 +258,8 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
       } else {
         setVerificationError('Secure consultation service could not be reached. Please retry.');
       }
+    } finally {
+      setIsSubmittingSession(false);
     }
   };
 
@@ -395,9 +430,49 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
   // -----------------------------------------------------------------
   // 7. CHAT MESSAGE SENDING
   // -----------------------------------------------------------------
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5242880) {
+      setChatError('Image exceeds the maximum allowed size of 5MB.');
+      return;
+    }
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setChatError('Unsupported format. Please use JPEG, PNG, or WebP.');
+      return;
+    }
+
+    setChatError(null);
+    setSelectedImage(file);
+    setImagePreviewUrl(URL.createObjectURL(file));
+  };
+
+  const clearImageSelection = () => {
+    setSelectedImage(null);
+    if (imagePreviewUrl) {
+      URL.revokeObjectURL(imagePreviewUrl);
+      setImagePreviewUrl(null);
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (currentState === 'RECHARGING') return; // block send in grace period
+
+    if (selectedImage) {
+      try {
+        await sendImage(selectedImage, inputText);
+        setInputText('');
+        clearImageSelection();
+      } catch (err) {
+        setChatError(err instanceof Error ? err.message : 'Failed to send image');
+      }
+      return;
+    }
 
     const textToSend = inputText.trim();
     if (!textToSend) return;
@@ -452,6 +527,24 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
   // MAIN STATE MACHINE RENDERING CHANNELS
   // -----------------------------------------------------------------
 
+  // 0. SELECTING KUNDLI — shown for all new paid sessions (not readOnly).
+  if (currentState === 'SELECTING_KUNDLI') {
+    return (
+      <KundliProfileSelector
+        loadProfiles={() => kundliProfileRepository.getAllProfiles()}
+        ensureSelfProfile={() => kundliProfileRepository.ensureSelfProfile()}
+        isSubmitting={isSubmittingSession}
+        astrologerId={resolvedAstrologerId}
+        onConfirm={(profileId) => {
+          setSelectedKundliProfileId(profileId);
+          void runWalletVerification();
+        }}
+        onCancel={() => onNavigate('astrologers')}
+        onNavigate={onNavigate}
+      />
+    );
+  }
+
   // 1. CHECKING WALLET SCREEN
   if (currentState === 'CHECKING_WALLET') {
     if (verificationError) {
@@ -468,8 +561,8 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
             <div className="flex gap-3 justify-center">
               <button onClick={() => onNavigate('astrologers')} className="h-11 px-5 rounded-xl bg-neutral-100 text-neutral-700 text-xs font-bold border-none">Go Back</button>
               <button onClick={() => void runWalletVerification()} className="h-11 px-5 rounded-xl bg-[#FF8A00] text-white text-xs font-black border-none flex items-center gap-2">
-                <RefreshCw size={13} />
-                Retry
+                <RefreshCw size={12} strokeWidth={3} className={isSubmittingSession ? "animate-spin" : ""} />
+                <span>Retry Request</span>
               </button>
             </div>
           </div>
@@ -1510,7 +1603,52 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
           </div>
         ) : (
           <>
-            <div className="flex items-center space-x-3">
+            {imagePreviewUrl && (
+              <div className="mb-3 flex items-start gap-3 rounded-xl border border-neutral-100 bg-neutral-50 p-2">
+                <div className="relative h-16 w-16 shrink-0 rounded-lg overflow-hidden border border-neutral-200">
+                  <img src={imagePreviewUrl} alt="Preview" className="h-full w-full object-cover" />
+                  <button
+                    onClick={clearImageSelection}
+                    className="absolute -right-1 -top-1 bg-white rounded-full p-0.5 shadow-sm border border-neutral-200 text-neutral-500 hover:text-red-500 cursor-pointer"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+                <div className="flex flex-1 flex-col justify-center h-16 text-xs text-neutral-500">
+                  <span className="font-semibold text-neutral-700 truncate max-w-[200px]">{selectedImage?.name}</span>
+                  <span>{(selectedImage?.size ? (selectedImage.size / 1024 / 1024).toFixed(2) : 0)} MB</span>
+                </div>
+              </div>
+            )}
+            <div className="flex items-center space-x-2">
+              {['ACTIVE', 'LOW_BALANCE', 'RECHARGING'].includes(currentState) && (
+                <>
+                  <button
+                    type="button"
+                    aria-label="Open consultation profile"
+                    onClick={() => setIsProfileSheetOpen(true)}
+                    className="w-10 h-10 shrink-0 rounded-full bg-neutral-100 text-neutral-700 hover:bg-neutral-200 transition-colors flex items-center justify-center cursor-pointer border-none"
+                  >
+                    <User size={18} strokeWidth={2.5} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Attach image"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={currentState === 'RECHARGING'}
+                    className="w-10 h-10 shrink-0 rounded-full bg-neutral-100 text-neutral-700 hover:bg-neutral-200 transition-colors flex items-center justify-center cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ImagePlus size={18} strokeWidth={2.5} />
+                  </button>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleImageSelect}
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                  />
+                </>
+              )}
               <form onSubmit={handleSendMessage} className="flex-1 flex items-center bg-neutral-50 border border-neutral-100 rounded-2xl pr-1.5 pl-4 py-1">
                 <input
                   type="text"
@@ -1520,21 +1658,25 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
                   placeholder={
                     currentState === 'RECHARGING'
                       ? "Recharge required to send message."
-                      : "Ask regarding career, marriage, remedies..."
+                      : selectedImage ? "Add a caption (optional)..." : "Ask regarding career, marriage, remedies..."
                   }
                   className="flex-1 bg-transparent border-none focus:outline-none text-[13.5px] font-semibold text-neutral-800 placeholder:text-neutral-400 h-10 disabled:cursor-not-allowed"
                 />
 
                 <button
                   type="submit"
-                  disabled={!inputText.trim() || currentState === 'RECHARGING'}
+                  disabled={(!inputText.trim() && !selectedImage) || currentState === 'RECHARGING' || isSending}
                   className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all ${
-                    inputText.trim() && currentState !== 'RECHARGING'
+                    (inputText.trim() || selectedImage) && currentState !== 'RECHARGING' && !isSending
                       ? 'bg-neutral-900 text-white shadow-md active:scale-95 cursor-pointer'
                       : 'bg-neutral-100 text-neutral-400 cursor-not-allowed'
                   }`}
                 >
-                  <Send size={14} strokeWidth={2.5} className="ml-0.5 text-[#FF8A00]" />
+                  {isSending ? (
+                    <Loader2 size={14} className="animate-spin text-neutral-400" />
+                  ) : (
+                    <Send size={14} strokeWidth={2.5} className="ml-0.5 text-[#FF8A00]" />
+                  )}
                 </button>
               </form>
 
@@ -1542,6 +1684,14 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
           </>
         )}
       </div>
+
+      <ConsultationProfileSheet
+        isOpen={isProfileSheetOpen}
+        onClose={() => setIsProfileSheetOpen(false)}
+        sessionId={activeSessionId}
+        currentProfileId={currentKundliProfileId}
+        onProfileSwitched={(newProfileId) => setCurrentKundliProfileId(newProfileId)}
+      />
     </div>
   );
 }

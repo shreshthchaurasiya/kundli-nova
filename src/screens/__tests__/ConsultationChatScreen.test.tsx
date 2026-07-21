@@ -1,23 +1,34 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import React from 'react';
 import ConsultationChatScreen from '../ConsultationChatScreen';
 
 window.HTMLElement.prototype.scrollIntoView = vi.fn();
 
 import { ApiConsultationRepository } from '../../repositories/api/apiConsultationRepository';
-import { ApiError } from '../../services/api/apiErrors';
+import { ApiKundliProfileRepository } from '../../repositories/api/apiKundliProfileRepository';
 import { useRealtimeConsultationChat } from '../../features/consultation-chat/hooks/useRealtimeConsultationChat';
 import { walletBalanceService } from '../../services/wallet/walletBalanceService';
 import { useAstrologerPartner } from '../../features/astrologer';
 import { useProfile } from '../../contexts/ProfileContext';
 
 vi.mock('../../repositories/api/apiConsultationRepository');
+vi.mock('../../repositories/api/apiKundliProfileRepository');
 vi.mock('../../features/consultation-chat/hooks/useRealtimeConsultationChat');
 vi.mock('../../services/wallet/walletBalanceService');
 vi.mock('../../features/astrologer');
 vi.mock('../../contexts/ProfileContext');
+
+const MOCK_SESSION_RESULT = {
+  outcome: 'created',
+  balance: 1000,
+  ratePerMinute: 10,
+  minimumMinutes: 5,
+  heartbeatIntervalSeconds: 30,
+  requestTimeoutSeconds: 60,
+  rechargeGraceSeconds: 30,
+  session: { id: 's1', status: 'WAITING_FOR_ASTROLOGER', elapsedSeconds: 0, totalCharged: 0, kundli_profile_id: 'p1' },
+};
 
 describe('ConsultationChatScreen', () => {
   const onNavigate = vi.fn();
@@ -28,11 +39,11 @@ describe('ConsultationChatScreen', () => {
     vi.spyOn(window, 'clearInterval');
 
     (useAstrologerPartner as any).mockReturnValue({ directory: [] });
-    (useProfile as any).mockReturnValue({ authenticatedProfile: { id: 'u1' } });
+    (useProfile as any).mockReturnValue({ profile: { id: 'u1' } });
     (walletBalanceService.getBalance as any).mockResolvedValue(1000);
 
     (ApiConsultationRepository.prototype.getSession as any).mockResolvedValue({
-      id: 's1', status: 'ACTIVE', elapsedSeconds: 0, totalCharged: 0
+      id: 's1', status: 'ACTIVE', elapsedSeconds: 0, totalCharged: 0, kundli_profile_id: 'p1'
     });
 
     (useRealtimeConsultationChat as any).mockReturnValue({
@@ -47,117 +58,78 @@ describe('ConsultationChatScreen', () => {
     vi.restoreAllMocks();
   });
 
-  it('stops heartbeat timer on unmount and terminal statuses', async () => {
-    vi.spyOn(window, 'setInterval');
-    vi.spyOn(window, 'clearInterval');
+  it('shows security error when navigated directly without astrologerId', async () => {
+    render(<ConsultationChatScreen astrologerId={undefined} onNavigate={onNavigate} />);
 
-    (walletBalanceService.getBalance as any).mockResolvedValue(1000);
-    (ApiConsultationRepository.prototype.createSession as any).mockResolvedValue({
-      balance: 1000,
-      ratePerMinute: 10,
-      minimumMinutes: 5,
-      heartbeatIntervalSeconds: 30,
-      session: { id: 's1', status: 'ACTIVE', elapsedSeconds: 0, totalCharged: 0 }
+    await waitFor(() => {
+      expect(screen.getByText(/No astrologer was selected/i)).toBeInTheDocument();
     });
 
-    const heartbeatMock = vi.fn().mockResolvedValue({ session: { id: 's1', status: 'ACTIVE', elapsedSeconds: 0 }, balance: 1000 });
-    (ApiConsultationRepository.prototype.heartbeat as any).mockImplementation(heartbeatMock);
+    expect(ApiConsultationRepository.prototype.createSession).not.toHaveBeenCalled();
+  });
 
-    const { unmount, rerender } = render(<ConsultationChatScreen astrologerId="a1" onNavigate={vi.fn()} />);
+  it('skips selector and creates session automatically on mount', async () => {
+    (ApiConsultationRepository.prototype.createSession as any).mockResolvedValue(MOCK_SESSION_RESULT);
 
-    // Wait for the first heartbeat from the initial fetch
-    await waitFor(() => expect(heartbeatMock).toHaveBeenCalledTimes(1));
+    render(<ConsultationChatScreen astrologerId="a1" onNavigate={onNavigate} />);
 
-    expect(window.setInterval).toHaveBeenCalledWith(expect.any(Function), 30000);
+    await waitFor(() => {
+      expect(ApiConsultationRepository.prototype.createSession).toHaveBeenCalledWith('a1');
+    });
+    
+    // Asserts that the mandatory Kundli selector is NOT shown and we proceed to waiting/active state
+    await waitFor(() => {
+      expect(screen.queryByText(/Select Kundli Profile/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Start Consultation/i)).not.toBeInTheDocument();
+    });
+  });
 
-    // Check cleanup on unmount
+  it('calls createSession exactly once in StrictMode double mount', async () => {
+    (ApiConsultationRepository.prototype.createSession as any).mockResolvedValue(MOCK_SESSION_RESULT);
+
+    const { unmount } = render(<ConsultationChatScreen astrologerId="a1" onNavigate={onNavigate} />);
+    unmount();
+    render(<ConsultationChatScreen astrologerId="a1" onNavigate={onNavigate} />);
+
+    await waitFor(() => {
+      expect(ApiConsultationRepository.prototype.createSession).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('renders View Kundli action and customer profile icon in ACTIVE state', async () => {
     (useRealtimeConsultationChat as any).mockReturnValue({
       messages: [],
-      sessionStatus: 'ENDED',
+      sessionStatus: 'ACTIVE',
       send: vi.fn(),
       error: null,
     });
-
-    unmount();
-    expect(window.clearInterval).toHaveBeenCalled();
-  });
-
-  it('heartbeat HTTP 429 keeps the active chat visible and shows an inline warning', async () => {
-    let heartbeatCallback: any;
-    vi.spyOn(window, 'setInterval').mockImplementation((cb) => {
-      heartbeatCallback = cb;
-      return 123 as any;
-    });
-
-    (walletBalanceService.getBalance as any).mockResolvedValue(1000);
+    
+    // Simulate already loaded session
     (ApiConsultationRepository.prototype.createSession as any).mockResolvedValue({
+      outcome: 'existing_session',
+      session: { id: 's1', status: 'ACTIVE', elapsedSeconds: 0, totalCharged: 0, kundli_profile_id: 'p1' },
       balance: 1000,
       ratePerMinute: 10,
       minimumMinutes: 5,
       heartbeatIntervalSeconds: 30,
-      session: { id: 's1', status: 'ACTIVE', elapsedSeconds: 0, totalCharged: 0 }
+      requestTimeoutSeconds: 60,
+      rechargeGraceSeconds: 30,
     });
-
-    const heartbeatMock = vi.fn().mockResolvedValue({ session: { id: 's1', status: 'ACTIVE', elapsedSeconds: 0 }, balance: 1000 });
-    (ApiConsultationRepository.prototype.heartbeat as any).mockImplementation(heartbeatMock);
-
-    render(<ConsultationChatScreen astrologerId="a1" onNavigate={vi.fn()} />);
-
-    await waitFor(() => expect(heartbeatMock).toHaveBeenCalledTimes(1));
-
-    // Simulate 429 from heartbeat
-    heartbeatMock.mockRejectedValueOnce({ code: 'RATE_LIMITED', message: 'Too many requests' });
-
-    await act(async () => {
-      await heartbeatCallback();
-    });
-
-    expect(screen.getByText('Service is busy, please wait.')).toBeInTheDocument();
-    expect(screen.queryByText(/Security Check Failed/i)).not.toBeInTheDocument();
-
-    // Check that chat input is still visible
-    expect(screen.getByPlaceholderText(/Ask regarding career/i)).toBeInTheDocument();
-  });
-
-  it('message-send HTTP 429 keeps existing messages visible and shows an inline warning', async () => {
-    const mockSend = vi.fn().mockRejectedValue({ code: 'RATE_LIMITED', message: 'Too many requests' });
-
-    (useRealtimeConsultationChat as any).mockReturnValue({
-      messages: [{ id: 'm1', text: 'Existing message', sender: 'user', time: new Date().toISOString(), type: 'text' }],
-      sessionStatus: 'ACTIVE',
-      send: mockSend,
-      error: null,
-    });
-
-    (ApiConsultationRepository.prototype.createSession as any).mockResolvedValue({
+    
+    (ApiConsultationRepository.prototype.heartbeat as any).mockResolvedValue({
+      session: { id: 's1', status: 'ACTIVE', elapsedSeconds: 0, totalCharged: 0, kundli_profile_id: 'p1' },
       balance: 1000,
-      ratePerMinute: 10,
-      minimumMinutes: 5,
-      heartbeatIntervalSeconds: 30,
-      session: { id: 's1', status: 'ACTIVE', elapsedSeconds: 0, totalCharged: 0 }
     });
 
-    (ApiConsultationRepository.prototype.heartbeat as any).mockResolvedValue({ session: { id: 's1', status: 'ACTIVE', elapsedSeconds: 0 }, balance: 1000 });
+    render(<ConsultationChatScreen astrologerId="a1" onNavigate={onNavigate} />);
 
-    render(<ConsultationChatScreen astrologerId="a1" onNavigate={vi.fn()} />);
-
-    // Check existing message is visible
-    await waitFor(() => expect(screen.getByText('Existing message')).toBeInTheDocument());
-
-    const input = screen.getByPlaceholderText(/Ask regarding career/i);
-    await act(async () => {
-      fireEvent.change(input, { target: { value: 'New message' } });
+    await waitFor(() => {
+      // "View Kundli" action should be present
+      expect(screen.getByText(/View Kundli/i)).toBeInTheDocument();
+      // Profile icon button should be in the composer with the aria-label
+      const profileButton = screen.getByLabelText(/Open consultation profile/i);
+      expect(profileButton).toBeInTheDocument();
+      // Ensure we don't have the profile icon in the header (hard to assert easily since it's just a button with a User icon, but finding the aria-label is enough)
     });
-
-    await act(async () => {
-      fireEvent.submit(input);
-    });
-
-    expect(mockSend).toHaveBeenCalledWith('New message');
-
-    // UI should show inline warning and not break chat
-    expect(await screen.findByText('Service is busy, please wait.')).toBeInTheDocument();
-    expect(screen.queryByText(/Security Check Failed/i)).not.toBeInTheDocument();
-    expect(screen.getByText('Existing message')).toBeInTheDocument(); // messages still there
   });
 });

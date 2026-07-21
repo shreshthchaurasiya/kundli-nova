@@ -27,7 +27,8 @@ export type Screen =
   | 'manage-astrologer-profile'
   | 'help-support'
   | 'category-detail'
-  | 'nova-ai';
+  | 'nova-ai'
+  | 'kundli-profile-form';
 
 export type Tab = 'home' | 'chat-list' | 'chat-history' | 'nova-ai' | 'services' | 'profile';
 
@@ -51,4 +52,25 @@ export interface ChatThread {
   lastMessage: string;
   unreadCount: number;
   timestamp: string;
+}
+
+/**
+ * Navigation parameters that must survive the consultation flow:
+ * ConsultationChat → KundliProfileSelector → KundliProfileFormScreen → back.
+ */
+export interface ConsultationNavParams {
+  /** The astrologer the customer selected. Must be preserved across all screens. */
+  astrologerId?: string;
+  /** For read-only transcript viewing; bypasses selector. */
+  readOnlySessionId?: string;
+  /** Which screen to return to after profile creation. */
+  returnTo?: Screen;
+  /** Discriminator so screens know they are in a consultation creation flow. */
+  intent?: 'select-kundli-for-consultation';
+}
+
+/** Route params accepted by KundliProfileFormScreen. */
+export interface KundliProfileFormNavParams extends ConsultationNavParams {
+  /** Which screen opened this form (for header back button label). */
+  fromScreen?: Screen;
 }

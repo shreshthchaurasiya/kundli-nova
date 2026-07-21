@@ -272,7 +272,7 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
           </button>
           <div>
             <h1 className="text-[16px] font-[850] text-[#111827] tracking-tight leading-tight">Janam Kundli</h1>
-            <p className="text-[10.5px] font-bold text-[#FF8A00] tracking-wide uppercase mt-0.5">Vedic Astro Engine</p>
+            <p className="text-[10.5px] font-bold text-[#FF8A00] tracking-wide uppercase mt-0.5">Demo Kundli Preview</p>
           </div>
         </div>
 
@@ -283,6 +283,13 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
           <Download size={13} strokeWidth={3} />
           <span>Save PDF</span>
         </button>
+      </div>
+
+      {/* Demo notice banner */}
+      <div className="mx-4 mt-3 mb-0 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-2">
+        <span className="text-amber-600 text-[11px] font-bold leading-tight">
+          ⚠️ Demo preview — Calculated Kundli report not available yet. Displayed data is illustrative only.
+        </span>
       </div>
 
       {/* Sleek Horizontal Profile Summary (Saves space, matches Astrotalk app) */}

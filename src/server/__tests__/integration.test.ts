@@ -24,6 +24,9 @@ vi.mock('../config/supabase', () => ({
     from: vi.fn(),
     rpc: vi.fn(),
   },
+  createAuthClient: vi.fn(() => ({
+    rpc: vi.fn().mockResolvedValue({ data: null, error: null }),
+  })),
 }));
 
 describe('API Integration Tests', () => {
@@ -159,6 +162,7 @@ describe('API Integration Tests', () => {
       expect(supabaseAdmin.rpc).toHaveBeenCalledWith('create_consultation_session', {
         p_user_id: '22222222-2222-4222-8222-222222222222',
         p_astrologer_id: '11111111-1111-1111-1111-111111111111',
+        p_kundli_profile_id: null,
       });
     });
 
@@ -292,6 +296,190 @@ describe('API Integration Tests', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.data.status).toBe('insufficient_balance');
+    });
+
+    it('POST /api/v1/consultations forwards kundliProfileId to the RPC as p_kundli_profile_id', async () => {
+      const token = mockValidToken();
+      (supabaseAdmin.rpc as any).mockResolvedValue({
+        data: {
+          outcome: 'created',
+          session: {
+            id: '11111111-1111-4111-8111-111111111111',
+            user_id: '22222222-2222-4222-8222-222222222222',
+            astrologer_id: '33333333-3333-4333-8333-333333333333',
+            status: 'WAITING_FOR_ASTROLOGER',
+            rate_per_minute: 25,
+            requested_at: '2026-07-20T10:00:00.000Z',
+            billed_minutes: 0,
+            total_charged: 0,
+            elapsed_seconds: 0,
+          },
+          balance: 500,
+          minimum_minutes: 5,
+          minimum_required: 125,
+          heartbeat_interval_seconds: 10,
+          request_timeout_seconds: 60,
+          recharge_grace_seconds: 30,
+        },
+        error: null,
+      });
+
+      const res = await request(app)
+        .post('/api/v1/consultations')
+        .set('Authorization', token)
+        .send({
+          astrologerId: '11111111-1111-1111-1111-111111111111',
+          kundliProfileId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        });
+
+      expect(res.status).toBe(201);
+      expect(supabaseAdmin.rpc).toHaveBeenCalledWith('create_consultation_session', {
+        p_user_id: '22222222-2222-4222-8222-222222222222',
+        p_astrologer_id: '11111111-1111-1111-1111-111111111111',
+        p_kundli_profile_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      });
+    });
+
+    it('POST /api/v1/consultations auto-resolves default profile if missing from body', async () => {
+      const token = mockValidToken();
+      
+      const mockSelect = vi.fn().mockReturnThis();
+      const mockEq = vi.fn().mockReturnThis();
+      const mockOrder1 = vi.fn().mockReturnThis();
+      const mockOrder2 = vi.fn().mockReturnThis();
+      const mockLimit = vi.fn().mockResolvedValue({
+        data: [
+          { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', is_default: false, relation: 'self' }
+        ],
+        error: null
+      });
+
+      (supabaseAdmin.from as any).mockReturnValue({
+        select: mockSelect, eq: mockEq, order: mockOrder1, limit: mockLimit
+      });
+
+      // Override the second order call to avoid mock collision, we just want to ensure it resolves to 'self'
+      mockOrder1.mockImplementation((col: string) => col === 'is_default' ? { order: mockOrder2 } : { limit: mockLimit });
+      mockOrder2.mockImplementation(() => { return { limit: mockLimit } });
+
+      (supabaseAdmin.rpc as any).mockResolvedValue({
+        data: {
+          outcome: 'created',
+          session: {
+            id: '11111111-1111-4111-8111-111111111111',
+            status: 'WAITING_FOR_ASTROLOGER',
+          },
+        },
+        error: null,
+      });
+
+      const res = await request(app)
+        .post('/api/v1/consultations')
+        .set('Authorization', token)
+        .send({
+          astrologerId: '11111111-1111-1111-1111-111111111111',
+        });
+
+      expect(res.status).toBe(201);
+      expect(supabaseAdmin.rpc).toHaveBeenCalledWith('create_consultation_session', {
+        p_user_id: '22222222-2222-4222-8222-222222222222',
+        p_astrologer_id: '11111111-1111-1111-1111-111111111111',
+        p_kundli_profile_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', // auto-resolved from mock
+      });
+    });
+
+    it('PATCH /api/v1/consultations/:id/kundli-profile rejects terminal sessions', async () => {
+      const token = mockValidToken();
+      
+      const mockSelect = vi.fn().mockReturnThis();
+      const mockEq = vi.fn().mockReturnThis();
+      const mockSingle = vi.fn().mockResolvedValue({ 
+        data: { user_id: '22222222-2222-4222-8222-222222222222', status: 'ENDED' }, 
+        error: null 
+      });
+      
+      (supabaseAdmin.from as any).mockReturnValue({
+        select: mockSelect,
+        eq: mockEq,
+        single: mockSingle
+      });
+
+      const res = await request(app)
+        .patch('/api/v1/consultations/11111111-1111-4111-8111-111111111111/kundli-profile')
+        .set('Authorization', token)
+        .send({ kundliProfileId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' });
+
+      expect(res.status).toBe(403);
+      expect(res.body.message).toMatch(/Cannot switch profile/);
+    });
+
+    it('PATCH /api/v1/consultations/:id/kundli-profile rejects unowned profiles', async () => {
+      const token = mockValidToken();
+      
+      const mockSelect = vi.fn().mockReturnThis();
+      const mockEq = vi.fn().mockReturnThis();
+      const mockSingle = vi.fn()
+        .mockResolvedValueOnce({ 
+          data: { user_id: '22222222-2222-4222-8222-222222222222', status: 'ACTIVE' }, 
+          error: null 
+        })
+        .mockResolvedValueOnce({
+          data: null, // Profile not found / unowned
+          error: { message: 'not found' }
+        });
+      
+      (supabaseAdmin.from as any).mockReturnValue({
+        select: mockSelect,
+        eq: mockEq,
+        single: mockSingle
+      });
+
+      const res = await request(app)
+        .patch('/api/v1/consultations/11111111-1111-4111-8111-111111111111/kundli-profile')
+        .set('Authorization', token)
+        .send({ kundliProfileId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' });
+
+      expect(res.status).toBe(403);
+      expect(res.body.message).toMatch(/Profile not found or not owned/);
+    });
+
+    it('PATCH /api/v1/consultations/:id/kundli-profile allows valid updates in ACTIVE state', async () => {
+      const token = mockValidToken();
+      
+      const mockSelect = vi.fn().mockReturnThis();
+      const mockEq = vi.fn().mockReturnThis();
+      const mockIn = vi.fn().mockReturnThis();
+      const mockUpdate = vi.fn().mockReturnThis();
+      
+      const mockSingle = vi.fn()
+        .mockResolvedValueOnce({ 
+          data: { user_id: '22222222-2222-4222-8222-222222222222', status: 'ACTIVE' }, 
+          error: null 
+        })
+        .mockResolvedValueOnce({
+          data: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }, 
+          error: null 
+        })
+        .mockResolvedValueOnce({
+          data: { id: '11111111-1111-4111-8111-111111111111', status: 'ACTIVE', kundli_profile_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+          error: null
+        });
+      
+      (supabaseAdmin.from as any).mockReturnValue({
+        select: mockSelect,
+        eq: mockEq,
+        in: mockIn,
+        update: mockUpdate,
+        single: mockSingle
+      });
+
+      const res = await request(app)
+        .patch('/api/v1/consultations/11111111-1111-4111-8111-111111111111/kundli-profile')
+        .set('Authorization', token)
+        .send({ kundliProfileId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' });
+
+      expect(res.status).toBe(200);
+      expect(mockUpdate).toHaveBeenCalledWith({ kundli_profile_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' });
     });
   });
 });
