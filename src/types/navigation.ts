@@ -74,4 +74,6 @@ export interface ConsultationNavParams {
 export interface KundliProfileFormNavParams extends ConsultationNavParams {
   /** Which screen opened this form (for header back button label). */
   fromScreen?: Screen;
+  action?: 'create' | 'edit';
+  profileId?: string;
 }

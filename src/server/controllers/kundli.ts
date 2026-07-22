@@ -3,6 +3,7 @@ import { supabaseAdmin, createAuthClient } from '../config/supabase';
 import type { AuthenticatedRequest } from '../types';
 import { ApiError } from '../errors/ApiError';
 import { z } from 'zod';
+import { ApiNinjasLocationResolver } from '../providers/apiNinjasLocationResolver';
 
 const kundliProfileSchema = z.object({
   name: z.string().min(1).max(100),
@@ -88,8 +89,19 @@ export const createKundliProfile = async (
     const userId = req.user!.id;
     const validatedData = kundliProfileSchema.parse(req.body);
 
+    const locationResolver = new ApiNinjasLocationResolver();
+    const location = await locationResolver.resolve({
+      city: validatedData.birth_city,
+      district: validatedData.birth_district,
+      state: validatedData.birth_state,
+      country: 'India',
+    });
+
     const newProfile = {
       ...validatedData,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      timezone: location.timezone,
       owner_id: userId,
     };
 
@@ -135,9 +147,33 @@ export const updateKundliProfile = async (
       throw new ApiError(400, 'No valid fields to update');
     }
 
+    const payloadToUpdate: any = { ...validatedData };
+
+    if (validatedData.birth_city || validatedData.birth_state) {
+      // Need to fetch current profile to get full city/state for resolution if one is missing
+      const { data: currentProfile } = await supabaseAdmin
+        .from('kundli_profiles')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+
+      if (currentProfile) {
+        const locationResolver = new ApiNinjasLocationResolver();
+        const location = await locationResolver.resolve({
+          city: validatedData.birth_city || currentProfile.birth_city,
+          district: validatedData.birth_district || currentProfile.birth_district,
+          state: validatedData.birth_state || currentProfile.birth_state,
+          country: 'India',
+        });
+        payloadToUpdate.latitude = location.latitude;
+        payloadToUpdate.longitude = location.longitude;
+        payloadToUpdate.timezone = location.timezone;
+      }
+    }
+
     const { data, error } = await supabaseAdmin
       .from('kundli_profiles')
-      .update(validatedData)
+      .update(payloadToUpdate)
       .eq('id', id)
       .eq('owner_id', userId)
       .select()

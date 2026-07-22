@@ -7,7 +7,8 @@ export type ProviderErrorCode =
   | 'PROVIDER_TIMEOUT'
   | 'PROVIDER_UNAVAILABLE'
   | 'PROVIDER_BAD_RESPONSE'
-  | 'PROVIDER_NOT_CONFIGURED';
+  | 'PROVIDER_NOT_CONFIGURED'
+  | 'LOCATION_RESOLUTION_FAILED';
 
 const DEFAULT_STATUS_CODES: Record<ProviderErrorCode, number> = {
   PROVIDER_BAD_REQUEST: 400,
@@ -17,6 +18,7 @@ const DEFAULT_STATUS_CODES: Record<ProviderErrorCode, number> = {
   PROVIDER_UNAVAILABLE: 503,
   PROVIDER_BAD_RESPONSE: 502,
   PROVIDER_NOT_CONFIGURED: 503,
+  LOCATION_RESOLUTION_FAILED: 400,
 };
 
 export class ProviderError extends ApiError {

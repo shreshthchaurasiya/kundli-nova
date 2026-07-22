@@ -41,9 +41,13 @@ export const navamshaStandardBirthRequestSchema = z.object({
 // Schema for API Ninjas GET /v1/horoscope response
 export const apiNinjasHoroscopeResponseSchema = z.object({
   date: z.string(),
-  zodiac: z.string(),
+  sign: z.string().optional(),
+  zodiac: z.string().optional(),
   horoscope: z.string().min(1),
-});
+}).transform(data => ({
+  ...data,
+  zodiac: data.zodiac || data.sign || 'unknown',
+}));
 
 // Schema for KundliNovaDailyHoroscope validation
 export const kundliNovaDailyHoroscopeSchema = z.object({

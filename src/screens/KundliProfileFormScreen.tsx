@@ -84,6 +84,9 @@ export default function KundliProfileFormScreen({ onNavigate, routeParams }: Kun
   const astrologerId     = routeParams?.astrologerId;
   const intent           = routeParams?.intent;
 
+  const action = routeParams?.action || 'create';
+  const profileIdToEdit = routeParams?.profileId;
+
   // ── Form state ───────────────────────────────────────────────────────────────
   const [name,     setName]     = useState('');
   const [gender,   setGender]   = useState('');
@@ -96,6 +99,27 @@ export default function KundliProfileFormScreen({ onNavigate, routeParams }: Kun
 
   const [saving,    setSaving]    = useState(false);
   const [error,     setError]     = useState('');
+  const [initialLoading, setInitialLoading] = useState(action === 'edit');
+
+  React.useEffect(() => {
+    if (action === 'edit' && profileIdToEdit) {
+      kundliProfileRepository.getProfileById(profileIdToEdit).then(p => {
+        if (p) {
+          setName(p.name || '');
+          setRelation(p.relation || 'self');
+          if (p.birthDetails) {
+            setGender(p.birthDetails.gender || '');
+            setDob(p.birthDetails.dob || '');
+            setTob(p.birthDetails.tob || '');
+            setState(p.birthDetails.state || '');
+            setDistrict(p.birthDetails.district || '');
+            setCity(p.birthDetails.city || '');
+          }
+        }
+        setInitialLoading(false);
+      }).catch(() => setInitialLoading(false));
+    }
+  }, [action, profileIdToEdit]);
 
   // ── State picker sheet ───────────────────────────────────────────────────────
   const [showStatePicker, setShowStatePicker] = useState(false);
@@ -134,7 +158,7 @@ export default function KundliProfileFormScreen({ onNavigate, routeParams }: Kun
     setError('');
 
     try {
-      await kundliProfileRepository.createProfile({
+      const payload = {
         name:      trimmed.name,
         gender:    trimmed.gender as any,
         relation:  trimmed.relation as any,
@@ -144,7 +168,13 @@ export default function KundliProfileFormScreen({ onNavigate, routeParams }: Kun
               birth_state: trimmed.birth_state,
               birth_district: trimmed.birth_district,
               birth_city: trimmed.birth_city } as any),
-      });
+      };
+
+      if (action === 'edit' && profileIdToEdit) {
+        await kundliProfileRepository.updateProfile(profileIdToEdit, payload);
+      } else {
+        await kundliProfileRepository.createProfile(payload);
+      }
 
       // Return to the originating screen (consultation-chat or profile)
       // and carry the consultation context so astrologerId is not lost.
