@@ -53,6 +53,23 @@ export const navamshaPlanetsResponseSchema = z.object({
   }).passthrough(),
 });
 
+const ashtakootFactorSchema = z.object({
+  score: z.number(),
+  maximum: z.number(),
+  source_rule: z.string().optional(),
+}).passthrough();
+
+export const navamshaCompatibilityResponseSchema = z.object({
+  statusCode: z.number().optional(),
+  output: z.object({
+    total_score: z.number().optional(),
+    effective_total_score: z.number().optional(),
+    maximum_score: z.number(),
+    breakdown: z.record(z.string(), ashtakootFactorSchema).optional(),
+    effective_breakdown: z.record(z.string(), z.union([ashtakootFactorSchema, z.number()])).optional()
+  }).passthrough()
+});
+
 export interface NavamshaProviderConfig {
   apiKey?: string;
   baseUrl?: string;
@@ -98,21 +115,15 @@ export class NavamshaProvider implements AstrologyCalculationProvider {
     return { apiKey, baseUrl };
   }
 
-  public async getNatalChart(input: KundliNovaCalcInput): Promise<KundliNovaNatalChart> {
-    // 1. Check API configuration
-    const { apiKey, baseUrl } = this.getProviderConfig();
-
-    // 2. Validate input strictly against Zod schema
+  private buildStandardBirthRequest(input: KundliNovaCalcInput) {
     const parsedInput = kundliNovaCalcInputSchema.parse(input);
 
-    // 3. Compute numeric UTC offset from IANA timezone string
     const utcOffset = getUTCOffsetHours(
       parsedInput.timezone,
       parsedInput.dateOfBirth,
       parsedInput.timeOfBirth
     );
 
-    // 4. Construct Navamsha StandardBirthRequest payload
     const [yearStr, monthStr, dateStr] = parsedInput.dateOfBirth.split('-');
     const [hoursStr, minutesStr, secondsStr] = parsedInput.timeOfBirth.split(':');
 
@@ -134,9 +145,18 @@ export class NavamshaProvider implements AstrologyCalculationProvider {
       },
     };
 
-    const validatedPayload = navamshaStandardBirthRequestSchema.parse(rawPayload);
+    return navamshaStandardBirthRequestSchema.parse(rawPayload);
+  }
 
-    // 5. Execute HTTP Request with AbortController timeout
+  public async getNatalChart(input: KundliNovaCalcInput): Promise<KundliNovaNatalChart> {
+    // 1. Check API configuration
+    const { apiKey, baseUrl } = this.getProviderConfig();
+
+    // 2. Validate input and construct Navamsha StandardBirthRequest payload
+    const parsedInput = kundliNovaCalcInputSchema.parse(input);
+    const validatedPayload = this.buildStandardBirthRequest(input);
+
+    // 3. Execute HTTP Request with AbortController timeout
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
 
@@ -409,12 +429,131 @@ export class NavamshaProvider implements AstrologyCalculationProvider {
     throw new Error('Method getMatching not implemented in Stage 2.');
   }
 
-  public async getCompatibilityAnalysis(_inputA: KundliNovaCalcInput, _inputB: KundliNovaCalcInput): Promise<import('../types/astrologyProvider').KundliNovaCompatibilityAnalysis> {
-    throw new ProviderError(
-      'navamsha',
-      'PROVIDER_NOT_CONFIGURED',
-      'Navamsha Compatibility analysis endpoint is not verified/configured yet.'
-    );
+  public async getCompatibilityAnalysis(inputA: KundliNovaCalcInput, inputB: KundliNovaCalcInput): Promise<import('../types/astrologyProvider').KundliNovaCompatibilityAnalysis> {
+    const { apiKey, baseUrl } = this.getProviderConfig();
+
+    const bridePayload = this.buildStandardBirthRequest(inputA);
+    const groomPayload = this.buildStandardBirthRequest(inputB);
+
+    const requestPayload = {
+      bride: bridePayload,
+      groom: groomPayload
+    };
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
+
+    let response: Response;
+    try {
+      response = await fetch(`${baseUrl}/api/v1/compatibility/ashtakoot/detailed`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(requestPayload),
+        signal: controller.signal,
+      });
+    } catch (err: any) {
+      if (err.name === 'AbortError' || err.message?.includes('aborted')) {
+        throw new ProviderError(
+          'navamsha',
+          'PROVIDER_TIMEOUT',
+          `Request timed out after ${this.timeoutMs}ms`,
+          504
+        );
+      }
+      throw new ProviderError(
+        'navamsha',
+        'PROVIDER_UNAVAILABLE',
+        `Network error: ${err.message || 'Failed to reach Navamsha API'}`,
+        503
+      );
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    if (!response.ok) {
+      const status = response.status;
+      if (status === 401 || status === 403) throw new ProviderError('navamsha', 'PROVIDER_AUTH_ERROR', `Authentication failed with Navamsha API (${status})`, 503);
+      if (status === 408) throw new ProviderError('navamsha', 'PROVIDER_TIMEOUT', 'Navamsha API request timed out', 504);
+      if (status === 429) throw new ProviderError('navamsha', 'PROVIDER_UNAVAILABLE', 'Navamsha API rate limit exceeded', 503);
+      if (status === 422 || status === 400) throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', 'Invalid request payload or validation failed upstream', 502);
+      throw new ProviderError('navamsha', 'PROVIDER_UNAVAILABLE', `Navamsha server error (${status})`, 503);
+    }
+
+    let responseData: unknown;
+    try {
+      responseData = await response.json();
+    } catch {
+      throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', 'Failed to parse Navamsha response JSON', 502);
+    }
+
+    const validatedResponse = navamshaCompatibilityResponseSchema.safeParse(responseData);
+    if (!validatedResponse.success) {
+      throw new ProviderError(
+        'navamsha',
+        'PROVIDER_BAD_RESPONSE',
+        `Navamsha response envelope schema mismatch: ${validatedResponse.error.message}`,
+        502
+      );
+    }
+
+    const out = validatedResponse.data.output;
+    const totalScore = out.effective_total_score ?? out.total_score ?? 0;
+    const maximumScore = out.maximum_score;
+    const percentage = maximumScore > 0 ? (totalScore / maximumScore) * 100 : 0;
+
+    const keys = [
+      { id: 'varna', name: 'Varna' },
+      { id: 'vashya', name: 'Vashya' },
+      { id: 'tara', name: 'Tara' },
+      { id: 'yoni', name: 'Yoni' },
+      { id: 'graha_maitri', name: 'Graha Maitri' },
+      { id: 'gana', name: 'Gana' },
+      { id: 'bhakoot', name: 'Bhakoot' },
+      { id: 'nadi', name: 'Nadi' },
+    ];
+
+    const factors: import('../types/astrologyProvider').AshtakootaFactor[] = keys.map(k => {
+      // Prefer effective_breakdown when it contains the verified factor entries
+      let factorData: any = out.effective_breakdown?.[k.id];
+      // If it's just a number, we still need the source_rule and maximum from breakdown
+      const fallbackData = out.breakdown?.[k.id];
+
+      if (typeof factorData === 'number') {
+        factorData = {
+          score: factorData,
+          maximum: fallbackData?.maximum ?? 0,
+          source_rule: fallbackData?.source_rule
+        };
+      } else if (!factorData && fallbackData) {
+        factorData = fallbackData;
+      }
+
+      return {
+        code: k.id.toUpperCase() as import('../types/astrologyProvider').AshtakootaFactorCode,
+        name: k.name,
+        score: factorData?.score ?? 0,
+        maximumScore: factorData?.maximum ?? 0,
+        summary: factorData?.source_rule || '',
+        calculationStatus: factorData ? 'calculated' : 'unavailable'
+      };
+    });
+
+    return {
+      schemaVersion: '1.0',
+      provider: 'navamsha',
+      providerVersion: 'v1',
+      calculatedAt: new Date().toISOString(),
+      profileAId: inputA.profileId,
+      profileBId: inputB.profileId,
+      totalScore,
+      maximumScore,
+      compatibilityPercentage: parseFloat(percentage.toFixed(2)),
+      factors
+    };
   }
 
   async getDetailedKundliReport(input: KundliNovaCalcInput): Promise<any> {
