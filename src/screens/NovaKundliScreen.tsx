@@ -36,6 +36,7 @@ import { AstrologyApi } from '../services/api/astrologyApi';
 import { KundliNovaNatalChart, KundliNovaDoshaAnalysis, KundliNovaYogaAnalysis, KundliNovaCompatibilityAnalysis } from '../server/types/astrologyProvider';
 import { YogaAnalysisPanel } from '../components/astrology/YogaAnalysisPanel';
 import { CompatibilityPanel } from '../components/astrology/CompatibilityPanel';
+import { DetailedKundliReportPanel } from '../components/astrology/DetailedKundliReportPanel';
 import { KundliProfile } from '../types/kundli';
 import { KundliChart } from '../components/astrology/KundliChart';
 import { ApiError } from '../services/api/apiErrors';
@@ -80,12 +81,17 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
   const [compatibilityErrorState, setCompatibilityErrorState] = useState<{code: string, message: string} | null>(null);
   const [selectedProfileBId, setSelectedProfileBId] = useState<string | null>(null);
 
+  const [detailedReportData, setDetailedReportData] = useState<import('../server/types/astrologyProvider').KundliNovaDetailedReport | null>(null);
+  const [detailedReportLoading, setDetailedReportLoading] = useState(false);
+  const [detailedReportError, setDetailedReportError] = useState<{code: string, message: string} | null>(null);
+
   // Monotonically increasing request ID guard against out-of-order responses
   const activeRequestIdRef = useRef(0);
   const dashaRequestIdRef = useRef(0);
   const doshaRequestIdRef = useRef(0);
   const yogaRequestIdRef = useRef(0);
   const compatibilityRequestIdRef = useRef(0);
+  const detailedReportRequestIdRef = useRef(0);
 
   // Fetch profiles on mount
   useEffect(() => {
@@ -143,7 +149,8 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
     return () => { isMounted = false; };
   }, [selectedProfileId]);
 
-  const [activeTab, setActiveTab] = useState<'charts' | 'planets' | 'dasha' | 'dosha' | 'yoga' | 'compatibility' | 'insights' | 'basic'>('charts');
+  type TabKey = 'charts' | 'planets' | 'dasha' | 'dosha' | 'yoga' | 'compatibility' | 'detailed-report' | 'insights' | 'basic';
+  const [activeTab, setActiveTab] = useState<TabKey>('charts');
 
   // Clear states when profile A switches
   useEffect(() => {
@@ -156,11 +163,12 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
     setApiYogaData(null);
     setYogaErrorState(null);
     setLoadingYoga(false);
-    
-    // Clear compatibility state
     setApiCompatibilityData(null);
     setCompatibilityErrorState(null);
     setLoadingCompatibility(false);
+    setDetailedReportData(null);
+    setDetailedReportError(null);
+    setDetailedReportLoading(false);
     setSelectedProfileBId(null);
   }, [selectedProfileId]);
 
@@ -263,7 +271,40 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
     fetchYoga();
   }, [activeTab, selectedProfileId, apiYogaData, loadingYoga, yogaErrorState]);
 
-  // Lazy fetch Compatibility when tab is active and Profile B is selected
+  // Lazy fetch Detailed Report when tab is active
+  useEffect(() => {
+    if (!selectedProfileId || activeTab !== 'detailed-report' || detailedReportData || detailedReportLoading || detailedReportError) {
+      return;
+    }
+
+    const requestId = ++detailedReportRequestIdRef.current;
+    
+    const fetchDetailedReport = async () => {
+      setDetailedReportLoading(true);
+      setDetailedReportError(null);
+      
+      try {
+        const data = await AstrologyApi.getDetailedKundliReport(selectedProfileId);
+        if (detailedReportRequestIdRef.current === requestId) {
+          setDetailedReportData(data);
+          setDetailedReportLoading(false);
+        }
+      } catch (err: any) {
+        if (detailedReportRequestIdRef.current === requestId) {
+          const apiErr = err as ApiError;
+          setDetailedReportError({
+            code: apiErr.code || 'ERROR',
+            message: apiErr.message || 'Failed to load detailed report'
+          });
+          setDetailedReportLoading(false);
+        }
+      }
+    };
+    
+    fetchDetailedReport();
+  }, [activeTab, selectedProfileId, detailedReportData, detailedReportLoading, detailedReportError]);
+
+  // Lazy fetch Compatibility
   useEffect(() => {
     if (!selectedProfileId || !selectedProfileBId || activeTab !== 'compatibility' || apiCompatibilityData || loadingCompatibility || compatibilityErrorState) {
       return;
@@ -304,7 +345,7 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
   const [zoomScale, setZoomScale] = useState(1);
 
   // Swipeable tabs touch tracking
-  const tabsOrder: ('charts' | 'planets' | 'dasha' | 'dosha' | 'yoga' | 'compatibility' | 'insights' | 'basic')[] = ['charts', 'planets', 'dasha', 'dosha', 'yoga', 'compatibility', 'insights', 'basic'];
+  const tabsOrder: TabKey[] = ['charts', 'planets', 'dasha', 'dosha', 'yoga', 'compatibility', 'detailed-report', 'insights', 'basic'];
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
 
@@ -318,6 +359,7 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
   // PDF modal state
   const [pdfModalState, setPdfModalState] = useState<'idle' | 'generating' | 'ready'>('idle');
   const [pdfUrls, setPdfUrls] = useState<{ blobUrl: string; base64: string } | null>(null);
+
 
   if (loadingKundli) {
     return (
@@ -627,6 +669,7 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
             { id: 'dosha', label: 'Dosha Analysis' },
             { id: 'yoga', label: 'Yoga Analysis' },
             { id: 'compatibility', label: 'Kundli Match' },
+            { id: 'detailed-report', label: 'Detailed Report' },
             { id: 'insights', label: 'Predictions' },
             { id: 'basic', label: 'Basic Details' }
           ].map((tab) => {
@@ -634,7 +677,7 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
+                onClick={() => setActiveTab(tab.id as TabKey)}
                 className={`px-4.5 py-2 rounded-full text-[12.5px] font-[800] transition-all whitespace-nowrap active:scale-[0.97] focus:outline-none ${
                   isActive
                     ? 'bg-[#FF8A00] text-white shadow-[0_3px_10px_rgba(255,138,0,0.25)] border border-[#FF8A00]'
@@ -1112,6 +1155,37 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
                   if (compatibilityRequestIdRef.current === reqId) {
                     setCompatibilityErrorState({ code: err.code || 'ERROR', message: err.message || 'Failed to load compatibility analysis' });
                     setLoadingCompatibility(false);
+                  }
+                });
+            }}
+          />
+        )}
+
+        {/* PANEL: DETAILED REPORT */}
+        {activeTab === 'detailed-report' && (
+          <DetailedKundliReportPanel
+            report={detailedReportData}
+            loading={detailedReportLoading}
+            error={detailedReportError}
+            onRetry={() => {
+              const reqId = ++detailedReportRequestIdRef.current;
+              setDetailedReportError(null);
+              setDetailedReportLoading(true);
+              AstrologyApi.getDetailedKundliReport(selectedProfileId!)
+                .then(res => {
+                  if (detailedReportRequestIdRef.current === reqId) {
+                    setDetailedReportData(res);
+                    setDetailedReportLoading(false);
+                  }
+                })
+                .catch(err => {
+                  if (detailedReportRequestIdRef.current === reqId) {
+                    const apiErr = err as ApiError;
+                    setDetailedReportError({
+                      code: apiErr.code || 'ERROR',
+                      message: apiErr.message || 'Failed to load detailed report'
+                    });
+                    setDetailedReportLoading(false);
                   }
                 });
             }}

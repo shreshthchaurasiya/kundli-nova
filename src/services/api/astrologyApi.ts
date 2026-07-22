@@ -51,6 +51,10 @@ export class AstrologyApi {
   static async getCompatibility(profileAId: string, profileBId: string): Promise<KundliNovaCompatibilityAnalysis> {
     return ApiClient.get<KundliNovaCompatibilityAnalysis>(ENDPOINTS.ASTROLOGY.GET_COMPATIBILITY(profileAId, profileBId));
   }
+
+  static async getDetailedKundliReport(profileId: string): Promise<import('../../server/types/astrologyProvider').KundliNovaDetailedReport> {
+    return ApiClient.get<import('../../server/types/astrologyProvider').KundliNovaDetailedReport>(ENDPOINTS.ASTROLOGY.GET_DETAILED_KUNDLI_REPORT(profileId));
+  }
 }
 
 

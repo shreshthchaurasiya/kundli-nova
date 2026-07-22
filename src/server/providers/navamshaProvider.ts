@@ -398,4 +398,8 @@ export class NavamshaProvider implements AstrologyCalculationProvider {
       'Navamsha Compatibility analysis endpoint is not verified/configured yet.'
     );
   }
+
+  async getDetailedKundliReport(input: KundliNovaCalcInput): Promise<any> {
+    throw new ProviderError('navamsha', 'PROVIDER_NOT_CONFIGURED', 'Detailed Kundli Report calculation is not configured for the Navamsha provider yet.');
+  }
 }

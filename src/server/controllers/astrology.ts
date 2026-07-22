@@ -45,20 +45,21 @@ export const getDailyHoroscope = async (req: Request, res: Response, next: NextF
   }
 };
 
-const handleAstrologyError = (error: any, res: Response, next: NextFunction, feature: 'KUNDLI' | 'DASHA' | 'DOSHA' | 'YOGA' | 'COMPATIBILITY') => {
+const handleAstrologyError = (error: unknown, res: Response, next: NextFunction, feature: 'KUNDLI' | 'DASHA' | 'DOSHA' | 'YOGA' | 'COMPATIBILITY' | 'DETAILED_REPORT') => {
   // Handle expected operational errors thrown by the service
-  if (error && error.statusCode && error.code) {
-    return res.status(error.statusCode).json({
+  const err = error as any;
+  if (err && err.statusCode && err.code) {
+    return res.status(err.statusCode).json({
       status: 'error',
-      code: error.code,
-      message: error.message
+      code: err.code,
+      message: err.message
     });
   }
   
   if (error instanceof ProviderError) {
     let statusCode = 500;
     let code = `${feature}_CALCULATION_FAILED`;
-    let featureName = feature === 'KUNDLI' ? 'Kundli' : feature === 'DASHA' ? 'Dasha' : feature === 'DOSHA' ? 'Dosha analysis' : feature === 'YOGA' ? 'Yoga analysis' : 'Compatibility analysis';
+    let featureName = feature === 'KUNDLI' ? 'Kundli' : feature === 'DASHA' ? 'Dasha' : feature === 'DOSHA' ? 'Dosha analysis' : feature === 'YOGA' ? 'Yoga analysis' : feature === 'COMPATIBILITY' ? 'Compatibility analysis' : 'Detailed report';
     let message = `We could not calculate this ${featureName} right now.`;
 
     if (error.errorCode === 'PROVIDER_NOT_CONFIGURED') {
@@ -181,5 +182,25 @@ export const getCompatibility = async (req: AuthenticatedRequest, res: Response,
     });
   } catch (error: any) {
     handleAstrologyError(error, res, next, 'COMPATIBILITY');
+  }
+};
+
+export const getDetailedKundliReport = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.id;
+    const { profileId } = req.params;
+
+    if (!profileId) {
+      return res.status(400).json({ status: 'error', message: 'Profile ID is required' });
+    }
+
+    const report = await kundliCalculationService.getDetailedKundliReport(profileId, userId);
+
+    return res.status(200).json({
+      status: 'success',
+      data: report,
+    });
+  } catch (error: any) {
+    handleAstrologyError(error, res, next, 'DETAILED_REPORT');
   }
 };

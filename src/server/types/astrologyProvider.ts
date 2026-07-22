@@ -278,6 +278,146 @@ export interface AstrologyCalculationProvider {
   getPanchang(input: KundliNovaCalcInput, date?: string): Promise<KundliNovaPanchang>;
   getMatching(bride: KundliNovaCalcInput, groom: KundliNovaCalcInput): Promise<KundliNovaMatchResult>;
   getCompatibilityAnalysis(inputA: KundliNovaCalcInput, inputB: KundliNovaCalcInput): Promise<KundliNovaCompatibilityAnalysis>;
+  getDetailedKundliReport(input: KundliNovaCalcInput): Promise<KundliNovaDetailedReport>;
+}
+
+export type DetailedReportSectionCode =
+  | 'BIRTH_SUMMARY'
+  | 'ASCENDANT'
+  | 'PLANETARY_POSITIONS'
+  | 'HOUSE_ANALYSIS'
+  | 'NAKSHATRA_ANALYSIS'
+  | 'DASHA_SUMMARY'
+  | 'DOSHA_SUMMARY'
+  | 'YOGA_SUMMARY';
+
+export interface DetailedBirthSummarySection {
+  profileName: string;
+  dateOfBirth: string;
+  timeOfBirth: string;
+  placeOfBirth: string;
+  latitude: number | null;
+  longitude: number | null;
+  timezone: string | null;
+}
+
+export interface DetailedAscendantSection {
+  sign: string;
+  degree: number | null;
+  nakshatra: string | null;
+  pada: number | null;
+  summary: string | null;
+  calculationStatus: 'calculated' | 'unavailable';
+}
+
+export interface DetailedPlanetPosition {
+  planet: string;
+  sign: string | null;
+  house: number | null;
+  degree: number | null;
+  nakshatra: string | null;
+  pada: number | null;
+  retrograde: boolean | null;
+  combust: boolean | null;
+  calculationStatus: 'calculated' | 'unavailable';
+}
+
+export interface DetailedPlanetaryPositionsSection {
+  planets: DetailedPlanetPosition[];
+}
+
+export interface DetailedHouseItem {
+  houseNumber: number;
+  sign: string | null;
+  lord: string | null;
+  occupants: string[];
+  summary: string | null;
+  calculationStatus: 'calculated' | 'unavailable';
+}
+
+export interface DetailedHouseAnalysisSection {
+  houses: DetailedHouseItem[];
+}
+
+export interface DetailedNakshatraSection {
+  moonNakshatra: string | null;
+  moonPada: number | null;
+  nakshatraLord: string | null;
+  deity: string | null;
+  gana: string | null;
+  symbol: string | null;
+  summary: string | null;
+  calculationStatus: 'calculated' | 'unavailable';
+}
+
+export interface DetailedDashaSummarySection {
+  currentMahadasha: string | null;
+  currentAntardasha: string | null;
+  mahadashaStartDate: string | null;
+  mahadashaEndDate: string | null;
+  calculationStatus: 'calculated' | 'unavailable';
+}
+
+export interface DetailedDoshaSummaryItem {
+  code:
+    | 'MANGAL_DOSHA'
+    | 'KAAL_SARP_DOSHA'
+    | 'PITRU_DOSHA'
+    | 'GRAHAN_DOSHA';
+
+  present: boolean | null;
+  severity: string | null;
+  summary: string | null;
+  calculationStatus: 'calculated' | 'unavailable';
+}
+
+export interface DetailedDoshaSummarySection {
+  doshas: DetailedDoshaSummaryItem[];
+}
+
+export interface DetailedYogaSummaryItem {
+  code:
+    | 'GAJ_KESARI_YOGA'
+    | 'BUDHA_ADITYA_YOGA'
+    | 'DHAN_YOGA'
+    | 'RAJ_YOGA'
+    | 'NEECH_BHANG_RAJ_YOGA';
+
+  present: boolean | null;
+  strength: string | null;
+  summary: string | null;
+  calculationStatus: 'calculated' | 'unavailable';
+}
+
+export interface DetailedYogaSummarySection {
+  yogas: DetailedYogaSummaryItem[];
+}
+
+export interface KundliNovaDetailedReport {
+  schemaVersion: '1.0';
+
+  provider: string;
+  providerVersion: string;
+  calculatedAt: string;
+
+  profileId: string;
+
+  reportStatus:
+    | 'complete'
+    | 'partial'
+    | 'unavailable';
+
+  availableSections: DetailedReportSectionCode[];
+  unavailableSections: DetailedReportSectionCode[];
+
+  birthSummary: DetailedBirthSummarySection | null;
+  ascendant: DetailedAscendantSection | null;
+  planetaryPositions: DetailedPlanetaryPositionsSection | null;
+  houseAnalysis: DetailedHouseAnalysisSection | null;
+  nakshatraAnalysis: DetailedNakshatraSection | null;
+  dashaSummary: DetailedDashaSummarySection | null;
+  doshaSummary: DetailedDoshaSummarySection | null;
+  yogaSummary: DetailedYogaSummarySection | null;
 }
 
 export interface HoroscopeContentProvider {

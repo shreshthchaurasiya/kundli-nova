@@ -18,6 +18,9 @@ export class KundliCalculationService {
   
   private compatibilityCache = new Map<string, import('../types/astrologyProvider').KundliNovaCompatibilityAnalysis>();
   private compatibilityInflight = new Map<string, Promise<import('../types/astrologyProvider').KundliNovaCompatibilityAnalysis>>();
+
+  private detailedReportCache = new Map<string, import('../types/astrologyProvider').KundliNovaDetailedReport>();
+  private detailedReportInflight = new Map<string, Promise<import('../types/astrologyProvider').KundliNovaDetailedReport>>();
   
   constructor(private provider: AstrologyCalculationProvider) {}
 
@@ -229,6 +232,73 @@ export class KundliCalculationService {
       .finally(() => this.compatibilityInflight.delete(cacheKey));
 
     this.compatibilityInflight.set(cacheKey, promise);
+    return promise;
+  }
+
+  public async getDetailedKundliReport(profileId: string, userId: string): Promise<import('../types/astrologyProvider').KundliNovaDetailedReport> {
+    const input = await this.loadAuthorizedCalculationInput(profileId, userId);
+    const fingerprint = this.createFingerprint(input);
+    const cacheKey = `detailed:navamsha:v1:${profileId}:${fingerprint}`;
+
+    if (this.detailedReportCache.has(cacheKey)) return this.detailedReportCache.get(cacheKey)!;
+    if (this.detailedReportInflight.has(cacheKey)) return this.detailedReportInflight.get(cacheKey)!;
+
+    const promise = this.provider.getDetailedKundliReport(input)
+      .then(result => {
+        if (!result || !result.availableSections || !result.unavailableSections) {
+          throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', 'Invalid detailed report response structure');
+        }
+
+        const allCodes: import('../types/astrologyProvider').DetailedReportSectionCode[] = ['BIRTH_SUMMARY', 'ASCENDANT', 'PLANETARY_POSITIONS', 'HOUSE_ANALYSIS', 'NAKSHATRA_ANALYSIS', 'DASHA_SUMMARY', 'DOSHA_SUMMARY', 'YOGA_SUMMARY'];
+        
+        // Validation: sections do not overlap and cover exactly all codes (or just check exactly 8 mutually exclusive)
+        const totalCount = result.availableSections.length + result.unavailableSections.length;
+        if (totalCount !== 8) {
+           throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', 'Report must account for exactly 8 sections');
+        }
+
+        const sectionSet = new Set([...result.availableSections, ...result.unavailableSections]);
+        if (sectionSet.size !== 8) {
+           throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', 'Report sections must not overlap and must contain exactly 8 unique sections');
+        }
+        
+        for (const code of allCodes) {
+          if (!sectionSet.has(code)) {
+            throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', `Missing section code in arrays: ${code}`);
+          }
+        }
+
+        // Validate reportStatus logic
+        if (result.availableSections.length === 8 && result.reportStatus !== 'complete') {
+          throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', 'Status must be complete if all sections are available');
+        }
+        if (result.availableSections.length === 0 && result.reportStatus !== 'unavailable') {
+          throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', 'Status must be unavailable if no sections are available');
+        }
+        if (result.availableSections.length > 0 && result.availableSections.length < 8 && result.reportStatus !== 'partial') {
+          throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', 'Status must be partial if sections are partially available');
+        }
+
+        // Validate house analysis rules if available
+        if (result.houseAnalysis && result.houseAnalysis.houses) {
+          const houseNumbers = new Set();
+          for (const h of result.houseAnalysis.houses) {
+            if (h.houseNumber < 1 || h.houseNumber > 12) {
+              throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', `Invalid house number: ${h.houseNumber}`);
+            }
+            if (houseNumbers.has(h.houseNumber)) {
+              throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', `Duplicate house number: ${h.houseNumber}`);
+            }
+            houseNumbers.add(h.houseNumber);
+          }
+        }
+
+        this.detailedReportCache.set(cacheKey, result);
+        return result;
+      })
+      .finally(() => this.detailedReportInflight.delete(cacheKey));
+
+    this.detailedReportInflight.set(cacheKey, promise);
     return promise;
   }
 }
