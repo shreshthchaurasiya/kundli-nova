@@ -45,7 +45,7 @@ export const getDailyHoroscope = async (req: Request, res: Response, next: NextF
   }
 };
 
-const handleAstrologyError = (error: any, res: Response, next: NextFunction, feature: 'KUNDLI' | 'DASHA') => {
+const handleAstrologyError = (error: any, res: Response, next: NextFunction, feature: 'KUNDLI' | 'DASHA' | 'DOSHA') => {
   // Handle expected operational errors thrown by the service
   if (error && error.statusCode && error.code) {
     return res.status(error.statusCode).json({
@@ -58,20 +58,20 @@ const handleAstrologyError = (error: any, res: Response, next: NextFunction, fea
   if (error instanceof ProviderError) {
     let statusCode = 500;
     let code = `${feature}_CALCULATION_FAILED`;
-    let message = `We could not calculate this ${feature === 'KUNDLI' ? 'Kundli' : 'Dasha'} right now.`;
+    let message = `We could not calculate this ${feature === 'KUNDLI' ? 'Kundli' : feature === 'DASHA' ? 'Dasha' : 'Dosha analysis'} right now.`;
 
     if (error.errorCode === 'PROVIDER_NOT_CONFIGURED') {
       statusCode = 503;
       code = `${feature}_SERVICE_NOT_CONFIGURED`;
-      message = `${feature === 'KUNDLI' ? 'Kundli' : 'Dasha'} calculation service is not configured yet.`;
+      message = `${feature === 'KUNDLI' ? 'Kundli' : feature === 'DASHA' ? 'Dasha' : 'Dosha analysis'} calculation service is not configured yet.`;
     } else if (['PROVIDER_TIMEOUT', 'PROVIDER_RATE_LIMITED', 'PROVIDER_UNAVAILABLE'].includes(error.errorCode)) {
       statusCode = 503;
       code = `${feature}_TEMPORARILY_UNAVAILABLE`;
-      message = `${feature === 'KUNDLI' ? 'Kundli' : 'Dasha'} calculation is temporarily unavailable. Please try again shortly.`;
+      message = `${feature === 'KUNDLI' ? 'Kundli' : feature === 'DASHA' ? 'Dasha' : 'Dosha analysis'} calculation is temporarily unavailable. Please try again shortly.`;
     } else if (error.errorCode === 'PROVIDER_BAD_RESPONSE') {
       statusCode = 502;
       code = `${feature}_CALCULATION_FAILED`;
-      message = `We could not calculate this ${feature === 'KUNDLI' ? 'Kundli' : 'Dasha'} right now.`;
+      message = `We could not calculate this ${feature === 'KUNDLI' ? 'Kundli' : feature === 'DASHA' ? 'Dasha' : 'Dosha analysis'} right now.`;
     }
 
     return res.status(statusCode).json({
@@ -120,5 +120,25 @@ export const getDasha = async (req: AuthenticatedRequest, res: Response, next: N
     });
   } catch (error: any) {
     handleAstrologyError(error, res, next, 'DASHA');
+  }
+};
+
+export const getDosha = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.id;
+    const { profileId } = req.params;
+
+    if (!profileId) {
+      return res.status(400).json({ status: 'error', message: 'Profile ID is required' });
+    }
+
+    const dosha = await kundliCalculationService.getDoshaAnalysis(profileId, userId);
+
+    return res.status(200).json({
+      status: 'success',
+      data: dosha,
+    });
+  } catch (error: any) {
+    handleAstrologyError(error, res, next, 'DOSHA');
   }
 };

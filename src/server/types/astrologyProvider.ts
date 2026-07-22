@@ -83,7 +83,7 @@ export interface KundliNovaVimshottariDasha {
   mahadashaTimeline: DashaPeriod[];
 }
 
-export interface KundliNovaDoshaResult {
+export interface LegacyKundliNovaDoshaResult {
   schemaVersion: '1.0';
   provider: string;
   mangalDosha: {
@@ -101,6 +101,45 @@ export interface KundliNovaDoshaResult {
     phase?: string;
     description: string;
   };
+}
+
+export type DoshaCode =
+  | 'MANGAL_DOSHA'
+  | 'KAAL_SARP_DOSHA'
+  | 'PITRU_DOSHA'
+  | 'GRAHAN_DOSHA';
+
+export type DoshaSeverity =
+  | 'none'
+  | 'mild'
+  | 'moderate'
+  | 'strong'
+  | 'unknown';
+
+export interface DoshaEvidence {
+  planets: string[];
+  houses: number[];
+  signs?: string[];
+  description?: string;
+}
+
+export interface KundliNovaDoshaResult {
+  code: DoshaCode;
+  name: string;
+  detected: boolean;
+  severity: DoshaSeverity;
+  summary: string;
+  evidence: DoshaEvidence[];
+  calculationStatus: 'calculated' | 'unavailable';
+}
+
+export interface KundliNovaDoshaAnalysis {
+  schemaVersion: '1.0';
+  provider: string;
+  providerVersion: string;
+  calculatedAt: string;
+  profileId: string;
+  results: KundliNovaDoshaResult[];
 }
 
 export interface KundliNovaYogaResult {
@@ -159,7 +198,8 @@ export interface AstrologyCalculationProvider {
   getNatalChart(input: KundliNovaCalcInput): Promise<KundliNovaNatalChart>;
   getPlanets(input: KundliNovaCalcInput): Promise<PlanetData[]>;
   getVimshottariDasha(input: KundliNovaCalcInput): Promise<KundliNovaVimshottariDasha>;
-  getDoshas(input: KundliNovaCalcInput): Promise<KundliNovaDoshaResult>;
+  getDoshas(input: KundliNovaCalcInput): Promise<LegacyKundliNovaDoshaResult>;
+  getDoshaAnalysis(input: KundliNovaCalcInput): Promise<KundliNovaDoshaAnalysis>;
   getYogas(input: KundliNovaCalcInput): Promise<KundliNovaYogaResult>;
   getPanchang(input: KundliNovaCalcInput, date?: string): Promise<KundliNovaPanchang>;
   getMatching(bride: KundliNovaCalcInput, groom: KundliNovaCalcInput): Promise<KundliNovaMatchResult>;

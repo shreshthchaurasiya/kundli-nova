@@ -33,7 +33,7 @@ import { generateKundli } from '../services/kundliService';
 import { generateKundliPdf } from '../services/kundliPdfService';
 import { postAiRequest } from '../services/aiClient';
 import { AstrologyApi } from '../services/api/astrologyApi';
-import { KundliNovaNatalChart } from '../server/types/astrologyProvider';
+import { KundliNovaNatalChart, KundliNovaDoshaAnalysis } from '../server/types/astrologyProvider';
 import { KundliProfile } from '../types/kundli';
 import { KundliChart } from '../components/astrology/KundliChart';
 import { ApiError } from '../services/api/apiErrors';
@@ -57,6 +57,7 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
   // New API Data
   const [apiChartData, setApiChartData] = useState<KundliNovaNatalChart | null>(null);
   const [apiDashaData, setApiDashaData] = useState<import('../server/types/astrologyProvider').KundliNovaVimshottariDasha | null>(null);
+  const [apiDoshaData, setApiDoshaData] = useState<KundliNovaDoshaAnalysis | null>(null);
   
   // States
   const [loadingKundli, setLoadingKundli] = useState(true);
@@ -65,9 +66,13 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
   const [loadingDasha, setLoadingDasha] = useState(false);
   const [dashaErrorState, setDashaErrorState] = useState<{code: string, message: string} | null>(null);
 
+  const [loadingDosha, setLoadingDosha] = useState(false);
+  const [doshaErrorState, setDoshaErrorState] = useState<{code: string, message: string} | null>(null);
+
   // Monotonically increasing request ID guard against out-of-order responses
   const activeRequestIdRef = useRef(0);
   const dashaRequestIdRef = useRef(0);
+  const doshaRequestIdRef = useRef(0);
 
   // Fetch profiles on mount
   useEffect(() => {
@@ -125,13 +130,16 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
     return () => { isMounted = false; };
   }, [selectedProfileId]);
 
-  const [activeTab, setActiveTab] = useState<'charts' | 'planets' | 'dasha' | 'insights' | 'basic'>('charts');
+  const [activeTab, setActiveTab] = useState<'charts' | 'planets' | 'dasha' | 'dosha' | 'insights' | 'basic'>('charts');
 
   // Clear Dasha state when profile switches
   useEffect(() => {
     setApiDashaData(null);
     setDashaErrorState(null);
     setLoadingDasha(false);
+    setApiDoshaData(null);
+    setDoshaErrorState(null);
+    setLoadingDosha(false);
   }, [selectedProfileId]);
 
   // Lazy fetch Dasha when tab is active
@@ -166,6 +174,40 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
     
     fetchDasha();
   }, [activeTab, selectedProfileId, apiDashaData, loadingDasha, dashaErrorState]);
+
+  // Lazy fetch Dosha when tab is active
+  useEffect(() => {
+    if (!selectedProfileId || activeTab !== 'dosha' || apiDoshaData || loadingDosha || doshaErrorState) {
+      return;
+    }
+
+    const requestId = ++doshaRequestIdRef.current;
+    
+    const fetchDosha = async () => {
+      setLoadingDosha(true);
+      setDoshaErrorState(null);
+      
+      try {
+        const dosha = await AstrologyApi.getDoshaAnalysis(selectedProfileId);
+        if (doshaRequestIdRef.current === requestId) {
+          setApiDoshaData(dosha);
+          setLoadingDosha(false);
+        }
+      } catch (err: any) {
+        if (doshaRequestIdRef.current === requestId) {
+          const apiErr = err as ApiError;
+          setDoshaErrorState({
+            code: apiErr.code || 'ERROR',
+            message: apiErr.message || 'Failed to load Dosha analysis'
+          });
+          setLoadingDosha(false);
+        }
+      }
+    };
+    
+    fetchDosha();
+  }, [activeTab, selectedProfileId, apiDoshaData, loadingDosha, doshaErrorState]);
+
   // Accordion active house
   const [activeAccordionHouse, setActiveAccordionHouse] = useState<number>(1);
 
@@ -174,7 +216,7 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
   const [zoomScale, setZoomScale] = useState(1);
 
   // Swipeable tabs touch tracking
-  const tabsOrder: ('charts' | 'planets' | 'dasha' | 'insights' | 'basic')[] = ['charts', 'planets', 'dasha', 'insights', 'basic'];
+  const tabsOrder: ('charts' | 'planets' | 'dasha' | 'dosha' | 'insights' | 'basic')[] = ['charts', 'planets', 'dasha', 'dosha', 'insights', 'basic'];
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
 
@@ -494,6 +536,7 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
             { id: 'charts', label: 'Lagna Chart' },
             { id: 'planets', label: 'Planets Degrees' },
             { id: 'dasha', label: 'Vimshottari Dasha' },
+            { id: 'dosha', label: 'Dosha Analysis' },
             { id: 'insights', label: 'Predictions' },
             { id: 'basic', label: 'Basic Details' }
           ].map((tab) => {
@@ -808,6 +851,115 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
                   </div>
                 </div>
               </>
+            ) : null}
+          </div>
+        )}
+
+        {/* PANEL: DOSHA */}
+        {activeTab === 'dosha' && (
+          <div className="space-y-4 animate-fadeIn">
+            <div className="text-center max-w-xs mx-auto mb-1">
+              <span className="text-[#FF8A00] text-[10.5px] font-[850] uppercase tracking-wider block">Vedic Dosha Check</span>
+              <h3 className="text-[17px] font-[850] text-[#111827] tracking-tight mt-0.5">Dosha Analysis</h3>
+              <p className="text-[11.5px] text-neutral-400 font-semibold leading-relaxed mt-1">Factual assessment of planetary Dosha configurations in your birth chart.</p>
+            </div>
+
+            {loadingDosha ? (
+              <div className="flex flex-col items-center justify-center py-10 space-y-3">
+                <div className="w-8 h-8 border-4 border-[#FF8A00]/20 border-t-[#FF8A00] rounded-full animate-spin" />
+                <span className="text-[12.5px] text-neutral-500 font-bold">Analyzing Dosha configurations...</span>
+              </div>
+            ) : doshaErrorState ? (
+              <div className="bg-[#FEF2F2] border-2 border-[#FECACA] rounded-2xl p-4.5 text-center flex flex-col items-center shadow-[0_4px_16px_rgba(239,68,68,0.03)]">
+                <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center mb-3">
+                  <span className="text-red-500 font-bold">!</span>
+                </div>
+                <h4 className="text-[14px] font-[900] text-[#111827] mb-1">Analysis Failed</h4>
+                <p className="text-[12.5px] text-neutral-500 font-semibold leading-relaxed mb-4 max-w-[250px]">
+                  {doshaErrorState.message}
+                </p>
+                <button
+                  onClick={() => {
+                    const reqId = ++doshaRequestIdRef.current;
+                    setDoshaErrorState(null);
+                    setLoadingDosha(true);
+                    AstrologyApi.getDoshaAnalysis(selectedProfileId!)
+                      .then(res => {
+                        if (doshaRequestIdRef.current === reqId) {
+                          setApiDoshaData(res);
+                          setLoadingDosha(false);
+                        }
+                      })
+                      .catch(err => {
+                        if (doshaRequestIdRef.current === reqId) {
+                          setDoshaErrorState({ code: err.code || 'ERROR', message: err.message || 'Failed to load Dosha analysis' });
+                          setLoadingDosha(false);
+                        }
+                      });
+                  }}
+                  className="px-6 py-2 bg-[#111827] hover:bg-[#1F2937] text-white text-[12.5px] font-[850] rounded-full transition-all active:scale-[0.98]"
+                >
+                  Try Again
+                </button>
+              </div>
+            ) : apiDoshaData ? (
+              <div className="space-y-3">
+                {['MANGAL_DOSHA', 'KAAL_SARP_DOSHA', 'PITRU_DOSHA', 'GRAHAN_DOSHA'].map(code => {
+                  const dosha = apiDoshaData.results.find(r => r.code === code);
+                  if (!dosha) return null;
+                  
+                  return (
+                    <div key={dosha.code} className="bg-white border border-[#EBE8E0] rounded-2xl overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.01)]">
+                      <div className="bg-[#FFFDF9] border-b border-[#F5F2EB] px-4 py-3 flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <div className={`w-2.5 h-2.5 rounded-full ${
+                            dosha.calculationStatus === 'unavailable' ? 'bg-neutral-300' :
+                            dosha.detected ? 'bg-amber-400' : 'bg-emerald-400'
+                          }`} />
+                          <span className="text-[12.5px] font-[850] text-[#111827]">{dosha.name}</span>
+                        </div>
+                        <span className={`text-[10px] font-[850] uppercase tracking-widest px-2 py-0.5 rounded-full ${
+                          dosha.calculationStatus === 'unavailable' ? 'bg-neutral-50 text-neutral-500 border border-neutral-200' :
+                          dosha.detected ? 'bg-amber-50 text-amber-600 border border-amber-100' : 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                        }`}>
+                          {dosha.calculationStatus === 'unavailable' ? 'Unavailable' :
+                           dosha.detected ? 'Present' : 'Not Present'}
+                        </span>
+                      </div>
+                      <div className="px-4 py-3">
+                        {dosha.calculationStatus === 'unavailable' ? (
+                          <p className="text-[12px] text-neutral-400 font-semibold italic">Calculation unavailable for this Dosha.</p>
+                        ) : !dosha.detected ? (
+                          <p className="text-[12px] text-neutral-500 font-semibold leading-relaxed">Not detected in the available calculation.</p>
+                        ) : (
+                          <>
+                            {dosha.severity && dosha.severity !== 'unknown' && dosha.severity !== 'none' && (
+                              <p className="text-[11px] text-[#FF8A00] font-bold mb-1 uppercase tracking-wider">Severity: {dosha.severity}</p>
+                            )}
+                            <p className="text-[12px] text-neutral-500 font-semibold leading-relaxed">{dosha.summary}</p>
+                            {dosha.evidence && dosha.evidence.length > 0 && (
+                              <div className="mt-2 space-y-1">
+                                {dosha.evidence.map((ev, idx) => (
+                                  <p key={idx} className="text-[11px] text-neutral-400 font-medium">
+                                    • {ev.description || `Formed by ${ev.planets.join(', ')} in house ${ev.houses.join(', ')}`}
+                                  </p>
+                                ))}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Disclaimer */}
+                <div className="bg-[#FFFDF9] border border-[#F5E6D3] rounded-xl px-4 py-3 mt-2">
+                  <p className="text-[10.5px] text-neutral-400 font-semibold leading-relaxed">
+                    Dosha analysis is derived from planetary positions in the birth chart. This is a factual assessment based on classical Vedic rules, not a prediction. The presence of a Dosha does not imply negative outcomes.
+                  </p>
+                </div>
+              </div>
             ) : null}
           </div>
         )}

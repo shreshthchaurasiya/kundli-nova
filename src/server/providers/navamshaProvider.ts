@@ -345,8 +345,22 @@ export class NavamshaProvider implements AstrologyCalculationProvider {
     );
   }
 
-  public async getDoshas(_input: KundliNovaCalcInput): Promise<KundliNovaDoshaResult> {
-    throw new Error('Method getDoshas not implemented in Stage 2.');
+  public async getDoshas(_input: KundliNovaCalcInput): Promise<import('../types/astrologyProvider').LegacyKundliNovaDoshaResult> {
+    throw new ProviderError(
+      'navamsha',
+      'PROVIDER_NOT_CONFIGURED',
+      'Navamsha Dosha analysis endpoint is not verified/configured yet.',
+      503
+    );
+  }
+
+  public async getDoshaAnalysis(_input: KundliNovaCalcInput): Promise<import('../types/astrologyProvider').KundliNovaDoshaAnalysis> {
+    throw new ProviderError(
+      'navamsha',
+      'PROVIDER_NOT_CONFIGURED',
+      'Navamsha Dosha analysis endpoint is not verified/configured yet.',
+      503
+    );
   }
 
   public async getYogas(_input: KundliNovaCalcInput): Promise<KundliNovaYogaResult> {
