@@ -46,6 +46,9 @@ describe('ConsultationChatScreen', () => {
       id: 's1', status: 'ACTIVE', elapsedSeconds: 0, totalCharged: 0, kundli_profile_id: 'p1'
     });
 
+    (ApiKundliProfileRepository.prototype.getAllProfiles as any).mockResolvedValue([]);
+    (ApiKundliProfileRepository.prototype.ensureSelfProfile as any).mockResolvedValue(null);
+
     (useRealtimeConsultationChat as any).mockReturnValue({
       messages: [],
       sessionStatus: 'ACTIVE',
@@ -62,7 +65,7 @@ describe('ConsultationChatScreen', () => {
     render(<ConsultationChatScreen astrologerId={undefined} onNavigate={onNavigate} />);
 
     await waitFor(() => {
-      expect(screen.getByText(/No astrologer was selected/i)).toBeInTheDocument();
+      expect(onNavigate).toHaveBeenCalledWith('astrologers');
     });
 
     expect(ApiConsultationRepository.prototype.createSession).not.toHaveBeenCalled();

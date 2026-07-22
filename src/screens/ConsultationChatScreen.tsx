@@ -270,6 +270,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
       }
     } finally {
       setIsSubmittingSession(false);
+      inflightSessionRequests.delete(astrologerId);
     }
   };
 

@@ -62,7 +62,7 @@ const handleAstrologyError = (error: unknown, res: Response, next: NextFunction,
     let featureName = feature === 'KUNDLI' ? 'Kundli' : feature === 'DASHA' ? 'Dasha' : feature === 'DOSHA' ? 'Dosha analysis' : feature === 'YOGA' ? 'Yoga analysis' : feature === 'COMPATIBILITY' ? 'Compatibility analysis' : 'Detailed report';
     let message = `We could not calculate this ${featureName} right now.`;
 
-    if (error.errorCode === 'PROVIDER_NOT_CONFIGURED') {
+    if (error.errorCode === 'PROVIDER_NOT_CONFIGURED' || error.errorCode === 'PROVIDER_AUTH_ERROR') {
       statusCode = 503;
       code = `${feature}_SERVICE_NOT_CONFIGURED`;
       message = `${feature === 'YOGA' ? 'Yoga analysis will be available after the astrology service is configured.' : feature === 'COMPATIBILITY' ? 'Compatibility analysis will be available after the astrology service is configured.' : featureName + ' calculation service is not configured yet.'}`;

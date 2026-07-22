@@ -4,11 +4,10 @@ import { getDailyHoroscope, getKundli, getDasha, getDosha, getYoga, getCompatibi
 
 const router = Router();
 
-// Public routes
-router.get('/horoscope/daily', getDailyHoroscope);
-
 // Authenticated routes
 router.use(requireAuth);
+
+router.get('/horoscope/daily', getDailyHoroscope);
 router.get('/kundli/:profileId', getKundli);
 router.get('/dasha/:profileId', getDasha);
 router.get('/dosha/:profileId', getDosha);

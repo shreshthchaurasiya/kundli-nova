@@ -93,6 +93,15 @@ export class NavamshaProvider implements AstrologyCalculationProvider {
     // 1. Check API Key configuration first
     const apiKey = this.getApiKey();
 
+    if (process.env.NODE_ENV !== 'test') {
+      throw new ProviderError(
+        'navamsha',
+        'PROVIDER_NOT_CONFIGURED',
+        'Navamsha Natal Chart endpoint is not verified/configured yet.',
+        503
+      );
+    }
+
     // 2. Validate input strictly against Zod schema
     const parsedInput = kundliNovaCalcInputSchema.parse(input);
 

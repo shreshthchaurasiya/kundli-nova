@@ -100,7 +100,7 @@ describe('Chat Attachments API', () => {
     const res = await request(app)
       .post(`/api/v1/consultations/${mockSessionId}/messages`)
       .send({
-        client_message_id: '00000000-0000-0000-0000-000000000001',
+        client_message_id: '11111111-1111-4111-a111-111111111111',
         message_type: 'image',
         attachment_url: `consultations/${mockSessionId}/test.jpg`
       });
@@ -158,7 +158,7 @@ describe('Chat Attachments API', () => {
     const res = await request(app)
       .post(`/api/v1/consultations/${mockSessionId}/messages`)
       .send({
-        client_message_id: '00000000-0000-0000-0000-000000000001',
+        client_message_id: '11111111-1111-4111-a111-111111111111',
         message_type: 'image',
         attachment_url: `consultations/${mockSessionId}/test.jpg`
       });
@@ -213,7 +213,7 @@ describe('Chat Attachments API', () => {
     const res = await request(app)
       .post(`/api/v1/consultations/${mockSessionId}/messages`)
       .send({
-        client_message_id: '00000000-0000-0000-0000-000000000001',
+        client_message_id: '11111111-1111-4111-a111-111111111111',
         message_type: 'image',
         attachment_url: `consultations/${mockSessionId}/test.jpg`
       });
