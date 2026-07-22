@@ -45,6 +45,44 @@ export const getDailyHoroscope = async (req: Request, res: Response, next: NextF
   }
 };
 
+const handleAstrologyError = (error: any, res: Response, next: NextFunction, feature: 'KUNDLI' | 'DASHA') => {
+  // Handle expected operational errors thrown by the service
+  if (error && error.statusCode && error.code) {
+    return res.status(error.statusCode).json({
+      status: 'error',
+      code: error.code,
+      message: error.message
+    });
+  }
+  
+  if (error instanceof ProviderError) {
+    let statusCode = 500;
+    let code = `${feature}_CALCULATION_FAILED`;
+    let message = `We could not calculate this ${feature === 'KUNDLI' ? 'Kundli' : 'Dasha'} right now.`;
+
+    if (error.errorCode === 'PROVIDER_NOT_CONFIGURED') {
+      statusCode = 503;
+      code = `${feature}_SERVICE_NOT_CONFIGURED`;
+      message = `${feature === 'KUNDLI' ? 'Kundli' : 'Dasha'} calculation service is not configured yet.`;
+    } else if (['PROVIDER_TIMEOUT', 'PROVIDER_RATE_LIMITED', 'PROVIDER_UNAVAILABLE'].includes(error.errorCode)) {
+      statusCode = 503;
+      code = `${feature}_TEMPORARILY_UNAVAILABLE`;
+      message = `${feature === 'KUNDLI' ? 'Kundli' : 'Dasha'} calculation is temporarily unavailable. Please try again shortly.`;
+    } else if (error.errorCode === 'PROVIDER_BAD_RESPONSE') {
+      statusCode = 502;
+      code = `${feature}_CALCULATION_FAILED`;
+      message = `We could not calculate this ${feature === 'KUNDLI' ? 'Kundli' : 'Dasha'} right now.`;
+    }
+
+    return res.status(statusCode).json({
+      status: 'error',
+      code,
+      message,
+    });
+  }
+  next(error);
+};
+
 export const getKundli = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.id;
@@ -54,67 +92,33 @@ export const getKundli = async (req: AuthenticatedRequest, res: Response, next: 
       return res.status(400).json({ status: 'error', message: 'Profile ID is required' });
     }
 
-    // Load profile
-    const { data: profile, error } = await supabaseAdmin
-      .from('kundli_profiles')
-      .select('*')
-      .eq('id', profileId)
-      .maybeSingle();
-
-    if (error) {
-      throw error;
-    }
-
-    if (!profile) {
-      return res.status(404).json({ status: 'error', message: 'Kundli profile not found' });
-    }
-
-    if (profile.owner_id !== userId) {
-      return res.status(403).json({ status: 'error', message: 'Forbidden: Profile belongs to another user' });
-    }
-
-    // Map and Execute Kundli Calculation
-    const kundli = await kundliCalculationService.getKundli(profile);
+    const kundli = await kundliCalculationService.getKundli(profileId, userId);
 
     return res.status(200).json({
       status: 'success',
       data: kundli,
     });
   } catch (error: any) {
-    // Handle INCOMPLETE_BIRTH_DETAILS object
-    if (error && error.statusCode === 400 && error.code) {
-      return res.status(400).json({
-        status: 'error',
-        code: error.code,
-        message: error.message
-      });
-    }
-    
-    if (error instanceof ProviderError) {
-      let statusCode = 500;
-      let code = 'KUNDLI_CALCULATION_FAILED';
-      let message = 'We could not calculate this Kundli right now.';
+    handleAstrologyError(error, res, next, 'KUNDLI');
+  }
+};
 
-      if (error.errorCode === 'PROVIDER_NOT_CONFIGURED') {
-        statusCode = 503;
-        code = 'KUNDLI_SERVICE_NOT_CONFIGURED';
-        message = 'Kundli calculation service is not configured yet.';
-      } else if (['PROVIDER_TIMEOUT', 'PROVIDER_RATE_LIMITED', 'PROVIDER_UNAVAILABLE'].includes(error.errorCode)) {
-        statusCode = 503;
-        code = 'KUNDLI_TEMPORARILY_UNAVAILABLE';
-        message = 'Kundli calculation is temporarily unavailable. Please try again shortly.';
-      } else if (error.errorCode === 'PROVIDER_BAD_RESPONSE') {
-        statusCode = 502;
-        code = 'KUNDLI_CALCULATION_FAILED';
-        message = 'We could not calculate this Kundli right now.';
-      }
+export const getDasha = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.id;
+    const { profileId } = req.params;
 
-      return res.status(statusCode).json({
-        status: 'error',
-        code,
-        message,
-      });
+    if (!profileId) {
+      return res.status(400).json({ status: 'error', message: 'Profile ID is required' });
     }
-    next(error);
+
+    const dasha = await kundliCalculationService.getVimshottariDasha(profileId, userId);
+
+    return res.status(200).json({
+      status: 'success',
+      data: dasha,
+    });
+  } catch (error: any) {
+    handleAstrologyError(error, res, next, 'DASHA');
   }
 };

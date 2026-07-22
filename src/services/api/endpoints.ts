@@ -43,6 +43,7 @@ export const ENDPOINTS = {
   ASTROLOGY: {
     DAILY_HOROSCOPE: (zodiac: string) => `${API_BASE}/astrology/horoscope/daily?zodiac=${zodiac}`,
     GET_KUNDLI: (profileId: string) => `${API_BASE}/astrology/kundli/${profileId}`,
+    GET_DASHA: (profileId: string) => `${API_BASE}/astrology/dasha/${profileId}`,
   }
 };
 

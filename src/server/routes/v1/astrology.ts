@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getDailyHoroscope, getKundli } from '../../controllers/astrology';
+import { getDailyHoroscope, getKundli, getDasha } from '../../controllers/astrology';
 import { requireAuth } from '../../middleware/auth';
 
 const router = Router();
@@ -8,5 +8,6 @@ router.use(requireAuth);
 
 router.get('/horoscope/daily', getDailyHoroscope);
 router.get('/kundli/:profileId', getKundli);
+router.get('/dasha/:profileId', getDasha);
 
 export default router;

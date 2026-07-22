@@ -71,19 +71,22 @@ describe('Kundli Service Stage 5A - Backend Integration', () => {
 
   describe('KundliCalculationService', () => {
     it('throws INCOMPLETE_BIRTH_DETAILS on missing coordinates', async () => {
-      const profile = { id: 'prof123', name: 'Test', dob: '1990-01-01', tob: '12:00' }; // No lat/lng/tz
-      await expect(service.getKundli(profile)).rejects.toMatchObject({ code: 'INCOMPLETE_BIRTH_DETAILS' });
+      const profile = { id: 'prof123', owner_id: 'user123', name: 'Test', dob: '1990-01-01', tob: '12:00' }; // No lat/lng/tz
+      vi.mocked((supabaseAdmin.from as any)().select().eq().maybeSingle).mockResolvedValueOnce({ data: profile, error: null });
+
+      await expect(service.getKundli('prof123', 'user123')).rejects.toMatchObject({ code: 'INCOMPLETE_BIRTH_DETAILS' });
       expect(provider.getNatalChart).not.toHaveBeenCalled();
     });
 
     it('maps profile to KundliNovaCalcInput and returns successful normalized result', async () => {
       const profile = {
-        id: 'prof123', name: 'Test', dob: '1990-01-01', tob: '12:00',
+        id: 'prof123', owner_id: 'user123', name: 'Test', dob: '1990-01-01', tob: '12:00',
         latitude: 28.61, longitude: 77.20, timezone: 'Asia/Kolkata'
       };
+      vi.mocked((supabaseAdmin.from as any)().select().eq().maybeSingle).mockResolvedValueOnce({ data: profile, error: null });
       
       vi.mocked(provider.getNatalChart).mockResolvedValue(mockChart);
-      const res = await service.getKundli(profile);
+      const res = await service.getKundli('prof123', 'user123');
       
       expect(res).toBe(mockChart);
       expect(provider.getNatalChart).toHaveBeenCalledWith({
@@ -99,23 +102,43 @@ describe('Kundli Service Stage 5A - Backend Integration', () => {
 
     it('caches successful responses using fingerprint', async () => {
       const profile = {
-        id: 'prof123', name: 'Test', dob: '1990-01-01', tob: '12:00',
+        id: 'prof123', owner_id: 'user123', name: 'Test', dob: '1990-01-01', tob: '12:00',
         latitude: 28.61, longitude: 77.20, timezone: 'Asia/Kolkata'
       };
       
       vi.mocked(provider.getNatalChart).mockResolvedValue(mockChart);
 
-      const res1 = await service.getKundli(profile);
-      const res2 = await service.getKundli(profile);
+      vi.mocked((supabaseAdmin.from as any)().select().eq().maybeSingle).mockResolvedValue({ data: profile, error: null });
+      
+      await service.getKundli('prof123', 'user123');
+      await service.getKundli('prof123', 'user123');
+      expect(provider.getNatalChart).toHaveBeenCalledTimes(1); // Cached
+    });
 
-      expect(res1).toBe(mockChart);
-      expect(res2).toBe(mockChart);
+    it('single-flights concurrent requests', async () => {
+      const profile = {
+        id: 'prof123', owner_id: 'user123', name: 'Test', dob: '1990-01-01', tob: '12:00',
+        latitude: 28.61, longitude: 77.20, timezone: 'Asia/Kolkata'
+      };
+      
+      // Artificial delay
+      vi.mocked(provider.getNatalChart).mockImplementation(() => 
+        new Promise(resolve => setTimeout(() => resolve(mockChart), 50))
+      );
+
+      vi.mocked((supabaseAdmin.from as any)().select().eq().maybeSingle).mockResolvedValue({ data: profile, error: null });
+
+      const p1 = service.getKundli('prof123', 'user123');
+      const p2 = service.getKundli('prof123', 'user123');
+      
+      await Promise.all([p1, p2]);
+      
       expect(provider.getNatalChart).toHaveBeenCalledTimes(1);
     });
 
     it('changes cache key when DOB or time is edited', async () => {
       const profile1 = {
-        id: 'prof123', name: 'Test', dob: '1990-01-01', tob: '12:00',
+        id: 'prof123', owner_id: 'user123', name: 'Test', dob: '1990-01-01', tob: '12:00',
         latitude: 28.61, longitude: 77.20, timezone: 'Asia/Kolkata'
       };
       const profile2 = { ...profile1, dob: '1990-01-02' };
@@ -125,27 +148,38 @@ describe('Kundli Service Stage 5A - Backend Integration', () => {
       
       vi.mocked(provider.getNatalChart).mockResolvedValue(mockChart);
 
-      await service.getKundli(profile1);
-      await service.getKundli(profile2);
-      await service.getKundli(profile3);
-      await service.getKundli(profile4);
-      await service.getKundli(profile5);
+      const mockSupabase = vi.mocked((supabaseAdmin.from as any)().select().eq().maybeSingle);
+      mockSupabase.mockResolvedValueOnce({ data: profile1, error: null });
+      await service.getKundli('prof123', 'user123');
+      
+      mockSupabase.mockResolvedValueOnce({ data: profile2, error: null });
+      await service.getKundli('prof123', 'user123');
+      
+      mockSupabase.mockResolvedValueOnce({ data: profile3, error: null });
+      await service.getKundli('prof123', 'user123');
+      
+      mockSupabase.mockResolvedValueOnce({ data: profile4, error: null });
+      await service.getKundli('prof123', 'user123');
+      
+      mockSupabase.mockResolvedValueOnce({ data: profile5, error: null });
+      await service.getKundli('prof123', 'user123');
 
       expect(provider.getNatalChart).toHaveBeenCalledTimes(5);
     });
 
     it('single-flight concurrent requests make one provider call', async () => {
       const profile = {
-        id: 'prof123', name: 'Test', dob: '1990-01-01', tob: '12:00',
+        id: 'prof123', owner_id: 'user123', name: 'Test', dob: '1990-01-01', tob: '12:00',
         latitude: 28.61, longitude: 77.20, timezone: 'Asia/Kolkata'
       };
       
       let resolvePromise: any;
       const providerPromise = new Promise<KundliNovaNatalChart>((res) => { resolvePromise = res; });
+      vi.mocked((supabaseAdmin.from as any)().select().eq().maybeSingle).mockResolvedValue({ data: profile, error: null });
       vi.mocked(provider.getNatalChart).mockReturnValue(providerPromise);
 
-      const p1 = service.getKundli(profile);
-      const p2 = service.getKundli(profile);
+      const p1 = service.getKundli('prof123', 'user123');
+      const p2 = service.getKundli('prof123', 'user123');
 
       resolvePromise(mockChart);
 
@@ -156,15 +190,16 @@ describe('Kundli Service Stage 5A - Backend Integration', () => {
     
     it('failed provider request is not cached', async () => {
       const profile = {
-        id: 'prof123', name: 'Test', dob: '1990-01-01', tob: '12:00',
+        id: 'prof123', owner_id: 'user123', name: 'Test', dob: '1990-01-01', tob: '12:00',
         latitude: 28.61, longitude: 77.20, timezone: 'Asia/Kolkata'
       };
       
+      vi.mocked((supabaseAdmin.from as any)().select().eq().maybeSingle).mockResolvedValue({ data: profile, error: null });
       vi.mocked(provider.getNatalChart).mockRejectedValueOnce(new ProviderError('navamsha', 'PROVIDER_TIMEOUT', 'timeout', 504));
       vi.mocked(provider.getNatalChart).mockResolvedValueOnce(mockChart);
 
-      await expect(service.getKundli(profile)).rejects.toThrow();
-      const res = await service.getKundli(profile);
+      await expect(service.getKundli('prof123', 'user123')).rejects.toThrow();
+      const res = await service.getKundli('prof123', 'user123');
       
       expect(res).toBe(mockChart);
       expect(provider.getNatalChart).toHaveBeenCalledTimes(2);
@@ -172,11 +207,12 @@ describe('Kundli Service Stage 5A - Backend Integration', () => {
 
     it('inflight entry is cleared after success', async () => {
       const profile = {
-        id: 'prof123', name: 'Test', dob: '1990-01-01', tob: '12:00',
+        id: 'prof123', owner_id: 'user123', name: 'Test', dob: '1990-01-01', tob: '12:00',
         latitude: 28.61, longitude: 77.20, timezone: 'Asia/Kolkata'
       };
+      vi.mocked((supabaseAdmin.from as any)().select().eq().maybeSingle).mockResolvedValue({ data: profile, error: null });
       vi.mocked(provider.getNatalChart).mockResolvedValue(mockChart);
-      await service.getKundli(profile);
+      await service.getKundli('prof123', 'user123');
       
       // We can't directly check private map, but if we call again it uses cache,
       // not the inflight promise. However we can assume it's cleared if the design relies on it.
@@ -184,14 +220,15 @@ describe('Kundli Service Stage 5A - Backend Integration', () => {
 
     it('inflight entry is cleared after failure', async () => {
       const profile = {
-        id: 'prof123', name: 'Test', dob: '1990-01-01', tob: '12:00',
+        id: 'prof123', owner_id: 'user123', name: 'Test', dob: '1990-01-01', tob: '12:00',
         latitude: 28.61, longitude: 77.20, timezone: 'Asia/Kolkata'
       };
+      vi.mocked((supabaseAdmin.from as any)().select().eq().maybeSingle).mockResolvedValue({ data: profile, error: null });
       vi.mocked(provider.getNatalChart).mockRejectedValueOnce(new Error('fail'));
-      await expect(service.getKundli(profile)).rejects.toThrow();
+      await expect(service.getKundli('prof123', 'user123')).rejects.toThrow();
       
       vi.mocked(provider.getNatalChart).mockResolvedValueOnce(mockChart);
-      await service.getKundli(profile);
+      await service.getKundli('prof123', 'user123');
       // should succeed meaning it tried again instead of returning rejected promise
     });
   });

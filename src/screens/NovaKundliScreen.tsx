@@ -56,13 +56,18 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
 
   // New API Data
   const [apiChartData, setApiChartData] = useState<KundliNovaNatalChart | null>(null);
+  const [apiDashaData, setApiDashaData] = useState<import('../server/types/astrologyProvider').KundliNovaVimshottariDasha | null>(null);
   
   // States
   const [loadingKundli, setLoadingKundli] = useState(true);
   const [errorState, setErrorState] = useState<{code: string, message: string} | null>(null);
+  
+  const [loadingDasha, setLoadingDasha] = useState(false);
+  const [dashaErrorState, setDashaErrorState] = useState<{code: string, message: string} | null>(null);
 
   // Monotonically increasing request ID guard against out-of-order responses
   const activeRequestIdRef = useRef(0);
+  const dashaRequestIdRef = useRef(0);
 
   // Fetch profiles on mount
   useEffect(() => {
@@ -122,6 +127,45 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
 
   const [activeTab, setActiveTab] = useState<'charts' | 'planets' | 'dasha' | 'insights' | 'basic'>('charts');
 
+  // Clear Dasha state when profile switches
+  useEffect(() => {
+    setApiDashaData(null);
+    setDashaErrorState(null);
+    setLoadingDasha(false);
+  }, [selectedProfileId]);
+
+  // Lazy fetch Dasha when tab is active
+  useEffect(() => {
+    if (!selectedProfileId || activeTab !== 'dasha' || apiDashaData || loadingDasha || dashaErrorState) {
+      return;
+    }
+
+    const requestId = ++dashaRequestIdRef.current;
+    
+    const fetchDasha = async () => {
+      setLoadingDasha(true);
+      setDashaErrorState(null);
+      
+      try {
+        const dasha = await AstrologyApi.getDasha(selectedProfileId);
+        if (dashaRequestIdRef.current === requestId) {
+          setApiDashaData(dasha);
+          setLoadingDasha(false);
+        }
+      } catch (err: any) {
+        if (dashaRequestIdRef.current === requestId) {
+          const apiErr = err as ApiError;
+          setDashaErrorState({
+            code: apiErr.code || 'ERROR',
+            message: apiErr.message || 'Failed to load Dasha'
+          });
+          setLoadingDasha(false);
+        }
+      }
+    };
+    
+    fetchDasha();
+  }, [activeTab, selectedProfileId, apiDashaData, loadingDasha, dashaErrorState]);
   // Accordion active house
   const [activeAccordionHouse, setActiveAccordionHouse] = useState<number>(1);
 
@@ -490,8 +534,8 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
 
             <div className="flex flex-col items-center">
               <KundliChart 
-                ascendantSign={apiChartData.ascendant.sign}
-                planets={apiChartData.planets}
+                ascendantSign={apiChartData?.ascendant?.sign || 'ARIES'}
+                planets={apiChartData?.planets || []}
                 onZoom={() => {
                   setIsFullscreenChartOpen(true);
                   setZoomScale(1.2);
@@ -665,109 +709,106 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
               <p className="text-[11.5px] text-neutral-400 font-semibold leading-relaxed mt-1">Calculated using 120 years lunar cycle timeline to determine planetary influences in current life phase.</p>
             </div>
 
-            {/* Active Dasha Highlight Card */}
-            <div className="bg-[#FFFDF9] border-2 border-[#FFE0B2] rounded-2xl p-4.5 space-y-3 relative overflow-hidden shadow-[0_4px_16px_rgba(255,138,0,0.03)]">
-              <div className="absolute right-0 top-0 bottom-0 w-1/5 bg-[#FF8A00]/5 pointer-events-none rounded-r-xl" />
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div className="border-r border-[#FFF3E0] pr-2">
-                  <span className="text-[9px] font-bold text-[#FF8A00] uppercase tracking-widest block">Active Mahadasha</span>
-                  <span className="text-[15px] font-[900] text-[#111827] mt-1 block leading-tight">{currentDasha.mahadasha}</span>
-                  <span className="text-[9.5px] font-bold text-neutral-400 block mt-1">Primary Lord planet influence</span>
-                </div>
-                <div className="pl-2">
-                  <span className="text-[9px] font-bold text-[#FF8A00] uppercase tracking-widest block">Active Antardasha</span>
-                  <span className="text-[15px] font-[900] text-[#111827] mt-1 block leading-tight">{currentDasha.antardasha}</span>
-                  <span className="text-[9.5px] font-bold text-neutral-400 block mt-1">Secondary sub-period ruler</span>
-                </div>
+            {loadingDasha ? (
+              <div className="flex flex-col items-center justify-center py-10 space-y-3">
+                <div className="w-8 h-8 border-4 border-[#FF8A00]/20 border-t-[#FF8A00] rounded-full animate-spin" />
+                <span className="text-[12.5px] text-neutral-500 font-bold">Calculating Dasha periods...</span>
               </div>
-
-              {/* Minimal Clean Current Focus Card */}
-              <div className="bg-white border border-[#F5E6D3] rounded-xl p-3.5 shadow-[0_1px_4px_rgba(0,0,0,0.015)] mt-3">
-                <span className="text-[10px] font-extrabold text-[#FF8A00] uppercase tracking-wider block">Current Focus & Influence</span>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 mt-2.5">
-                  {[
-                    { name: 'Career', rating: 5 },
-                    { name: 'Finance', rating: 4 },
-                    { name: 'Relationships', rating: 3 },
-                    { name: 'Health', rating: 3 },
-                  ].map((item) => (
-                    <div key={item.name} className="flex items-center justify-between text-[11.5px]">
-                      <span className="text-neutral-500 font-bold">{item.name}</span>
-                      <span className="text-[#FF8A00] font-mono tracking-wider font-extrabold text-[10px]">
-                        {'★'.repeat(item.rating)}{'☆'.repeat(5 - item.rating)}
-                      </span>
-                    </div>
-                  ))}
+            ) : dashaErrorState ? (
+              <div className="bg-[#FEF2F2] border-2 border-[#FECACA] rounded-2xl p-4.5 text-center flex flex-col items-center shadow-[0_4px_16px_rgba(239,68,68,0.03)]">
+                <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center mb-3">
+                  <span className="text-red-500 font-bold">!</span>
                 </div>
-              </div>
-
-              <div className="pt-3 border-t border-[#F5E6D3] flex items-start space-x-2">
-                <Info size={14} className="text-[#FF8A00] shrink-0 mt-0.5" />
-                <p className="text-[11.5px] text-neutral-500 font-semibold leading-[1.4]">
-                  This transit cycle is highly supportive for career development, self-elevation, and seeking spiritual/intellectual wisdom.
+                <h4 className="text-[14px] font-[900] text-[#111827] mb-1">Calculation Failed</h4>
+                <p className="text-[12.5px] text-neutral-500 font-semibold leading-relaxed mb-4 max-w-[250px]">
+                  {dashaErrorState.message}
                 </p>
+                <button
+                  onClick={() => {
+                    const reqId = ++dashaRequestIdRef.current;
+                    setDashaErrorState(null);
+                    setLoadingDasha(true);
+                    AstrologyApi.getDasha(selectedProfileId!)
+                      .then(res => {
+                        if (dashaRequestIdRef.current === reqId) {
+                          setApiDashaData(res);
+                          setLoadingDasha(false);
+                        }
+                      })
+                      .catch(err => {
+                        if (dashaRequestIdRef.current === reqId) {
+                          setDashaErrorState({ code: err.code || 'ERROR', message: err.message || 'Failed to load Dasha' });
+                          setLoadingDasha(false);
+                        }
+                      });
+                  }}
+                  className="px-6 py-2 bg-[#111827] hover:bg-[#1F2937] text-white text-[12.5px] font-[850] rounded-full transition-all active:scale-[0.98]"
+                >
+                  Try Again
+                </button>
               </div>
-            </div>
-
-            {/* Outlined AI Explanation Capsule Button for Dasha */}
-            <div className="w-full">
-              <button
-                onClick={() => handleExplainWithAI('dasha')}
-                disabled={explanations.dasha.loading}
-                className="w-full h-11 border border-[#FFE0B2] bg-[#FFFDF9] hover:bg-[#FFF5E6] rounded-2xl text-[12.5px] font-[800] text-[#FF8A00] flex items-center justify-center space-x-2 transition-all active:scale-[0.98] focus:outline-none disabled:opacity-50"
-              >
-                {explanations.dasha.loading ? (
-                  <div className="w-4 h-4 border-2 border-t-transparent border-[#FF8A00] rounded-full animate-spin" />
-                ) : (
-                  <Sparkles size={14} className="fill-[#FF8A00] text-[#FF8A00]" />
-                )}
-                <span>{explanations.dasha.loading ? 'Acharya Dev Sharma is analyzing...' : 'Explain Vimshottari Dasha with AI'}</span>
-              </button>
-
-              <AnimatePresence>
-                {explanations.dasha.text && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="mt-3 bg-gradient-to-tr from-[#FFFDF9] to-[#FFF9F0] border border-[#F5E6D3] rounded-2xl p-4 shadow-[0_2px_8px_rgba(255,138,0,0.02)] text-[12.5px] font-semibold text-neutral-700 leading-relaxed relative"
-                  >
-                    <div className="absolute top-3.5 right-3.5">
-                      <Sparkles size={13} className="text-[#FF8A00]/30 animate-pulse" />
+            ) : apiDashaData ? (
+              <>
+                {/* Active Dasha Highlight Card */}
+                <div className="bg-[#FFFDF9] border-2 border-[#FFE0B2] rounded-2xl p-4.5 space-y-3 relative overflow-hidden shadow-[0_4px_16px_rgba(255,138,0,0.03)]">
+                  <div className="absolute right-0 top-0 bottom-0 w-1/5 bg-[#FF8A00]/5 pointer-events-none rounded-r-xl" />
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="border-r border-[#FFF3E0] pr-2">
+                      <span className="text-[9px] font-bold text-[#FF8A00] uppercase tracking-widest block">Active Mahadasha</span>
+                      <span className="text-[15px] font-[900] text-[#111827] mt-1 block leading-tight">{apiDashaData.currentMahadasha.planet}</span>
+                      <span className="text-[9.5px] font-bold text-neutral-400 block mt-1">
+                        Ends {new Date(apiDashaData.currentMahadasha.endDate).toLocaleDateString()}
+                      </span>
+                      {apiDashaData.currentMahadasha.remainingDays !== undefined && (
+                        <span className="text-[9.5px] font-bold text-[#FF8A00] block mt-0.5">{apiDashaData.currentMahadasha.remainingDays} days left</span>
+                      )}
                     </div>
-                    <p className="pr-4">{explanations.dasha.text}</p>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            {/* Subtle Divider Line */}
-            <div className="border-t border-[#FF8A00]/10 my-4" />
-
-            {/* Vedic Timeline flow representation */}
-            <div className="bg-white border border-[#EBE8E0] rounded-2xl p-4.5 shadow-[0_2px_8px_rgba(0,0,0,0.01)] space-y-4">
-              <span className="text-[11px] font-extrabold text-neutral-400 uppercase tracking-widest block">Dasha Order Flow</span>
-              
-              <div className="relative border-l-2 border-[#FFF3E0] pl-5 ml-2.5 space-y-5.5 py-1">
-                {[
-                  { planet: currentDasha.mahadasha.split(' ')[0], period: 'Current Phase (Dominant)', desc: 'Focuses deeply on personal development, authority, and destiny alignment.', active: true },
-                  { planet: currentDasha.antardasha.split(' ')[0], period: 'Active Sub-Phase', desc: 'Directs the active daily energies towards relationships and profession.', active: true },
-                  { planet: 'Pratyantardasha', period: 'Micro Transit Phase', desc: 'Determines short-term events, mind state, and quick financial gains.', active: false }
-                ].map((item, idx) => (
-                  <div key={idx} className="relative">
-                    {/* Circle bullet node */}
-                    <div className={`absolute -left-[26px] top-1 w-3 h-3 rounded-full border-2 ${
-                      item.active ? 'bg-[#FF8A00] border-[#FF8A00] ring-4 ring-[#FFF3E0]' : 'bg-white border-[#EBE8E0]'
-                    }`} />
-                    <div className="text-[12.5px] leading-tight">
-                      <span className={`font-extrabold block ${item.active ? 'text-[#FF8A00]' : 'text-[#111827]'}`}>{item.planet}</span>
-                      <span className="text-neutral-400 text-[10px] font-bold uppercase tracking-wider block mt-0.5">{item.period}</span>
-                      <span className="text-neutral-500 font-semibold text-[11.5px] leading-relaxed mt-1 block">{item.desc}</span>
+                    <div className="pl-2">
+                      <span className="text-[9px] font-bold text-[#FF8A00] uppercase tracking-widest block">Active Antardasha</span>
+                      {apiDashaData.currentAntardasha ? (
+                        <>
+                          <span className="text-[15px] font-[900] text-[#111827] mt-1 block leading-tight">{apiDashaData.currentAntardasha.planet}</span>
+                          <span className="text-[9.5px] font-bold text-neutral-400 block mt-1">
+                            Ends {new Date(apiDashaData.currentAntardasha.endDate).toLocaleDateString()}
+                          </span>
+                          {apiDashaData.currentAntardasha.remainingDays !== undefined && (
+                            <span className="text-[9.5px] font-bold text-[#FF8A00] block mt-0.5">{apiDashaData.currentAntardasha.remainingDays} days left</span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-[12px] font-bold text-neutral-400 mt-2 block">Unavailable</span>
+                      )}
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
+                </div>
+
+                {/* Subtle Divider Line */}
+                <div className="border-t border-[#FF8A00]/10 my-4" />
+
+                {/* Vedic Timeline flow representation */}
+                <div className="bg-white border border-[#EBE8E0] rounded-2xl p-4.5 shadow-[0_2px_8px_rgba(0,0,0,0.01)] space-y-4">
+                  <span className="text-[11px] font-extrabold text-neutral-400 uppercase tracking-widest block">Mahadasha Timeline</span>
+                  
+                  <div className="relative border-l-2 border-[#FFF3E0] pl-5 ml-2.5 py-1">
+                    {apiDashaData.mahadashaTimeline.map((item, idx) => (
+                      <div key={idx} className="relative mb-5 last:mb-0">
+                        {/* Circle bullet node */}
+                        <div className={`absolute -left-[26px] top-1 w-3 h-3 rounded-full border-2 ${
+                          item.isCurrent ? 'bg-[#FF8A00] border-[#FF8A00] ring-4 ring-[#FFF3E0]' : 'bg-white border-[#EBE8E0]'
+                        }`} />
+                        <div className="text-[12.5px] leading-tight">
+                          <span className={`font-extrabold block ${item.isCurrent ? 'text-[#FF8A00]' : 'text-[#111827]'}`}>{item.planet}</span>
+                          <span className="text-neutral-400 text-[10px] font-bold tracking-wider block mt-0.5">
+                            {new Date(item.startDate).toLocaleDateString()} - {new Date(item.endDate).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            ) : null}
           </div>
         )}
 

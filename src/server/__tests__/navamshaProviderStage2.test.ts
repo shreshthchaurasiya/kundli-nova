@@ -334,4 +334,12 @@ describe('Stage 2: Navamsha Natal Calculation POC', () => {
       expect(sanitized).toContain('[REDACTED]');
     });
   });
+
+  describe('Stage 5B: Vimshottari Dasha', () => {
+    it('throws PROVIDER_NOT_CONFIGURED for getVimshottariDasha safely', async () => {
+      const provider = new NavamshaProvider();
+      await expect(provider.getVimshottariDasha(validInput))
+        .rejects.toEqual(expect.objectContaining({ errorCode: 'PROVIDER_NOT_CONFIGURED', statusCode: 503 }));
+    });
+  });
 });

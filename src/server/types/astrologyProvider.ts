@@ -65,16 +65,22 @@ export interface KundliNovaNatalChart {
   warnings?: string[];
 }
 
-export interface KundliNovaDasha {
+export interface DashaPeriod {
+  planet: 'Ketu' | 'Venus' | 'Sun' | 'Moon' | 'Mars' | 'Rahu' | 'Jupiter' | 'Saturn' | 'Mercury';
+  startDate: string; // ISO date
+  endDate: string; // ISO date
+  isCurrent: boolean;
+  remainingDays?: number;
+}
+
+export interface KundliNovaVimshottariDasha {
   schemaVersion: '1.0';
   provider: string;
-  currentDasha: {
-    mahadasha: string;
-    antardasha: string;
-    startDate: string;
-    endDate: string;
-  };
-  fullTree?: Record<string, unknown>;
+  providerVersion: string;
+  calculatedAt: string; // ISO date
+  currentMahadasha: DashaPeriod;
+  currentAntardasha: DashaPeriod | null;
+  mahadashaTimeline: DashaPeriod[];
 }
 
 export interface KundliNovaDoshaResult {
@@ -152,7 +158,7 @@ export interface KundliNovaDailyHoroscope {
 export interface AstrologyCalculationProvider {
   getNatalChart(input: KundliNovaCalcInput): Promise<KundliNovaNatalChart>;
   getPlanets(input: KundliNovaCalcInput): Promise<PlanetData[]>;
-  getDasha(input: KundliNovaCalcInput): Promise<KundliNovaDasha>;
+  getVimshottariDasha(input: KundliNovaCalcInput): Promise<KundliNovaVimshottariDasha>;
   getDoshas(input: KundliNovaCalcInput): Promise<KundliNovaDoshaResult>;
   getYogas(input: KundliNovaCalcInput): Promise<KundliNovaYogaResult>;
   getPanchang(input: KundliNovaCalcInput, date?: string): Promise<KundliNovaPanchang>;

@@ -4,7 +4,7 @@ import {
   KundliNovaNatalChart,
   PlanetData,
   HouseData,
-  KundliNovaDasha,
+  KundliNovaVimshottariDasha,
   KundliNovaDoshaResult,
   KundliNovaYogaResult,
   KundliNovaPanchang,
@@ -336,8 +336,13 @@ export class NavamshaProvider implements AstrologyCalculationProvider {
     return chart.planets;
   }
 
-  public async getDasha(_input: KundliNovaCalcInput): Promise<KundliNovaDasha> {
-    throw new Error('Method getDasha not implemented in Stage 2.');
+  public async getVimshottariDasha(_input: KundliNovaCalcInput): Promise<import('../types/astrologyProvider').KundliNovaVimshottariDasha> {
+    throw new ProviderError(
+      'navamsha',
+      'PROVIDER_NOT_CONFIGURED',
+      'Navamsha Vimshottari Dasha endpoint is not verified/configured yet.',
+      503
+    );
   }
 
   public async getDoshas(_input: KundliNovaCalcInput): Promise<KundliNovaDoshaResult> {
