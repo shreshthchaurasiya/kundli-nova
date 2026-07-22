@@ -30,6 +30,14 @@ const mockProfiles = [
   { id: 'profile-A', name: 'Profile A', relation: 'self', gender: 'male', birth_city: 'Delhi', birth_state: 'Delhi' }
 ];
 
+const renderWithProviders = (component: React.ReactNode) => {
+  return render(
+    <RepositoryProvider repositories={mockRepositories as any}>
+      {component}
+    </RepositoryProvider>
+  );
+};
+
 describe('Stage 5D: NovaKundliScreen Yoga Tab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -57,11 +65,7 @@ describe('Stage 5D: NovaKundliScreen Yoga Tab', () => {
 
   it('does not fetch Yoga data when Basic Kundli is loaded', async () => {
     await act(async () => {
-      render(
-        <RepositoryProvider>
-          <NovaKundliScreen />
-        </RepositoryProvider>
-      );
+      renderWithProviders(<NovaKundliScreen onNavigate={() => {}} />);
     });
     
     await waitFor(() => {
@@ -87,11 +91,7 @@ describe('Stage 5D: NovaKundliScreen Yoga Tab', () => {
     });
 
     await act(async () => {
-      render(
-        <RepositoryProvider>
-          <NovaKundliScreen />
-        </RepositoryProvider>
-      );
+      renderWithProviders(<NovaKundliScreen onNavigate={() => {}} />);
     });
     
     await waitFor(() => expect(AstrologyApi.getKundli).toHaveBeenCalled());

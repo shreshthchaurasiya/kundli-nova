@@ -23,7 +23,7 @@ describe('Stage 5D Route: GET /api/v1/astrology/yoga/:profileId', () => {
     app.use(express.json());
 
     // Mock authentication middleware
-    app.use((req, res, next) => {
+    app.use((req: any, res, next) => {
       req.user = { id: 'user-123', email: 'test@example.com', role: 'user', created_at: '' };
       next();
     });
