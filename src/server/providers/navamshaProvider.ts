@@ -390,4 +390,12 @@ export class NavamshaProvider implements AstrologyCalculationProvider {
   public async getMatching(_b: KundliNovaCalcInput, _g: KundliNovaCalcInput): Promise<KundliNovaMatchResult> {
     throw new Error('Method getMatching not implemented in Stage 2.');
   }
+
+  public async getCompatibilityAnalysis(_inputA: KundliNovaCalcInput, _inputB: KundliNovaCalcInput): Promise<import('../types/astrologyProvider').KundliNovaCompatibilityAnalysis> {
+    throw new ProviderError(
+      'navamsha',
+      'PROVIDER_NOT_CONFIGURED',
+      'Navamsha Compatibility analysis endpoint is not verified/configured yet.'
+    );
+  }
 }

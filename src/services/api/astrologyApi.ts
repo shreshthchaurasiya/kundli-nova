@@ -1,6 +1,6 @@
 import { ApiClient } from './apiClient';
 import { ENDPOINTS } from './endpoints';
-import { KundliNovaDailyHoroscope, ZodiacSign, KundliNovaNatalChart, KundliNovaVimshottariDasha, KundliNovaDoshaAnalysis, KundliNovaYogaAnalysis } from '../../server/types/astrologyProvider';
+import { KundliNovaDailyHoroscope, ZodiacSign, KundliNovaNatalChart, KundliNovaVimshottariDasha, KundliNovaDoshaAnalysis, KundliNovaYogaAnalysis, KundliNovaCompatibilityAnalysis } from '../../server/types/astrologyProvider';
 
 export class AstrologyApi {
   /**
@@ -41,6 +41,15 @@ export class AstrologyApi {
    */
   static async getYogaAnalysis(profileId: string): Promise<KundliNovaYogaAnalysis> {
     return ApiClient.get<KundliNovaYogaAnalysis>(ENDPOINTS.ASTROLOGY.GET_YOGA(profileId));
+  }
+
+  /**
+   * Fetches the compatibility (Ashtakoota) analysis between two profile IDs.
+   * @param profileAId The ID of the first saved Kundli profile
+   * @param profileBId The ID of the second saved Kundli profile
+   */
+  static async getCompatibility(profileAId: string, profileBId: string): Promise<KundliNovaCompatibilityAnalysis> {
+    return ApiClient.get<KundliNovaCompatibilityAnalysis>(ENDPOINTS.ASTROLOGY.GET_COMPATIBILITY(profileAId, profileBId));
   }
 }
 

@@ -46,6 +46,7 @@ export const ENDPOINTS = {
     GET_DASHA: (profileId: string) => `${API_BASE}/astrology/dasha/${profileId}`,
     GET_DOSHA: (profileId: string) => `${API_BASE}/astrology/dosha/${profileId}`,
     GET_YOGA: (profileId: string) => `${API_BASE}/astrology/yoga/${profileId}`,
+    GET_COMPATIBILITY: (profileAId: string, profileBId: string) => `${API_BASE}/astrology/compatibility?profileAId=${profileAId}&profileBId=${profileBId}`,
   }
 };
 

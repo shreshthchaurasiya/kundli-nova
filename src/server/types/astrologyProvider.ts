@@ -235,6 +235,38 @@ export interface KundliNovaDailyHoroscope {
   warning?: string;
 }
 
+export type AshtakootaFactorCode =
+  | 'VARNA'
+  | 'VASHYA'
+  | 'TARA'
+  | 'YONI'
+  | 'GRAHA_MAITRI'
+  | 'GANA'
+  | 'BHAKOOT'
+  | 'NADI';
+
+export interface AshtakootaFactor {
+  code: AshtakootaFactorCode;
+  name: string;
+  score: number;
+  maximumScore: number;
+  summary: string;
+  calculationStatus: 'calculated' | 'unavailable';
+}
+
+export interface KundliNovaCompatibilityAnalysis {
+  schemaVersion: '1.0';
+  provider: string;
+  providerVersion: string;
+  calculatedAt: string;
+  profileAId: string;
+  profileBId: string;
+  totalScore: number;
+  maximumScore: number;
+  compatibilityPercentage: number;
+  factors: AshtakootaFactor[];
+}
+
 export interface AstrologyCalculationProvider {
   getNatalChart(input: KundliNovaCalcInput): Promise<KundliNovaNatalChart>;
   getPlanets(input: KundliNovaCalcInput): Promise<PlanetData[]>;
@@ -245,6 +277,7 @@ export interface AstrologyCalculationProvider {
   getYogaAnalysis(input: KundliNovaCalcInput): Promise<KundliNovaYogaAnalysis>;
   getPanchang(input: KundliNovaCalcInput, date?: string): Promise<KundliNovaPanchang>;
   getMatching(bride: KundliNovaCalcInput, groom: KundliNovaCalcInput): Promise<KundliNovaMatchResult>;
+  getCompatibilityAnalysis(inputA: KundliNovaCalcInput, inputB: KundliNovaCalcInput): Promise<KundliNovaCompatibilityAnalysis>;
 }
 
 export interface HoroscopeContentProvider {

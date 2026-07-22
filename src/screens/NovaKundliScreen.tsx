@@ -33,8 +33,9 @@ import { generateKundli } from '../services/kundliService';
 import { generateKundliPdf } from '../services/kundliPdfService';
 import { postAiRequest } from '../services/aiClient';
 import { AstrologyApi } from '../services/api/astrologyApi';
-import { KundliNovaNatalChart, KundliNovaDoshaAnalysis, KundliNovaYogaAnalysis } from '../server/types/astrologyProvider';
+import { KundliNovaNatalChart, KundliNovaDoshaAnalysis, KundliNovaYogaAnalysis, KundliNovaCompatibilityAnalysis } from '../server/types/astrologyProvider';
 import { YogaAnalysisPanel } from '../components/astrology/YogaAnalysisPanel';
+import { CompatibilityPanel } from '../components/astrology/CompatibilityPanel';
 import { KundliProfile } from '../types/kundli';
 import { KundliChart } from '../components/astrology/KundliChart';
 import { ApiError } from '../services/api/apiErrors';
@@ -60,6 +61,7 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
   const [apiDashaData, setApiDashaData] = useState<import('../server/types/astrologyProvider').KundliNovaVimshottariDasha | null>(null);
   const [apiDoshaData, setApiDoshaData] = useState<KundliNovaDoshaAnalysis | null>(null);
   const [apiYogaData, setApiYogaData] = useState<KundliNovaYogaAnalysis | null>(null);
+  const [apiCompatibilityData, setApiCompatibilityData] = useState<KundliNovaCompatibilityAnalysis | null>(null);
   
   // States
   const [loadingKundli, setLoadingKundli] = useState(true);
@@ -74,11 +76,16 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
   const [loadingYoga, setLoadingYoga] = useState(false);
   const [yogaErrorState, setYogaErrorState] = useState<{code: string, message: string} | null>(null);
 
+  const [loadingCompatibility, setLoadingCompatibility] = useState(false);
+  const [compatibilityErrorState, setCompatibilityErrorState] = useState<{code: string, message: string} | null>(null);
+  const [selectedProfileBId, setSelectedProfileBId] = useState<string | null>(null);
+
   // Monotonically increasing request ID guard against out-of-order responses
   const activeRequestIdRef = useRef(0);
   const dashaRequestIdRef = useRef(0);
   const doshaRequestIdRef = useRef(0);
   const yogaRequestIdRef = useRef(0);
+  const compatibilityRequestIdRef = useRef(0);
 
   // Fetch profiles on mount
   useEffect(() => {
@@ -136,9 +143,9 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
     return () => { isMounted = false; };
   }, [selectedProfileId]);
 
-  const [activeTab, setActiveTab] = useState<'charts' | 'planets' | 'dasha' | 'dosha' | 'yoga' | 'insights' | 'basic'>('charts');
+  const [activeTab, setActiveTab] = useState<'charts' | 'planets' | 'dasha' | 'dosha' | 'yoga' | 'compatibility' | 'insights' | 'basic'>('charts');
 
-  // Clear Dasha state when profile switches
+  // Clear states when profile A switches
   useEffect(() => {
     setApiDashaData(null);
     setDashaErrorState(null);
@@ -149,6 +156,12 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
     setApiYogaData(null);
     setYogaErrorState(null);
     setLoadingYoga(false);
+    
+    // Clear compatibility state
+    setApiCompatibilityData(null);
+    setCompatibilityErrorState(null);
+    setLoadingCompatibility(false);
+    setSelectedProfileBId(null);
   }, [selectedProfileId]);
 
   // Lazy fetch Dasha when tab is active
@@ -250,6 +263,39 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
     fetchYoga();
   }, [activeTab, selectedProfileId, apiYogaData, loadingYoga, yogaErrorState]);
 
+  // Lazy fetch Compatibility when tab is active and Profile B is selected
+  useEffect(() => {
+    if (!selectedProfileId || !selectedProfileBId || activeTab !== 'compatibility' || apiCompatibilityData || loadingCompatibility || compatibilityErrorState) {
+      return;
+    }
+
+    const requestId = ++compatibilityRequestIdRef.current;
+    
+    const fetchCompatibility = async () => {
+      setLoadingCompatibility(true);
+      setCompatibilityErrorState(null);
+      
+      try {
+        const compData = await AstrologyApi.getCompatibility(selectedProfileId, selectedProfileBId);
+        if (compatibilityRequestIdRef.current === requestId) {
+          setApiCompatibilityData(compData);
+          setLoadingCompatibility(false);
+        }
+      } catch (err: any) {
+        if (compatibilityRequestIdRef.current === requestId) {
+          const apiErr = err as ApiError;
+          setCompatibilityErrorState({
+            code: apiErr.code || 'ERROR',
+            message: apiErr.message || 'Failed to load compatibility analysis'
+          });
+          setLoadingCompatibility(false);
+        }
+      }
+    };
+    
+    fetchCompatibility();
+  }, [activeTab, selectedProfileId, selectedProfileBId, apiCompatibilityData, loadingCompatibility, compatibilityErrorState]);
+
   // Accordion active house
   const [activeAccordionHouse, setActiveAccordionHouse] = useState<number>(1);
 
@@ -258,7 +304,7 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
   const [zoomScale, setZoomScale] = useState(1);
 
   // Swipeable tabs touch tracking
-  const tabsOrder: ('charts' | 'planets' | 'dasha' | 'dosha' | 'yoga' | 'insights' | 'basic')[] = ['charts', 'planets', 'dasha', 'dosha', 'yoga', 'insights', 'basic'];
+  const tabsOrder: ('charts' | 'planets' | 'dasha' | 'dosha' | 'yoga' | 'compatibility' | 'insights' | 'basic')[] = ['charts', 'planets', 'dasha', 'dosha', 'yoga', 'compatibility', 'insights', 'basic'];
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
 
@@ -580,6 +626,7 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
             { id: 'dasha', label: 'Vimshottari Dasha' },
             { id: 'dosha', label: 'Dosha Analysis' },
             { id: 'yoga', label: 'Yoga Analysis' },
+            { id: 'compatibility', label: 'Kundli Match' },
             { id: 'insights', label: 'Predictions' },
             { id: 'basic', label: 'Basic Details' }
           ].map((tab) => {
@@ -1029,6 +1076,42 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
                   if (yogaRequestIdRef.current === reqId) {
                     setYogaErrorState({ code: err.code || 'ERROR', message: err.message || 'Failed to load Yoga analysis' });
                     setLoadingYoga(false);
+                  }
+                });
+            }}
+          />
+        )}
+
+        {/* PANEL: COMPATIBILITY */}
+        {activeTab === 'compatibility' && (
+          <CompatibilityPanel
+            apiCompatibilityData={apiCompatibilityData}
+            loadingCompatibility={loadingCompatibility}
+            compatibilityErrorState={compatibilityErrorState}
+            selectedProfileId={selectedProfileId!}
+            selectedProfileBId={selectedProfileBId}
+            profiles={profiles}
+            onSelectProfileB={(profileBId) => {
+              setSelectedProfileBId(profileBId);
+              setApiCompatibilityData(null);
+              setCompatibilityErrorState(null);
+            }}
+            onRetry={() => {
+              if (!selectedProfileBId) return;
+              const reqId = ++compatibilityRequestIdRef.current;
+              setCompatibilityErrorState(null);
+              setLoadingCompatibility(true);
+              AstrologyApi.getCompatibility(selectedProfileId!, selectedProfileBId)
+                .then(res => {
+                  if (compatibilityRequestIdRef.current === reqId) {
+                    setApiCompatibilityData(res);
+                    setLoadingCompatibility(false);
+                  }
+                })
+                .catch(err => {
+                  if (compatibilityRequestIdRef.current === reqId) {
+                    setCompatibilityErrorState({ code: err.code || 'ERROR', message: err.message || 'Failed to load compatibility analysis' });
+                    setLoadingCompatibility(false);
                   }
                 });
             }}

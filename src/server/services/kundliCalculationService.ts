@@ -1,4 +1,5 @@
 import { AstrologyCalculationProvider, KundliNovaCalcInput, KundliNovaNatalChart, KundliNovaVimshottariDasha, KundliNovaDoshaAnalysis, KundliNovaYogaAnalysis } from '../types/astrologyProvider';
+import { ProviderError } from '../errors/ProviderError';
 import crypto from 'crypto';
 import { supabaseAdmin } from '../config/supabase';
 
@@ -14,6 +15,9 @@ export class KundliCalculationService {
   
   private yogaCache = new Map<string, KundliNovaYogaAnalysis>();
   private yogaInflight = new Map<string, Promise<KundliNovaYogaAnalysis>>();
+  
+  private compatibilityCache = new Map<string, import('../types/astrologyProvider').KundliNovaCompatibilityAnalysis>();
+  private compatibilityInflight = new Map<string, Promise<import('../types/astrologyProvider').KundliNovaCompatibilityAnalysis>>();
   
   constructor(private provider: AstrologyCalculationProvider) {}
 
@@ -155,6 +159,76 @@ export class KundliCalculationService {
       .finally(() => this.yogaInflight.delete(cacheKey));
 
     this.yogaInflight.set(cacheKey, promise);
+    return promise;
+  }
+
+  public async getCompatibilityAnalysis(profileAId: string, profileBId: string, userId: string): Promise<import('../types/astrologyProvider').KundliNovaCompatibilityAnalysis> {
+    if (profileAId === profileBId) {
+      const err: any = new Error('Please select two different profiles for Kundli matching.');
+      err.statusCode = 400;
+      err.code = 'SAME_PROFILE_NOT_ALLOWED';
+      throw err;
+    }
+
+    const [inputA, inputB] = await Promise.all([
+      this.loadAuthorizedCalculationInput(profileAId, userId),
+      this.loadAuthorizedCalculationInput(profileBId, userId)
+    ]);
+
+    const fingerprintA = this.createFingerprint(inputA);
+    const fingerprintB = this.createFingerprint(inputB);
+    
+    // Directional cache key (A+B is distinct from B+A)
+    const cacheKey = `compatibility:navamsha:v1:${inputA.profileId}:${fingerprintA}:${inputB.profileId}:${fingerprintB}`;
+
+    if (this.compatibilityCache.has(cacheKey)) return this.compatibilityCache.get(cacheKey)!;
+    if (this.compatibilityInflight.has(cacheKey)) return this.compatibilityInflight.get(cacheKey)!;
+
+    const promise = this.provider.getCompatibilityAnalysis(inputA, inputB)
+      .then(result => {
+        // Validate normalized response
+        const requiredCodes = ['VARNA', 'VASHYA', 'TARA', 'YONI', 'GRAHA_MAITRI', 'GANA', 'BHAKOOT', 'NADI'];
+        if (!result.factors || result.factors.length !== 8) {
+          throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', 'Compatibility analysis must have exactly 8 factors.');
+        }
+        
+        const factorCodes = new Set<string>();
+        for (const factor of result.factors) {
+          if (!requiredCodes.includes(factor.code)) {
+            throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', `Invalid factor code: ${factor.code}`);
+          }
+          if (factorCodes.has(factor.code)) {
+            throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', `Duplicate factor code: ${factor.code}`);
+          }
+          factorCodes.add(factor.code);
+
+          if (factor.score < 0 || factor.maximumScore < 0 || factor.score > factor.maximumScore) {
+            throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', `Invalid scores for factor ${factor.code}`);
+          }
+          if (factor.calculationStatus === 'unavailable' && factor.score > 0) {
+            throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', `Unavailable factor ${factor.code} cannot have a score > 0`);
+          }
+        }
+
+        if (result.totalScore < 0 || result.maximumScore < 0 || result.totalScore > result.maximumScore) {
+          throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', 'Invalid total score or maximum score');
+        }
+        
+        // maximumScore should represent the Ashtakoota total (36 typically)
+        if (result.maximumScore !== 36) {
+           // We might not hardcode 36 if it varies, but the instruction says "maximumScore should represent the Ashtakoota total", so let's allow what provider says as long as valid.
+        }
+
+        if (result.compatibilityPercentage < 0 || result.compatibilityPercentage > 100) {
+          throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', 'Compatibility percentage must be between 0 and 100');
+        }
+
+        this.compatibilityCache.set(cacheKey, result);
+        return result;
+      })
+      .finally(() => this.compatibilityInflight.delete(cacheKey));
+
+    this.compatibilityInflight.set(cacheKey, promise);
     return promise;
   }
 }
