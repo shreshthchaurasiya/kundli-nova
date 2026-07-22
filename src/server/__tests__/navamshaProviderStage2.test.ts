@@ -21,7 +21,7 @@ describe('Stage 2: Navamsha Natal Calculation POC', () => {
   const sampleNavamshaPlanetOutput = {
     statusCode: 200,
     output: {
-      Ascendant: {
+      ascendant: {
         fullDegree: 215.4,
         normDegree: 5.4,
         isRetro: 'false',
@@ -32,34 +32,37 @@ describe('Stage 2: Navamsha Natal Calculation POC', () => {
         nakshatra_name: 'Anuradha',
         nakshatra_pada: 2,
       },
-      Sun: {
-        fullDegree: 140.2,
-        normDegree: 20.2,
-        isRetro: 'false',
-        house_number: 10,
-        localized_name: 'Sun',
-        zodiac_sign_name: 'Leo',
-        zodiac_sign_lord: 'Sun',
-        nakshatra_name: 'Purva Phalguni',
-        nakshatra_pada: 3,
-      },
-      Moon: {
-        fullDegree: 42.8,
-        normDegree: 12.8,
-        isRetro: 'false',
-        house_number: 7,
-        localized_name: 'Moon',
-        zodiac_sign_name: 'Taurus',
-        zodiac_sign_lord: 'Venus',
-        nakshatra_name: 'Rohini',
-        nakshatra_pada: 1,
-      },
+      planets: {
+        Sun: {
+          fullDegree: 140.2,
+          normDegree: 20.2,
+          isRetro: 'false',
+          house_number: 10,
+          localized_name: 'Sun',
+          zodiac_sign_name: 'Leo',
+          zodiac_sign_lord: 'Sun',
+          nakshatra_name: 'Purva Phalguni',
+          nakshatra_pada: 3,
+        },
+        Moon: {
+          fullDegree: 42.8,
+          normDegree: 12.8,
+          isRetro: 'false',
+          house_number: 7,
+          localized_name: 'Moon',
+          zodiac_sign_name: 'Taurus',
+          zodiac_sign_lord: 'Venus',
+          nakshatra_name: 'Rohini',
+          nakshatra_pada: 1,
+        },
+      }
     },
   };
 
   beforeEach(() => {
     process.env = { ...originalEnv };
     process.env.NAVAMSHA_API_KEY = 'secret_test_navamsha_key_12345';
+    process.env.NAVAMSHA_API_BASE_URL = 'https://api.test.navamsha.in';
     vi.stubGlobal('fetch', mockFetch);
     mockFetch.mockReset();
   });
@@ -129,8 +132,10 @@ describe('Stage 2: Navamsha Natal Calculation POC', () => {
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
       const [url, init] = mockFetch.mock.calls[0];
-      expect(url).toBe('https://api.navamsha.in/api/v1/planets/extended');
-      expect(init.headers['X-API-Key']).toBe('secret_test_navamsha_key_12345');
+      expect(url).toBe('https://api.test.navamsha.in/api/v1/kundali/basic');
+      expect(init.headers['Authorization']).toBe('Bearer secret_test_navamsha_key_12345');
+      expect(init.headers['Content-Type']).toBe('application/json');
+      expect(init.headers['Accept']).toBe('application/json');
 
       const body = JSON.parse(init.body);
       expect(body.year).toBe(1995);
@@ -170,47 +175,39 @@ describe('Stage 2: Navamsha Natal Calculation POC', () => {
       expect((chart as any).statusCode).toBeUndefined();
     });
 
-    it('throws PROVIDER_BAD_RESPONSE if Ascendant is missing in provider output', async () => {
-      const missingAscOutput = {
+    it('throws PROVIDER_BAD_RESPONSE if ascendant is missing in provider output', async () => {
+      const missingAscendant = {
         statusCode: 200,
-        output: {
-          Sun: sampleNavamshaPlanetOutput.output.Sun,
-          Moon: sampleNavamshaPlanetOutput.output.Moon,
-        },
+        output: { ...sampleNavamshaPlanetOutput.output },
       };
+      delete (missingAscendant.output as any).ascendant;
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        status: 200,
-        json: async () => missingAscOutput,
+        json: async () => missingAscendant,
       });
 
       const provider = new NavamshaProvider();
       await expect(provider.getNatalChart(validInput)).rejects.toThrow(
-        'Provider response missing Ascendant placement'
+        /Navamsha response schema mismatch/
       );
     });
   });
 
   describe('HTTP Error Code Mappings & Retryability', () => {
-    it('maps HTTP 400 to PROVIDER_BAD_REQUEST (400, non-retryable)', async () => {
+    it('maps HTTP 400 to PROVIDER_BAD_RESPONSE (502, non-retryable)', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 400,
-        text: async () => 'Invalid year parameter',
+        text: async () => 'Missing field',
       });
 
       const provider = new NavamshaProvider();
-      let err: ProviderError | null = null;
-      try {
-        await provider.getNatalChart(validInput);
-      } catch (e: any) {
-        err = e;
-      }
+      const err = await provider.getNatalChart(validInput).catch((e) => e);
 
       expect(err).toBeInstanceOf(ProviderError);
-      expect(err?.errorCode).toBe('PROVIDER_BAD_REQUEST');
-      expect(err?.statusCode).toBe(400);
+      expect(err?.errorCode).toBe('PROVIDER_BAD_RESPONSE');
+      expect(err?.statusCode).toBe(502);
       expect(err?.isRetryable()).toBe(false);
     });
 
@@ -218,16 +215,11 @@ describe('Stage 2: Navamsha Natal Calculation POC', () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 401,
-        text: async () => 'Unauthorized API key',
+        text: async () => 'Unauthorized',
       });
 
       const provider = new NavamshaProvider();
-      let err: ProviderError | null = null;
-      try {
-        await provider.getNatalChart(validInput);
-      } catch (e: any) {
-        err = e;
-      }
+      const err = await provider.getNatalChart(validInput).catch((e) => e);
 
       expect(err).toBeInstanceOf(ProviderError);
       expect(err?.errorCode).toBe('PROVIDER_AUTH_ERROR');
@@ -235,29 +227,22 @@ describe('Stage 2: Navamsha Natal Calculation POC', () => {
       expect(err?.isRetryable()).toBe(false);
     });
 
-    it('maps HTTP 429 to PROVIDER_RATE_LIMITED (503, retryable) with Retry-After', async () => {
-      const headers = new Headers();
-      headers.set('retry-after', '15');
-
+    it('maps HTTP 429 to PROVIDER_UNAVAILABLE (503, retryable)', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 429,
-        headers,
         text: async () => 'Rate limit exceeded',
+        headers: {
+          get: (name: string) => (name === 'retry-after' ? '15' : null),
+        },
       });
 
       const provider = new NavamshaProvider();
-      let err: ProviderError | null = null;
-      try {
-        await provider.getNatalChart(validInput);
-      } catch (e: any) {
-        err = e;
-      }
+      const err = await provider.getNatalChart(validInput).catch((e) => e);
 
       expect(err).toBeInstanceOf(ProviderError);
-      expect(err?.errorCode).toBe('PROVIDER_RATE_LIMITED');
+      expect(err?.errorCode).toBe('PROVIDER_UNAVAILABLE');
       expect(err?.statusCode).toBe(503);
-      expect(err?.retryAfterSeconds).toBe(15);
       expect(err?.isRetryable()).toBe(true);
     });
 

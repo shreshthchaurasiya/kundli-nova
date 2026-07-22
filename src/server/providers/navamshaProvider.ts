@@ -43,7 +43,14 @@ export const navamshaPlanetOutputSchema = z.object({
 // Response schema for Navamsha POST /api/v1/planets/extended or /api/v1/kundali/basic
 export const navamshaPlanetsResponseSchema = z.object({
   statusCode: z.number().optional(),
-  output: z.record(z.string(), navamshaPlanetOutputSchema),
+  output: z.object({
+    ascendant: navamshaPlanetOutputSchema,
+    planets: z.record(z.string(), navamshaPlanetOutputSchema),
+    reference_sign: z.string().optional(),
+    julian_day_ut: z.number().optional(),
+    utc_datetime: z.string().optional(),
+    longitudes: z.record(z.string(), z.number()).optional(),
+  }).passthrough(),
 });
 
 export interface NavamshaProviderConfig {
@@ -76,31 +83,24 @@ export class NavamshaProvider implements AstrologyCalculationProvider {
     this.timeoutMs = config?.timeoutMs || 5000;
   }
 
-  private getApiKey(): string {
-    const key = process.env.NAVAMSHA_API_KEY?.trim();
-    if (!key) {
+  private getProviderConfig(): { apiKey: string; baseUrl: string } {
+    const apiKey = process.env.NAVAMSHA_API_KEY?.trim();
+    const baseUrl = process.env.NAVAMSHA_API_BASE_URL?.trim();
+
+    if (!apiKey || !baseUrl) {
       throw new ProviderError(
         'navamsha',
         'PROVIDER_NOT_CONFIGURED',
-        'NAVAMSHA_API_KEY is not configured in environment',
+        'Navamsha API is not fully configured (missing key or base URL)',
         503
       );
     }
-    return key;
+    return { apiKey, baseUrl };
   }
 
   public async getNatalChart(input: KundliNovaCalcInput): Promise<KundliNovaNatalChart> {
-    // 1. Check API Key configuration first
-    const apiKey = this.getApiKey();
-
-    if (process.env.NODE_ENV !== 'test') {
-      throw new ProviderError(
-        'navamsha',
-        'PROVIDER_NOT_CONFIGURED',
-        'Navamsha Natal Chart endpoint is not verified/configured yet.',
-        503
-      );
-    }
+    // 1. Check API configuration
+    const { apiKey, baseUrl } = this.getProviderConfig();
 
     // 2. Validate input strictly against Zod schema
     const parsedInput = kundliNovaCalcInputSchema.parse(input);
@@ -142,11 +142,12 @@ export class NavamshaProvider implements AstrologyCalculationProvider {
 
     let response: Response;
     try {
-      response = await fetch(`${this.baseUrl}/api/v1/planets/extended`, {
+      response = await fetch(`${baseUrl}/api/v1/kundali/basic`, {
         method: 'POST',
         headers: {
+          'Accept': 'application/json',
           'Content-Type': 'application/json',
-          'X-API-Key': apiKey,
+          'Authorization': `Bearer ${apiKey}`,
         },
         body: JSON.stringify(validatedPayload),
         signal: controller.signal,
@@ -180,15 +181,6 @@ export class NavamshaProvider implements AstrologyCalculationProvider {
         // ignore body parse error
       }
 
-      if (status === 400) {
-        throw new ProviderError(
-          'navamsha',
-          'PROVIDER_BAD_REQUEST',
-          `Bad request parameters: ${errorBody || 'Invalid payload'}`,
-          400
-        );
-      }
-
       if (status === 401 || status === 403) {
         throw new ProviderError(
           'navamsha',
@@ -198,22 +190,37 @@ export class NavamshaProvider implements AstrologyCalculationProvider {
         );
       }
 
-      if (status === 429) {
-        const retryAfter = response.headers.get('retry-after');
-        const retrySeconds = retryAfter ? parseInt(retryAfter, 10) : undefined;
+      if (status === 408) {
         throw new ProviderError(
           'navamsha',
-          'PROVIDER_RATE_LIMITED',
+          'PROVIDER_TIMEOUT',
+          'Navamsha API request timed out',
+          504
+        );
+      }
+
+      if (status === 429) {
+        throw new ProviderError(
+          'navamsha',
+          'PROVIDER_UNAVAILABLE',
           'Navamsha API rate limit exceeded',
-          503,
-          isNaN(retrySeconds!) ? undefined : retrySeconds
+          503
+        );
+      }
+
+      if (status === 422 || status === 400) {
+        throw new ProviderError(
+          'navamsha',
+          'PROVIDER_BAD_RESPONSE',
+          'Invalid request payload or validation failed upstream',
+          502
         );
       }
 
       throw new ProviderError(
         'navamsha',
         'PROVIDER_UNAVAILABLE',
-        `Navamsha server error (${status}): ${errorBody || 'Service unavailable'}`,
+        `Navamsha server error (${status})`,
         503
       );
     }
@@ -247,36 +254,38 @@ export class NavamshaProvider implements AstrologyCalculationProvider {
 
   private normalizeNatalChart(
     input: KundliNovaCalcInput,
-    output: Record<string, z.infer<typeof navamshaPlanetOutputSchema>>
+    output: {
+      ascendant: z.infer<typeof navamshaPlanetOutputSchema>;
+      planets: Record<string, z.infer<typeof navamshaPlanetOutputSchema>>;
+    }
   ): KundliNovaNatalChart {
     const planetsList: PlanetData[] = [];
-    let ascendantData: { sign: string; degree: number; nakshatra: string } | null = null;
+    
+    const asc = output.ascendant;
+    const ascendantData = {
+      sign: asc.zodiac_sign_name.toUpperCase(),
+      degree: asc.fullDegree,
+      nakshatra: asc.nakshatra_name,
+    };
+    
     let moonData: { sign: string; nakshatra: string; pada: number } | null = null;
     let sunSign = '';
 
-    for (const [key, planet] of Object.entries(output)) {
+    for (const [key, planet] of Object.entries(output.planets)) {
       const name = planet.localized_name || key;
       const signUpper = planet.zodiac_sign_name.toUpperCase();
 
-      if (name.toLowerCase() === 'ascendant' || key.toLowerCase() === 'ascendant') {
-        ascendantData = {
-          sign: signUpper,
-          degree: planet.fullDegree,
-          nakshatra: planet.nakshatra_name,
-        };
-      } else {
-        planetsList.push({
-          name,
-          sign: signUpper,
-          degreeInSign: planet.normDegree,
-          degree: planet.fullDegree,
-          house: planet.house_number,
-          nakshatra: planet.nakshatra_name,
-          pada: planet.nakshatra_pada,
-          isRetrograde: planet.isRetro,
-          signLord: planet.zodiac_sign_lord,
-        });
-      }
+      planetsList.push({
+        name,
+        sign: signUpper,
+        degreeInSign: planet.normDegree,
+        degree: planet.fullDegree,
+        house: planet.house_number,
+        nakshatra: planet.nakshatra_name,
+        pada: planet.nakshatra_pada,
+        isRetrograde: planet.isRetro,
+        signLord: planet.zodiac_sign_lord,
+      });
 
       if (name.toLowerCase() === 'moon' || key.toLowerCase() === 'moon') {
         moonData = {
