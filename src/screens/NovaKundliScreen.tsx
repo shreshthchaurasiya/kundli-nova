@@ -33,7 +33,8 @@ import { generateKundli } from '../services/kundliService';
 import { generateKundliPdf } from '../services/kundliPdfService';
 import { postAiRequest } from '../services/aiClient';
 import { AstrologyApi } from '../services/api/astrologyApi';
-import { KundliNovaNatalChart, KundliNovaDoshaAnalysis } from '../server/types/astrologyProvider';
+import { KundliNovaNatalChart, KundliNovaDoshaAnalysis, KundliNovaYogaAnalysis } from '../server/types/astrologyProvider';
+import { YogaAnalysisPanel } from '../components/astrology/YogaAnalysisPanel';
 import { KundliProfile } from '../types/kundli';
 import { KundliChart } from '../components/astrology/KundliChart';
 import { ApiError } from '../services/api/apiErrors';
@@ -58,6 +59,7 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
   const [apiChartData, setApiChartData] = useState<KundliNovaNatalChart | null>(null);
   const [apiDashaData, setApiDashaData] = useState<import('../server/types/astrologyProvider').KundliNovaVimshottariDasha | null>(null);
   const [apiDoshaData, setApiDoshaData] = useState<KundliNovaDoshaAnalysis | null>(null);
+  const [apiYogaData, setApiYogaData] = useState<KundliNovaYogaAnalysis | null>(null);
   
   // States
   const [loadingKundli, setLoadingKundli] = useState(true);
@@ -69,10 +71,14 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
   const [loadingDosha, setLoadingDosha] = useState(false);
   const [doshaErrorState, setDoshaErrorState] = useState<{code: string, message: string} | null>(null);
 
+  const [loadingYoga, setLoadingYoga] = useState(false);
+  const [yogaErrorState, setYogaErrorState] = useState<{code: string, message: string} | null>(null);
+
   // Monotonically increasing request ID guard against out-of-order responses
   const activeRequestIdRef = useRef(0);
   const dashaRequestIdRef = useRef(0);
   const doshaRequestIdRef = useRef(0);
+  const yogaRequestIdRef = useRef(0);
 
   // Fetch profiles on mount
   useEffect(() => {
@@ -130,7 +136,7 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
     return () => { isMounted = false; };
   }, [selectedProfileId]);
 
-  const [activeTab, setActiveTab] = useState<'charts' | 'planets' | 'dasha' | 'dosha' | 'insights' | 'basic'>('charts');
+  const [activeTab, setActiveTab] = useState<'charts' | 'planets' | 'dasha' | 'dosha' | 'yoga' | 'insights' | 'basic'>('charts');
 
   // Clear Dasha state when profile switches
   useEffect(() => {
@@ -140,6 +146,9 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
     setApiDoshaData(null);
     setDoshaErrorState(null);
     setLoadingDosha(false);
+    setApiYogaData(null);
+    setYogaErrorState(null);
+    setLoadingYoga(false);
   }, [selectedProfileId]);
 
   // Lazy fetch Dasha when tab is active
@@ -208,6 +217,39 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
     fetchDosha();
   }, [activeTab, selectedProfileId, apiDoshaData, loadingDosha, doshaErrorState]);
 
+  // Lazy fetch Yoga when tab is active
+  useEffect(() => {
+    if (!selectedProfileId || activeTab !== 'yoga' || apiYogaData || loadingYoga || yogaErrorState) {
+      return;
+    }
+
+    const requestId = ++yogaRequestIdRef.current;
+    
+    const fetchYoga = async () => {
+      setLoadingYoga(true);
+      setYogaErrorState(null);
+      
+      try {
+        const yoga = await AstrologyApi.getYogaAnalysis(selectedProfileId);
+        if (yogaRequestIdRef.current === requestId) {
+          setApiYogaData(yoga);
+          setLoadingYoga(false);
+        }
+      } catch (err: any) {
+        if (yogaRequestIdRef.current === requestId) {
+          const apiErr = err as ApiError;
+          setYogaErrorState({
+            code: apiErr.code || 'ERROR',
+            message: apiErr.message || 'Failed to load Yoga analysis'
+          });
+          setLoadingYoga(false);
+        }
+      }
+    };
+    
+    fetchYoga();
+  }, [activeTab, selectedProfileId, apiYogaData, loadingYoga, yogaErrorState]);
+
   // Accordion active house
   const [activeAccordionHouse, setActiveAccordionHouse] = useState<number>(1);
 
@@ -216,7 +258,7 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
   const [zoomScale, setZoomScale] = useState(1);
 
   // Swipeable tabs touch tracking
-  const tabsOrder: ('charts' | 'planets' | 'dasha' | 'dosha' | 'insights' | 'basic')[] = ['charts', 'planets', 'dasha', 'dosha', 'insights', 'basic'];
+  const tabsOrder: ('charts' | 'planets' | 'dasha' | 'dosha' | 'yoga' | 'insights' | 'basic')[] = ['charts', 'planets', 'dasha', 'dosha', 'yoga', 'insights', 'basic'];
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
 
@@ -537,6 +579,7 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
             { id: 'planets', label: 'Planets Degrees' },
             { id: 'dasha', label: 'Vimshottari Dasha' },
             { id: 'dosha', label: 'Dosha Analysis' },
+            { id: 'yoga', label: 'Yoga Analysis' },
             { id: 'insights', label: 'Predictions' },
             { id: 'basic', label: 'Basic Details' }
           ].map((tab) => {
@@ -962,6 +1005,34 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
               </div>
             ) : null}
           </div>
+        )}
+
+        {/* PANEL: YOGA */}
+        {activeTab === 'yoga' && (
+          <YogaAnalysisPanel
+            apiYogaData={apiYogaData}
+            loadingYoga={loadingYoga}
+            yogaErrorState={yogaErrorState}
+            selectedProfileId={selectedProfileId!}
+            onRetry={() => {
+              const reqId = ++yogaRequestIdRef.current;
+              setYogaErrorState(null);
+              setLoadingYoga(true);
+              AstrologyApi.getYogaAnalysis(selectedProfileId!)
+                .then(res => {
+                  if (yogaRequestIdRef.current === reqId) {
+                    setApiYogaData(res);
+                    setLoadingYoga(false);
+                  }
+                })
+                .catch(err => {
+                  if (yogaRequestIdRef.current === reqId) {
+                    setYogaErrorState({ code: err.code || 'ERROR', message: err.message || 'Failed to load Yoga analysis' });
+                    setLoadingYoga(false);
+                  }
+                });
+            }}
+          />
         )}
 
         {/* PANEL: INSIGHTS */}

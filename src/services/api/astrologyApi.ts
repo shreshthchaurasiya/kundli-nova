@@ -1,6 +1,6 @@
 import { ApiClient } from './apiClient';
 import { ENDPOINTS } from './endpoints';
-import { KundliNovaDailyHoroscope, ZodiacSign, KundliNovaNatalChart, KundliNovaVimshottariDasha, KundliNovaDoshaAnalysis } from '../../server/types/astrologyProvider';
+import { KundliNovaDailyHoroscope, ZodiacSign, KundliNovaNatalChart, KundliNovaVimshottariDasha, KundliNovaDoshaAnalysis, KundliNovaYogaAnalysis } from '../../server/types/astrologyProvider';
 
 export class AstrologyApi {
   /**
@@ -33,6 +33,14 @@ export class AstrologyApi {
    */
   static async getDoshaAnalysis(profileId: string): Promise<KundliNovaDoshaAnalysis> {
     return ApiClient.get<KundliNovaDoshaAnalysis>(ENDPOINTS.ASTROLOGY.GET_DOSHA(profileId));
+  }
+
+  /**
+   * Fetches the Yoga analysis for a given profile ID.
+   * @param profileId The ID of the saved Kundli profile
+   */
+  static async getYogaAnalysis(profileId: string): Promise<KundliNovaYogaAnalysis> {
+    return ApiClient.get<KundliNovaYogaAnalysis>(ENDPOINTS.ASTROLOGY.GET_YOGA(profileId));
   }
 }
 

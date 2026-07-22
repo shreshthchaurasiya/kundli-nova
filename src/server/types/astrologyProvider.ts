@@ -142,7 +142,7 @@ export interface KundliNovaDoshaAnalysis {
   results: KundliNovaDoshaResult[];
 }
 
-export interface KundliNovaYogaResult {
+export interface LegacyKundliNovaYogaResult {
   schemaVersion: '1.0';
   provider: string;
   yogas: Array<{
@@ -151,6 +151,47 @@ export interface KundliNovaYogaResult {
     description: string;
     hasYoga: boolean;
   }>;
+}
+
+export type YogaCode =
+  | 'GAJ_KESARI_YOGA'
+  | 'BUDHA_ADITYA_YOGA'
+  | 'DHAN_YOGA'
+  | 'RAJ_YOGA'
+  | 'NEECH_BHANG_RAJ_YOGA';
+
+export type YogaStrength =
+  | 'none'
+  | 'weak'
+  | 'moderate'
+  | 'strong'
+  | 'unknown';
+
+export interface YogaEvidence {
+  planets: string[];
+  houses: number[];
+  signs?: string[];
+  relationships?: string[];
+  description?: string;
+}
+
+export interface KundliNovaYogaResult {
+  code: YogaCode;
+  name: string;
+  detected: boolean;
+  strength: YogaStrength;
+  summary: string;
+  evidence: YogaEvidence[];
+  calculationStatus: 'calculated' | 'unavailable';
+}
+
+export interface KundliNovaYogaAnalysis {
+  schemaVersion: '1.0';
+  provider: string;
+  providerVersion: string;
+  calculatedAt: string;
+  profileId: string;
+  results: KundliNovaYogaResult[];
 }
 
 export interface KundliNovaPanchang {
@@ -200,7 +241,8 @@ export interface AstrologyCalculationProvider {
   getVimshottariDasha(input: KundliNovaCalcInput): Promise<KundliNovaVimshottariDasha>;
   getDoshas(input: KundliNovaCalcInput): Promise<LegacyKundliNovaDoshaResult>;
   getDoshaAnalysis(input: KundliNovaCalcInput): Promise<KundliNovaDoshaAnalysis>;
-  getYogas(input: KundliNovaCalcInput): Promise<KundliNovaYogaResult>;
+  getYogas(input: KundliNovaCalcInput): Promise<LegacyKundliNovaYogaResult>;
+  getYogaAnalysis(input: KundliNovaCalcInput): Promise<KundliNovaYogaAnalysis>;
   getPanchang(input: KundliNovaCalcInput, date?: string): Promise<KundliNovaPanchang>;
   getMatching(bride: KundliNovaCalcInput, groom: KundliNovaCalcInput): Promise<KundliNovaMatchResult>;
 }

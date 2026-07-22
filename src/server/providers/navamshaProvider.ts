@@ -354,6 +354,24 @@ export class NavamshaProvider implements AstrologyCalculationProvider {
     );
   }
 
+  public async getYogas(_input: KundliNovaCalcInput): Promise<import('../types/astrologyProvider').LegacyKundliNovaYogaResult> {
+    throw new ProviderError(
+      'navamsha',
+      'PROVIDER_NOT_CONFIGURED',
+      'Navamsha legacy Yoga endpoint is not verified/configured yet.',
+      503
+    );
+  }
+
+  public async getYogaAnalysis(_input: KundliNovaCalcInput): Promise<import('../types/astrologyProvider').KundliNovaYogaAnalysis> {
+    throw new ProviderError(
+      'navamsha',
+      'PROVIDER_NOT_CONFIGURED',
+      'Navamsha Yoga analysis endpoint is not verified/configured yet.',
+      503
+    );
+  }
+
   public async getDoshaAnalysis(_input: KundliNovaCalcInput): Promise<import('../types/astrologyProvider').KundliNovaDoshaAnalysis> {
     throw new ProviderError(
       'navamsha',
@@ -363,9 +381,7 @@ export class NavamshaProvider implements AstrologyCalculationProvider {
     );
   }
 
-  public async getYogas(_input: KundliNovaCalcInput): Promise<KundliNovaYogaResult> {
-    throw new Error('Method getYogas not implemented in Stage 2.');
-  }
+
 
   public async getPanchang(_input: KundliNovaCalcInput): Promise<KundliNovaPanchang> {
     throw new Error('Method getPanchang not implemented in Stage 2.');

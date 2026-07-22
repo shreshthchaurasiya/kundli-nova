@@ -1,4 +1,4 @@
-import { AstrologyCalculationProvider, KundliNovaCalcInput, KundliNovaNatalChart, KundliNovaVimshottariDasha, KundliNovaDoshaAnalysis } from '../types/astrologyProvider';
+import { AstrologyCalculationProvider, KundliNovaCalcInput, KundliNovaNatalChart, KundliNovaVimshottariDasha, KundliNovaDoshaAnalysis, KundliNovaYogaAnalysis } from '../types/astrologyProvider';
 import crypto from 'crypto';
 import { supabaseAdmin } from '../config/supabase';
 
@@ -11,6 +11,9 @@ export class KundliCalculationService {
 
   private doshaCache = new Map<string, KundliNovaDoshaAnalysis>();
   private doshaInflight = new Map<string, Promise<KundliNovaDoshaAnalysis>>();
+  
+  private yogaCache = new Map<string, KundliNovaYogaAnalysis>();
+  private yogaInflight = new Map<string, Promise<KundliNovaYogaAnalysis>>();
   
   constructor(private provider: AstrologyCalculationProvider) {}
 
@@ -133,6 +136,25 @@ export class KundliCalculationService {
       .finally(() => this.doshaInflight.delete(cacheKey));
 
     this.doshaInflight.set(cacheKey, promise);
+    return promise;
+  }
+
+  public async getYogaAnalysis(profileId: string, userId: string): Promise<KundliNovaYogaAnalysis> {
+    const input = await this.loadAuthorizedCalculationInput(profileId, userId);
+    const fingerprint = this.createFingerprint(input);
+    const cacheKey = `yoga:navamsha:v1:${input.profileId}:${fingerprint}`;
+
+    if (this.yogaCache.has(cacheKey)) return this.yogaCache.get(cacheKey)!;
+    if (this.yogaInflight.has(cacheKey)) return this.yogaInflight.get(cacheKey)!;
+
+    const promise = this.provider.getYogaAnalysis(input)
+      .then(result => {
+        this.yogaCache.set(cacheKey, result);
+        return result;
+      })
+      .finally(() => this.yogaInflight.delete(cacheKey));
+
+    this.yogaInflight.set(cacheKey, promise);
     return promise;
   }
 }
