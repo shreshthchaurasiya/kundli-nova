@@ -174,11 +174,17 @@ export const getCompatibility = async (req: AuthenticatedRequest, res: Response,
       return res.status(400).json({ status: 'error', code: 'INVALID_COMPATIBILITY_PROFILES', message: 'Please select two valid profiles for Kundli matching.' });
     }
 
-    const compatibility = await kundliCalculationService.getCompatibilityAnalysis(profileAId, profileBId, userId);
+    const [compatibility, manglik] = await Promise.all([
+      kundliCalculationService.getCompatibilityAnalysis(profileAId, profileBId, userId),
+      kundliCalculationService.getManglikCompatibility(profileAId, profileBId, userId)
+    ]);
 
     return res.status(200).json({
       status: 'success',
-      data: compatibility,
+      data: {
+        compatibility,
+        manglik
+      },
     });
   } catch (error: any) {
     handleAstrologyError(error, res, next, 'COMPATIBILITY');

@@ -100,22 +100,61 @@ describe('Stage 5E: Compatibility Backend Tests', () => {
       expect(response.body.code).toBe('SAME_PROFILE_NOT_ALLOWED');
     });
 
-    it('returns compatibility data successfully', async () => {
-      vi.spyOn(KundliCalculationService.prototype, 'getCompatibilityAnalysis').mockResolvedValueOnce(mockCompatibilityResult);
+    const mockManglikResult = {
+      schemaVersion: '1.0' as const,
+      provider: 'navamsha',
+      providerVersion: 'v1',
+      calculatedAt: new Date().toISOString(),
+      profileAId: 'profileA',
+      profileBId: 'profileB',
+      profileAManglik: true,
+      profileBManglik: false,
+      profileACancellation: 'not_evaluated',
+      profileBCancellation: 'fully_cancelled',
+      compatibility: 'manglik_non_manglik'
+    };
+
+    it('returns unified compatibility data successfully (Ashtakoot + Manglik)', async () => {
+      const compSpy = vi.spyOn(KundliCalculationService.prototype, 'getCompatibilityAnalysis').mockResolvedValueOnce(mockCompatibilityResult);
+      const manglikSpy = vi.spyOn(KundliCalculationService.prototype, 'getManglikCompatibility').mockResolvedValueOnce(mockManglikResult);
       
       const response = await request(app).get('/api/v1/astrology/compatibility?profileAId=profileA&profileBId=profileB').set('Authorization', 'Bearer fake-token');
       expect(response.status).toBe(200);
-      expect(response.body.data.totalScore).toBe(28.5);
+      expect(response.body.data.compatibility.totalScore).toBe(28.5);
+      expect(response.body.data.manglik.profileAManglik).toBe(true);
+      expect(response.body.data.manglik.compatibility).toBe('manglik_non_manglik');
+      
+      // Both service methods were called with the same parameters
+      expect(compSpy).toHaveBeenCalledWith('profileA', 'profileB', 'test-user-id');
+      expect(manglikSpy).toHaveBeenCalledWith('profileA', 'profileB', 'test-user-id');
+      
+      // Ensure no raw fields leak
+      expect(response.body.data.compatibility.reference_longitudes).toBeUndefined();
+      expect(response.body.data.manglik.reference_longitudes).toBeUndefined();
     });
 
-    it('handles PROVIDER_NOT_CONFIGURED properly', async () => {
+    it('handles PROVIDER_NOT_CONFIGURED properly if Ashtakoot fails', async () => {
       vi.spyOn(KundliCalculationService.prototype, 'getCompatibilityAnalysis').mockRejectedValueOnce(
         new ProviderError('navamsha', 'PROVIDER_NOT_CONFIGURED', 'Not ready')
       );
+      vi.spyOn(KundliCalculationService.prototype, 'getManglikCompatibility').mockResolvedValueOnce(mockManglikResult);
       
       const response = await request(app).get('/api/v1/astrology/compatibility?profileAId=profileA&profileBId=profileB').set('Authorization', 'Bearer fake-token');
       expect(response.status).toBe(503);
       expect(response.body.code).toBe('COMPATIBILITY_SERVICE_NOT_CONFIGURED');
+      expect(response.body.data).toBeUndefined();
+    });
+
+    it('handles PROVIDER_BAD_RESPONSE properly if Manglik fails', async () => {
+      vi.spyOn(KundliCalculationService.prototype, 'getCompatibilityAnalysis').mockResolvedValueOnce(mockCompatibilityResult);
+      vi.spyOn(KundliCalculationService.prototype, 'getManglikCompatibility').mockRejectedValueOnce(
+        new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', 'Invalid payload')
+      );
+      
+      const response = await request(app).get('/api/v1/astrology/compatibility?profileAId=profileA&profileBId=profileB').set('Authorization', 'Bearer fake-token');
+      expect(response.status).toBe(502);
+      expect(response.body.code).toBe('COMPATIBILITY_CALCULATION_FAILED');
+      expect(response.body.data).toBeUndefined();
     });
   });
 

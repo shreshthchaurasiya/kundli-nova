@@ -22,6 +22,9 @@ export class KundliCalculationService {
   private detailedReportCache = new Map<string, import('../types/astrologyProvider').KundliNovaDetailedReport>();
   private detailedReportInflight = new Map<string, Promise<import('../types/astrologyProvider').KundliNovaDetailedReport>>();
   
+  private manglikCache = new Map<string, import('../types/astrologyProvider').KundliNovaManglikAnalysis>();
+  private manglikInflight = new Map<string, Promise<import('../types/astrologyProvider').KundliNovaManglikAnalysis>>();
+  
   constructor(private provider: AstrologyCalculationProvider) {}
 
   private async loadAuthorizedCalculationInput(profileId: string, userId: string): Promise<KundliNovaCalcInput> {
@@ -232,6 +235,32 @@ export class KundliCalculationService {
       .finally(() => this.compatibilityInflight.delete(cacheKey));
 
     this.compatibilityInflight.set(cacheKey, promise);
+    return promise;
+  }
+
+  public async getManglikCompatibility(profileAId: string, profileBId: string, userId: string): Promise<import('../types/astrologyProvider').KundliNovaManglikAnalysis> {
+    const [inputA, inputB] = await Promise.all([
+      this.loadAuthorizedCalculationInput(profileAId, userId),
+      this.loadAuthorizedCalculationInput(profileBId, userId)
+    ]);
+
+    const fingerprintA = this.createFingerprint(inputA);
+    const fingerprintB = this.createFingerprint(inputB);
+    
+    // Directional cache key
+    const cacheKey = `manglik:navamsha:v1:${inputA.profileId}:${fingerprintA}:${inputB.profileId}:${fingerprintB}`;
+
+    if (this.manglikCache.has(cacheKey)) return this.manglikCache.get(cacheKey)!;
+    if (this.manglikInflight.has(cacheKey)) return this.manglikInflight.get(cacheKey)!;
+
+    const promise = this.provider.getManglikCompatibility(inputA, inputB)
+      .then(result => {
+        this.manglikCache.set(cacheKey, result);
+        return result;
+      })
+      .finally(() => this.manglikInflight.delete(cacheKey));
+
+    this.manglikInflight.set(cacheKey, promise);
     return promise;
   }
 
