@@ -89,6 +89,7 @@ describe('Detailed Kundli Report Validation (Stage 5F)', () => {
         getPanchang: vi.fn(),
         getMatching: vi.fn(),
         getCompatibilityAnalysis: vi.fn(),
+        getManglikCompatibility: vi.fn(),
         getDetailedKundliReport: vi.fn().mockResolvedValue(mockDetailedReportResult)
       };
       

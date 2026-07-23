@@ -70,6 +70,21 @@ export const navamshaCompatibilityResponseSchema = z.object({
   }).passthrough()
 });
 
+export const navamshaManglikResponseSchema = z.object({
+  statusCode: z.number().optional(),
+  output: z.object({
+    person_a: z.object({
+      is_present: z.boolean(),
+      cancellation: z.string().optional()
+    }),
+    person_b: z.object({
+      is_present: z.boolean(),
+      cancellation: z.string().optional()
+    }),
+    compatibility: z.string()
+  })
+});
+
 export interface NavamshaProviderConfig {
   apiKey?: string;
   baseUrl?: string;
@@ -553,6 +568,100 @@ export class NavamshaProvider implements AstrologyCalculationProvider {
       maximumScore,
       compatibilityPercentage: parseFloat(percentage.toFixed(2)),
       factors
+    };
+  }
+
+  public async getManglikCompatibility(inputA: KundliNovaCalcInput, inputB: KundliNovaCalcInput): Promise<any> {
+    const { apiKey, baseUrl } = this.getProviderConfig();
+
+    const bridePayload = this.buildStandardBirthRequest(inputA);
+    const groomPayload = this.buildStandardBirthRequest(inputB);
+
+    const requestPayload = {
+      person_a: bridePayload,
+      person_b: groomPayload
+    };
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
+
+    let response: Response;
+    try {
+      response = await fetch(`${baseUrl}/api/v1/compatibility/manglik`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(requestPayload),
+        signal: controller.signal,
+      });
+    } catch (err: any) {
+      if (err.name === 'AbortError' || err.message?.includes('aborted')) {
+        throw new ProviderError(
+          'navamsha',
+          'PROVIDER_TIMEOUT',
+          `Request timed out after ${this.timeoutMs}ms`,
+          504
+        );
+      }
+      throw new ProviderError(
+        'navamsha',
+        'PROVIDER_UNAVAILABLE',
+        `Network error: ${err.message || 'Failed to reach Navamsha API'}`,
+        503
+      );
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    if (!response.ok) {
+      const status = response.status;
+      let errorBody = '';
+      try {
+        errorBody = await response.text();
+      } catch {}
+      console.error('NAVAMSHA ERROR BODY:', errorBody);
+
+      if (status === 401 || status === 403) throw new ProviderError('navamsha', 'PROVIDER_AUTH_ERROR', `Authentication failed with Navamsha API (${status})`, 503);
+      if (status === 408) throw new ProviderError('navamsha', 'PROVIDER_TIMEOUT', 'Navamsha API request timed out', 504);
+      if (status === 429) throw new ProviderError('navamsha', 'PROVIDER_UNAVAILABLE', 'Navamsha API rate limit exceeded', 503);
+      if (status === 422 || status === 400) throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', 'Invalid request payload or validation failed upstream', 502);
+      throw new ProviderError('navamsha', 'PROVIDER_UNAVAILABLE', `Navamsha server error (${status})`, 503);
+    }
+
+    let responseData: unknown;
+    try {
+      responseData = await response.json();
+    } catch {
+      throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', 'Failed to parse Navamsha response JSON', 502);
+    }
+
+    const validatedResponse = navamshaManglikResponseSchema.safeParse(responseData);
+    if (!validatedResponse.success) {
+      throw new ProviderError(
+        'navamsha',
+        'PROVIDER_BAD_RESPONSE',
+        `Navamsha manglik response envelope schema mismatch: ${validatedResponse.error.message}`,
+        502
+      );
+    }
+
+    const out = validatedResponse.data.output;
+
+    return {
+      schemaVersion: '1.0',
+      provider: 'navamsha',
+      providerVersion: 'v1',
+      calculatedAt: new Date().toISOString(),
+      profileAId: inputA.profileId,
+      profileBId: inputB.profileId,
+      profileAManglik: out.person_a.is_present,
+      profileBManglik: out.person_b.is_present,
+      profileACancellation: out.person_a.cancellation || 'not_evaluated',
+      profileBCancellation: out.person_b.cancellation || 'not_evaluated',
+      compatibility: out.compatibility
     };
   }
 

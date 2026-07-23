@@ -135,6 +135,7 @@ describe('Stage 5E: Compatibility Backend Tests', () => {
         getPanchang: vi.fn(),
         getMatching: vi.fn(),
         getCompatibilityAnalysis: vi.fn().mockResolvedValue(mockCompatibilityResult),
+        getManglikCompatibility: vi.fn(),
         getDetailedKundliReport: vi.fn()
       };
       // Reset the service mock to use real implementation for these tests

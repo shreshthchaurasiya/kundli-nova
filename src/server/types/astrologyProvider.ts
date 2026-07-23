@@ -267,6 +267,20 @@ export interface KundliNovaCompatibilityAnalysis {
   factors: AshtakootaFactor[];
 }
 
+export interface KundliNovaManglikAnalysis {
+  schemaVersion: '1.0';
+  provider: string;
+  providerVersion: string;
+  calculatedAt: string;
+  profileAId: string;
+  profileBId: string;
+  profileAManglik: boolean;
+  profileBManglik: boolean;
+  profileACancellation: string;
+  profileBCancellation: string;
+  compatibility: string;
+}
+
 export interface AstrologyCalculationProvider {
   getNatalChart(input: KundliNovaCalcInput): Promise<KundliNovaNatalChart>;
   getPlanets(input: KundliNovaCalcInput): Promise<PlanetData[]>;
@@ -278,6 +292,7 @@ export interface AstrologyCalculationProvider {
   getPanchang(input: KundliNovaCalcInput, date?: string): Promise<KundliNovaPanchang>;
   getMatching(bride: KundliNovaCalcInput, groom: KundliNovaCalcInput): Promise<KundliNovaMatchResult>;
   getCompatibilityAnalysis(inputA: KundliNovaCalcInput, inputB: KundliNovaCalcInput): Promise<KundliNovaCompatibilityAnalysis>;
+  getManglikCompatibility(inputA: KundliNovaCalcInput, inputB: KundliNovaCalcInput): Promise<KundliNovaManglikAnalysis>;
   getDetailedKundliReport(input: KundliNovaCalcInput): Promise<KundliNovaDetailedReport>;
 }
 
