@@ -35,7 +35,7 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ child
           repositories.kundliProfile.getAllProfiles()
         ]);
         setProfile(p);
-        const kp = kpList.find(k => k.isDefault) || kpList[0] || null;
+        const kp = kpList.find(k => k.isDefault) || kpList.find(k => k.relation === 'self') || kpList[0] || null;
         setDefaultKundliProfile(kp);
       } else {
         setProfile(null);

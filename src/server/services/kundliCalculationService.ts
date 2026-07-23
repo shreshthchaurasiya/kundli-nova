@@ -140,9 +140,12 @@ export class KundliCalculationService {
 
         try {
           if (dasha.currentMahadasha?.planet) {
+            const mahadashaStr = dasha.currentAntardasha?.planet
+              ? `${dasha.currentMahadasha.planet} / ${dasha.currentAntardasha.planet}`
+              : dasha.currentMahadasha.planet;
             supabaseAdmin
               .from('kundli_profiles')
-              .update({ mahadasha: dasha.currentMahadasha.planet })
+              .update({ mahadasha: mahadashaStr })
               .eq('id', input.profileId)
               .then(); // Fire and forget
           }

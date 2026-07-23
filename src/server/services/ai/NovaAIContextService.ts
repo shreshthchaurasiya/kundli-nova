@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { supabaseAdmin } from '../../config/supabase';
 import { KundliCalculationService } from '../kundliCalculationService';
 import { NovaAIContext, NovaAIConversationMemory } from '../../types/novaAiContext';
+import { NormalizedCompatibilityContext } from '../../../types/matchingAiContext';
 
 export class NovaAIContextService {
   constructor(private kundliService: KundliCalculationService) {}
@@ -14,7 +15,9 @@ export class NovaAIContextService {
   public async loadContext(
     userId: string,
     profileId: string,
-    memory: NovaAIConversationMemory
+    memory: NovaAIConversationMemory,
+    profileBId?: string,
+    compatibilityContext?: NormalizedCompatibilityContext
   ): Promise<NovaAIContext> {
     // 1. Load profile securely
     const { data: profile, error } = await supabaseAdmin
@@ -86,6 +89,34 @@ export class NovaAIContextService {
       }
     }
 
+    let matchingContext = undefined;
+
+    if (profileBId) {
+      const { data: profileB } = await supabaseAdmin
+        .from('kundli_profiles')
+        .select('*')
+        .eq('id', profileBId)
+        .eq('owner_id', userId)
+        .single();
+
+      if (profileB) {
+        matchingContext = {
+          partnerProfile: {
+            id: profileB.id,
+            name: profileB.name,
+            gender: profileB.gender,
+            dob: profileB.dob,
+            timeOfBirth: profileB.tob,
+            city: profileB.birth_city || 'Unknown',
+            latitude: profileB.latitude,
+            longitude: profileB.longitude,
+            timezone: profileB.timezone,
+          },
+          normalizedContext: compatibilityContext
+        };
+      }
+    }
+
     return {
       user: { id: userId },
       selectedProfile: {
@@ -100,6 +131,7 @@ export class NovaAIContextService {
         timezone: profile.timezone,
       },
       astrology: astrologyContext,
+      matching: matchingContext,
       memory
     };
   }

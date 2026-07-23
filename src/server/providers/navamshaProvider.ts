@@ -389,13 +389,93 @@ export class NavamshaProvider implements AstrologyCalculationProvider {
     return chart.planets;
   }
 
-  public async getVimshottariDasha(_input: KundliNovaCalcInput): Promise<import('../types/astrologyProvider').KundliNovaVimshottariDasha> {
-    throw new ProviderError(
-      'navamsha',
-      'PROVIDER_NOT_CONFIGURED',
-      'Navamsha Vimshottari Dasha endpoint is not verified/configured yet.',
-      503
-    );
+  public async getVimshottariDasha(input: KundliNovaCalcInput): Promise<import('../types/astrologyProvider').KundliNovaVimshottariDasha> {
+    const { apiKey, baseUrl } = this.getProviderConfig();
+    const payload = this.buildStandardBirthRequest(input);
+    const currentPayload = { ...payload, target: null };
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
+
+    try {
+      const [timelineRes, currentRes] = await Promise.all([
+        fetch(`${baseUrl}/api/v1/dasha/vimshottari`, {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        }),
+        fetch(`${baseUrl}/api/v1/dasha/current`, {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify(currentPayload),
+          signal: controller.signal,
+        })
+      ]);
+
+      if (!timelineRes.ok) {
+        throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', `Failed to fetch dasha timeline: ${timelineRes.statusText}`, timelineRes.status);
+      }
+      if (!currentRes.ok) {
+        throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', `Failed to fetch current dasha: ${currentRes.statusText}`, currentRes.status);
+      }
+
+      const timelineData = await timelineRes.json();
+      const currentData = await currentRes.json();
+
+      const outTimeline = timelineData.output?.mahadashas || [];
+      const outCurrent = currentData.output?.mahadasha;
+      const outAntardasha = currentData.output?.antardasha;
+
+      const timeline = outTimeline.map((m: any) => ({
+        planet: m.lord,
+        startDate: m.start,
+        endDate: m.end,
+        isCurrent: outCurrent?.lord === m.lord,
+        remainingDays: outCurrent?.lord === m.lord ? outCurrent.duration_days : undefined,
+      }));
+
+      const currentMahadasha = {
+        planet: outCurrent.lord,
+        startDate: outCurrent.start,
+        endDate: outCurrent.end,
+        isCurrent: true,
+        remainingDays: outCurrent.duration_days,
+      };
+
+      const currentAntardasha = outAntardasha ? {
+        planet: outAntardasha.lord,
+        startDate: outAntardasha.start,
+        endDate: outAntardasha.end,
+        isCurrent: true,
+        remainingDays: outAntardasha.duration_days,
+      } : null;
+
+      return {
+        schemaVersion: '1.0',
+        provider: 'navamsha',
+        providerVersion: 'v1',
+        calculatedAt: new Date().toISOString(),
+        currentMahadasha,
+        currentAntardasha,
+        mahadashaTimeline: timeline,
+      };
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        throw new ProviderError('navamsha', 'PROVIDER_TIMEOUT', 'Request to Navamsha API timed out');
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
   public async getDoshas(_input: KundliNovaCalcInput): Promise<import('../types/astrologyProvider').LegacyKundliNovaDoshaResult> {

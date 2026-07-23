@@ -2,8 +2,7 @@ import { IKundliProfileRepository } from '../interfaces/kundliProfile';
 import { KundliProfile } from '../../types/kundli';
 import { ApiClient } from '../../services/api/apiClient';
 import { ENDPOINTS } from '../../services/api/endpoints';
-import { storageAdapter } from '../../services/storage/storageAdapter';
-import { KEYS } from '../../services/storage/storageKeys';
+
 
 export class ApiKundliProfileRepository implements IKundliProfileRepository {
   async getAllProfiles(): Promise<KundliProfile[]> {
@@ -33,28 +32,12 @@ export class ApiKundliProfileRepository implements IKundliProfileRepository {
 
   async deleteProfile(profileId: string): Promise<void> {
     await ApiClient.delete(ENDPOINTS.KUNDLI.DELETE(profileId));
-    
-    const defaultProfileId = storageAdapter.getItem<string | null>(KEYS.KUNDLI_DEFAULT_PROFILE, null);
-    if (defaultProfileId === profileId) {
-      storageAdapter.removeItem(KEYS.KUNDLI_DEFAULT_PROFILE);
-    }
+    // API currently doesn't sync default profile to local storage
   }
 
   async getDefaultProfile(): Promise<KundliProfile | null> {
-    const defaultProfileId = storageAdapter.getItem<string | null>(KEYS.KUNDLI_DEFAULT_PROFILE, null);
-    if (defaultProfileId) {
-      return await this.getProfileById(defaultProfileId);
-    }
-    
-    // If no default selected, maybe return the first self profile or just null
     const all = await this.getAllProfiles();
-    const selfProfile = all.find(p => p.relation === 'self');
-    if (selfProfile) {
-      this.setDefaultProfile(selfProfile.id);
-      return selfProfile;
-    }
-    
-    return all.length > 0 ? all[0] : null;
+    return all.find(p => p.isDefault) || all.find(p => p.relation === 'self') || (all.length > 0 ? all[0] : null);
   }
 
   /**
@@ -72,6 +55,6 @@ export class ApiKundliProfileRepository implements IKundliProfileRepository {
   }
 
   async setDefaultProfile(profileId: string): Promise<void> {
-    storageAdapter.setItem(KEYS.KUNDLI_DEFAULT_PROFILE, profileId);
+    await this.updateProfile(profileId, { isDefault: true } as any);
   }
 }

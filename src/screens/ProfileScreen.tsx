@@ -127,7 +127,7 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
         zodiac: defaultKundliProfile?.rashi || 'Will be generated after Kundli analysis',
         nakshatra: defaultKundliProfile?.nakshatra || 'Will be generated after Kundli analysis',
         lagna: defaultKundliProfile?.lagna || 'Will be generated after Kundli analysis',
-        mahadasha: defaultKundliProfile?.mahadasha || 'Will be generated after Kundli analysis'
+        mahadasha: defaultKundliProfile?.mahadasha || 'Not generated yet'
       };
     } catch (e) {
       return null;
@@ -266,7 +266,7 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
                   <ProfileInfoRow 
                     label="Mahadasha" 
                     value={astroInfo?.mahadasha} 
-                    isOrange={astroInfo?.mahadasha !== 'Will be generated after Kundli analysis' && astroInfo?.mahadasha !== 'Calculating...'} 
+                    isOrange={!!astroInfo?.mahadasha && astroInfo?.mahadasha !== 'Not generated yet' && astroInfo?.mahadasha !== 'Calculating...'} 
                   />
                 </>
               ) : (
@@ -344,7 +344,7 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
                   showToast('Please add Birth Details to view Kundli');
                   return;
                 }
-                onNavigate('view-kundli', { returnTo: 'profile' });
+                onNavigate('view-kundli', { mode: 'kundli', returnTo: 'profile' });
               }}
               className="bg-[#FF8A00] text-white font-bold px-4 py-2.5 rounded-xl text-xs tracking-tight shrink-0 shadow-md shadow-[#FF8A00]/25 cursor-pointer hover:bg-[#E07A00] transition-colors"
             >

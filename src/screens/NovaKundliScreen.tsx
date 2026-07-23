@@ -24,7 +24,9 @@ import {
   BookOpen,
   Info,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  X,
+  Plus
 } from 'lucide-react';
 import { Screen } from '../types';
 import { KundliData } from '../services/kundliStorage';
@@ -35,6 +37,9 @@ import { AstrologyApi } from '../services/api/astrologyApi';
 import { KundliNovaNatalChart, KundliNovaDoshaAnalysis, KundliNovaYogaAnalysis, KundliNovaCompatibilityAnalysis } from '../server/types/astrologyProvider';
 import { YogaAnalysisPanel } from '../components/astrology/YogaAnalysisPanel';
 import { CompatibilityPanel } from '../components/astrology/CompatibilityPanel';
+import { getKootaMetadata, getCompatibilityCategory } from '../features/astrology/compatibilityMetadata';
+import { NormalizedCompatibilityContext } from '../types/matchingAiContext';
+import { KundliMatchingFormPanel } from '../components/astrology/KundliMatchingFormPanel';
 import { DetailedKundliReportPanel } from '../components/astrology/DetailedKundliReportPanel';
 import { KundliProfile } from '../types/kundli';
 import { KundliChart } from '../components/astrology/KundliChart';
@@ -49,6 +54,9 @@ interface NovaKundliScreenProps {
     returnTo?: Screen;
     initialTab?: string;
     createdProfileId?: string;
+    mode?: 'kundli' | 'matching';
+    matchingStep?: 'form' | 'result';
+    profileId?: string;
   };
 }
 
@@ -56,11 +64,14 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
   const repositories = useRepositories();
   const { defaultKundliProfile, isLoadingProfile } = useProfile();
   const returnToScreen = routeParams?.returnTo || routeParams?.fromScreen || 'home';
+  const mode = routeParams?.mode || 'kundli';
+  const matchingStep = routeParams?.matchingStep || 'form';
 
   // Profile selection
   const [profiles, setProfiles] = useState<KundliProfile[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [hasInitializedDefault, setHasInitializedDefault] = useState(false);
+  const [isProfileSwitcherOpen, setIsProfileSwitcherOpen] = useState(false);
 
   // New API Data
   const [apiChartData, setApiChartData] = useState<KundliNovaNatalChart | null>(null);
@@ -84,6 +95,8 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
   const [loadingCompatibility, setLoadingCompatibility] = useState(false);
   const [compatibilityErrorState, setCompatibilityErrorState] = useState<{code: string, message: string} | null>(null);
   const [selectedProfileBId, setSelectedProfileBId] = useState<string | null>(null);
+  const [matchingFormError, setMatchingFormError] = useState<string | null>(null);
+  const isSavingPartnerRef = useRef(false);
 
   const [detailedReportData, setDetailedReportData] = useState<import('../server/types/astrologyProvider').KundliNovaDetailedReport | null>(null);
   const [detailedReportLoading, setDetailedReportLoading] = useState(false);
@@ -114,7 +127,10 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
           return;
         }
 
-        let chosenProfile = userProfiles.find(p => p.id === defaultKundliProfile.id) || defaultKundliProfile;
+        const explicitId = routeParams?.profileId;
+        let chosenProfile = explicitId 
+          ? userProfiles.find(p => p.id === explicitId) || defaultKundliProfile
+          : userProfiles.find(p => p.id === defaultKundliProfile.id) || defaultKundliProfile;
         const raw = chosenProfile as any;
 
         // ── Geocode gate ──────────────────────────────────────────────────────
@@ -215,7 +231,8 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
   }, [selectedProfileId]);
 
   type TabKey = 'charts' | 'planets' | 'dasha' | 'dosha' | 'yoga' | 'compatibility' | 'detailed-report' | 'insights' | 'basic';
-  const [activeTab, setActiveTab] = useState<TabKey>((routeParams?.initialTab as TabKey) || 'charts');
+  const defaultTab = mode === 'matching' ? 'compatibility' : (routeParams?.initialTab || 'charts');
+  const [activeTab, setActiveTab] = useState<TabKey>(defaultTab as TabKey);
 
   // Clear states when profile A switches
   useEffect(() => {
@@ -430,7 +447,7 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
   const [zoomScale, setZoomScale] = useState(1);
 
   // Swipeable tabs touch tracking
-  const tabsOrder: TabKey[] = ['charts', 'planets', 'dasha', 'dosha', 'yoga', 'compatibility', 'detailed-report', 'insights', 'basic'];
+  const tabsOrder: TabKey[] = ['charts', 'planets', 'dasha', 'dosha', 'yoga', 'detailed-report', 'basic'];
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
 
@@ -505,8 +522,83 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
 
   const planetaryPositions = apiChartData.planets;
   
+  /**
+   * Save a new partner profile inline, geocode it, then trigger compatibility.
+   * Called from KundliMatchingFormPanel when partnerMode === 'new'.
+   * Guards against duplicate calls via isSavingPartnerRef.
+   */
+  const handleSavePartnerAndMatch = async (fields: import('../components/astrology/KundliMatchingFormPanel').NewPartnerFields) => {
+    if (isSavingPartnerRef.current || loadingCompatibility) return;
+    isSavingPartnerRef.current = true;
+    setMatchingFormError(null);
+    setLoadingCompatibility(true);
+
+    try {
+      // 1. Create the profile
+      const payload: any = {
+        name: fields.name,
+        gender: fields.gender as any,
+        relation: 'partner' as any,
+        dob: fields.dob,
+        tob: fields.tob,
+        birth_city: fields.city,
+        birth_district: fields.district || fields.city,
+        birth_state: fields.state,
+      };
+
+      let partnerProfile = await repositories.kundliProfile.createProfile(payload);
+      const raw = partnerProfile as any;
+
+      // 2. Geocode if coordinates are missing
+      if (raw.latitude == null || raw.longitude == null || !raw.timezone) {
+        const geocodePatch: any = {
+          birth_city: raw.birth_city || fields.city,
+          birth_district: raw.birth_district || fields.district || fields.city,
+          birth_state: raw.birth_state || fields.state,
+        };
+        await repositories.kundliProfile.updateProfile(partnerProfile.id, geocodePatch);
+        const refreshed = await repositories.kundliProfile.getProfileById(partnerProfile.id);
+        if (!refreshed) throw new Error('Partner profile not found after geocode.');
+        const refreshedRaw = refreshed as any;
+        if (refreshedRaw.latitude == null || refreshedRaw.longitude == null || !refreshedRaw.timezone) {
+          setMatchingFormError('Could not resolve birth location. Please check the city and state spelling and try again.');
+          setLoadingCompatibility(false);
+          isSavingPartnerRef.current = false;
+          return;
+        }
+        partnerProfile = refreshed;
+      }
+
+      // 3. Reload all profiles so the panel can show the new partner
+      const freshProfiles = await repositories.kundliProfile.getAllProfiles();
+      setProfiles(freshProfiles);
+      setSelectedProfileBId(partnerProfile.id);
+
+      // 4. Trigger compatibility exactly once
+      const reqId = ++compatibilityRequestIdRef.current;
+      setCompatibilityErrorState(null);
+
+      const result = await AstrologyApi.getCompatibility(selectedProfileId!, partnerProfile.id);
+      if (compatibilityRequestIdRef.current === reqId) {
+        setApiCompatibilityData(result);
+        setLoadingCompatibility(false);
+        // Transition to result step by updating the route
+        onNavigate('nova-kundli', {
+          mode: 'matching',
+          matchingStep: 'result',
+          profileId: selectedProfileId,
+        });
+      }
+    } catch (err: any) {
+      setMatchingFormError(err?.message || 'Failed to save partner or calculate compatibility.');
+      setLoadingCompatibility(false);
+    } finally {
+      isSavingPartnerRef.current = false;
+    }
+  };
+
   const handleDownloadPdf = async () => {
-    if (activeTab === 'compatibility') {
+    if (mode === 'matching') {
       if (!apiCompatibilityData || !selectedProfileBId) return;
       const profileB = profiles.find(p => p.id === selectedProfileBId);
       if (!profileB) return;
@@ -709,98 +801,105 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
             <ArrowLeft size={22} strokeWidth={2.5} />
           </button>
           <div>
-            <h1 className="text-[16px] font-[850] text-[#111827] tracking-tight leading-tight">Janam Kundli</h1>
-            <p className="text-[10.5px] font-bold text-[#FF8A00] tracking-wide uppercase mt-0.5">Personal Kundli Report</p>
+            <h1 className="text-[16px] font-[850] text-[#111827] tracking-tight leading-tight">
+              {mode === 'matching' ? (matchingStep === 'result' ? 'Kundli Matching Result' : 'Kundli Matching') : 'Janam Kundli'}
+            </h1>
+            <p className="text-[10.5px] font-bold text-[#FF8A00] tracking-wide uppercase mt-0.5">
+              {mode === 'matching' ? 'Compare Profiles' : 'Personal Kundli Report'}
+            </p>
           </div>
         </div>
 
-        <button 
-          onClick={handleDownloadPdf}
-          disabled={(activeTab === 'compatibility' ? !apiCompatibilityData : !apiChartData) || pdfModalState === 'generating'}
-          className="h-9 px-3 bg-[#FFF3E0] text-[#FF8A00] border border-[#FFE0B2] hover:bg-[#FFE0B2] active:scale-[0.97] rounded-full text-[12px] font-[800] flex items-center space-x-1.5 transition-all focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {pdfModalState === 'generating' ? (
-            <div className="w-3 h-3 border-2 border-t-transparent border-[#FF8A00] rounded-full animate-spin" />
-          ) : (
-            <Download size={13} strokeWidth={3} />
-          )}
-          <span>{pdfModalState === 'generating' ? 'Generating...' : 'Save PDF'}</span>
-        </button>
+        {/* Save PDF — hidden entirely on matching form step */}
+        {!(mode === 'matching' && matchingStep === 'form') && (
+          <button
+            onClick={handleDownloadPdf}
+            disabled={!apiCompatibilityData && mode === 'matching' ? true : (!apiChartData && mode !== 'matching') || pdfModalState === 'generating'}
+            className="h-9 px-3 rounded-full text-[12px] font-[800] flex items-center space-x-1.5 transition-all focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed bg-[#FFF3E0] text-[#FF8A00] border border-[#FFE0B2] hover:bg-[#FFE0B2] active:scale-[0.97]"
+          >
+            {pdfModalState === 'generating' ? (
+              <div className="w-3 h-3 border-2 border-t-transparent border-[#FF8A00] rounded-full animate-spin" />
+            ) : (
+              <Download size={13} strokeWidth={3} />
+            )}
+            <span>{pdfModalState === 'generating' ? 'Generating...' : 'Save PDF'}</span>
+          </button>
+        )}
       </div>
 
 
       {/* Sleek Horizontal Profile Summary (Saves space, matches Astrotalk app) */}
-      <div className="px-4 pt-4">
-        <div className="max-w-md mx-auto bg-gradient-to-r from-[#FFFDF9] to-[#FFF9F0] border border-[#F5E6D3] rounded-2xl p-4 shadow-[0_2px_8px_rgba(255,138,0,0.02)] flex items-center justify-between relative overflow-hidden">
-          <div className="absolute right-0 top-0 bottom-0 w-1/4 opacity-[0.02] text-neutral-900 pointer-events-none">
-            <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-              <circle cx="90" cy="50" r="40" stroke="currentColor" strokeWidth="0.8" fill="none" />
-            </svg>
-          </div>
-          
-          <div className="flex items-center space-x-3 w-full">
-            <div className="w-11 h-11 rounded-full bg-gradient-to-tr from-[#FF8A00] to-[#FFB74D] text-white flex items-center justify-center font-[800] text-[18px] shadow-[0_3px_8px_rgba(255,138,0,0.15)] ring-2 ring-white shrink-0">
-              {birthDetails.name.charAt(0).toUpperCase()}
-            </div>
-            <div className="flex-1 relative">
-              <div className="flex items-center space-x-1.5 relative">
-                <select 
-                  className="appearance-none bg-transparent text-[14.5px] font-[850] text-[#111827] leading-tight outline-none focus:outline-none pr-5 cursor-pointer max-w-[150px] truncate"
-                  value={selectedProfileId || ''}
-                  onChange={(e) => setSelectedProfileId(e.target.value)}
-                >
-                  {profiles.map(p => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
-                <ChevronDown size={14} className="text-neutral-400 absolute right-0 pointer-events-none" />
-                <span className="text-[9.5px] text-[#FF8A00] bg-[#FFF3E0] px-1.5 py-0.5 rounded-full font-extrabold uppercase tracking-widest ml-1">{birthDetails.gender}</span>
-              </div>
-              <div className="flex items-center space-x-1.5 text-neutral-500 text-[11px] font-semibold mt-1.5">
-                <span>{birthDetails.dob}</span>
-                <span className="text-neutral-300">•</span>
-                <span>{birthDetails.tob}</span>
-              </div>
+      {mode === 'kundli' && (
+        <div className="px-4 pt-4">
+          <div className="max-w-md mx-auto bg-gradient-to-r from-[#FFFDF9] to-[#FFF9F0] border border-[#F5E6D3] rounded-2xl p-4 shadow-[0_2px_8px_rgba(255,138,0,0.02)] flex items-center justify-between relative overflow-hidden">
+            <div className="absolute right-0 top-0 bottom-0 w-1/4 opacity-[0.02] text-neutral-900 pointer-events-none">
+              <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                <circle cx="90" cy="50" r="40" stroke="currentColor" strokeWidth="0.8" fill="none" />
+              </svg>
             </div>
             
-            <div className="text-right shrink-0 pl-2">
-              <span className="text-[10px] font-bold text-neutral-400 block tracking-wide uppercase">Place</span>
-              <span className="text-[11.5px] font-extrabold text-neutral-700 block truncate max-w-[80px] mt-0.5">{birthDetails.city}</span>
+            <div className="flex items-center space-x-3 w-full">
+              <div className="w-11 h-11 rounded-full bg-gradient-to-tr from-[#FF8A00] to-[#FFB74D] text-white flex items-center justify-center font-[800] text-[18px] shadow-[0_3px_8px_rgba(255,138,0,0.15)] ring-2 ring-white shrink-0">
+                {birthDetails.name.charAt(0).toUpperCase()}
+              </div>
+              <div className="flex-1 relative">
+                <div 
+                  className="flex items-center space-x-1.5 relative cursor-pointer group"
+                  onClick={() => setIsProfileSwitcherOpen(true)}
+                >
+                  <span className="text-[14.5px] font-[850] text-[#111827] leading-tight max-w-[150px] truncate group-hover:text-[#FF8A00] transition-colors">
+                    {birthDetails.name}
+                  </span>
+                  <ChevronDown size={14} className="text-neutral-400 group-hover:text-[#FF8A00] transition-colors" />
+                  <span className="text-[9.5px] text-[#FF8A00] bg-[#FFF3E0] px-1.5 py-0.5 rounded-full font-extrabold uppercase tracking-widest ml-1">{birthDetails.gender}</span>
+                </div>
+                <div className="flex items-center space-x-1.5 text-neutral-500 text-[11px] font-semibold mt-1.5">
+                  <span>{birthDetails.dob}</span>
+                  <span className="text-neutral-300">•</span>
+                  <span>{birthDetails.tob}</span>
+                </div>
+              </div>
+              
+              <div className="text-right shrink-0 pl-2">
+                <span className="text-[10px] font-bold text-neutral-400 block tracking-wide uppercase">Place</span>
+                <span className="text-[11.5px] font-extrabold text-neutral-700 block truncate max-w-[80px] mt-0.5">{birthDetails.city}</span>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Horizontal Scrollable Tab Bar - Sticky beneath profile */}
-      <div className="sticky top-[61px] bg-[#FCFBF8] border-b border-[#F1EFE9] py-3 z-10">
-        <div className="flex space-x-2 overflow-x-auto px-4 no-scrollbar scroll-smooth">
-          {[
-            { id: 'charts', label: 'Lagna Chart' },
-            { id: 'planets', label: 'Planets Degrees' },
-            { id: 'dasha', label: 'Vimshottari Dasha' },
-            { id: 'dosha', label: 'Dosha Analysis' },
-            { id: 'yoga', label: 'Yoga Analysis' },
-            { id: 'compatibility', label: 'Kundli Match' },
-            { id: 'detailed-report', label: 'Detailed Report' },
-            { id: 'basic', label: 'Basic Details' }
-          ].map((tab) => {
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as TabKey)}
-                className={`px-4.5 py-2 rounded-full text-[12.5px] font-[800] transition-all whitespace-nowrap active:scale-[0.97] focus:outline-none ${
-                  isActive
-                    ? 'bg-[#FF8A00] text-white shadow-[0_3px_10px_rgba(255,138,0,0.25)] border border-[#FF8A00]'
-                    : 'bg-white text-neutral-600 border border-[#EBE8E0] hover:bg-[#FFFDF9]'
-                }`}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
+      {mode === 'kundli' && (
+        <div className="sticky top-[61px] bg-[#FCFBF8] border-b border-[#F1EFE9] py-3 z-10">
+          <div className="flex space-x-2 overflow-x-auto px-4 no-scrollbar scroll-smooth">
+            {[
+              { id: 'charts', label: 'Lagna Chart' },
+              { id: 'planets', label: 'Planets Degrees' },
+              { id: 'dasha', label: 'Vimshottari Dasha' },
+              { id: 'dosha', label: 'Dosha Analysis' },
+              { id: 'yoga', label: 'Yoga Analysis' },
+              { id: 'detailed-report', label: 'Detailed Report' },
+              { id: 'basic', label: 'Basic Details' }
+            ].map((tab) => {
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as TabKey)}
+                  className={`px-4.5 py-2 rounded-full text-[12.5px] font-[800] transition-all whitespace-nowrap active:scale-[0.97] focus:outline-none ${
+                    isActive
+                      ? 'bg-[#FF8A00] text-white shadow-[0_3px_10px_rgba(255,138,0,0.25)] border border-[#FF8A00]'
+                      : 'bg-white text-neutral-600 border border-[#EBE8E0] hover:bg-[#FFFDF9]'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Content Area with Dynamic Panels */}
       <div 
@@ -1266,42 +1365,140 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
         )}
 
         {/* PANEL: COMPATIBILITY */}
-        {activeTab === 'compatibility' && (
-          <CompatibilityPanel
-            apiCompatibilityData={apiCompatibilityData}
-            loadingCompatibility={loadingCompatibility}
-            compatibilityErrorState={compatibilityErrorState}
-            selectedProfileId={selectedProfileId!}
-            selectedProfileBId={selectedProfileBId}
-            profiles={profiles}
-            onSelectProfileB={(profileBId) => {
-              setSelectedProfileBId(profileBId);
-              setApiCompatibilityData(null);
-              setCompatibilityErrorState(null);
-            }}
-            onAddPartner={() => {
-              onNavigate('kundli-profile-form', { returnTo: 'nova-kundli', action: 'create' });
-            }}
-            onRetry={() => {
-              if (!selectedProfileBId) return;
-              const reqId = ++compatibilityRequestIdRef.current;
-              setCompatibilityErrorState(null);
-              setLoadingCompatibility(true);
-              AstrologyApi.getCompatibility(selectedProfileId!, selectedProfileBId)
-                .then(res => {
-                  if (compatibilityRequestIdRef.current === reqId) {
-                    setApiCompatibilityData(res);
-                    setLoadingCompatibility(false);
-                  }
-                })
-                .catch(err => {
-                  if (compatibilityRequestIdRef.current === reqId) {
-                    setCompatibilityErrorState({ code: err.code || 'ERROR', message: err.message || 'Failed to load compatibility analysis' });
-                    setLoadingCompatibility(false);
-                  }
-                });
-            }}
-          />
+        {mode === 'matching' && (
+          <div className="px-4">
+            {matchingStep === 'form' ? (
+              <KundliMatchingFormPanel
+                profiles={profiles}
+                selectedProfileId={selectedProfileId!}
+                selectedProfileBId={selectedProfileBId}
+                onSelectProfileB={(profileId) => {
+                  setSelectedProfileBId(profileId);
+                  setMatchingFormError(null);
+                }}
+                onChangeProfileA={() => setIsProfileSwitcherOpen(true)}
+                onMatchExisting={() => {
+                  if (!selectedProfileBId || loadingCompatibility) return;
+                  const reqId = ++compatibilityRequestIdRef.current;
+                  setCompatibilityErrorState(null);
+                  setLoadingCompatibility(true);
+                  setMatchingFormError(null);
+                  AstrologyApi.getCompatibility(selectedProfileId!, selectedProfileBId)
+                    .then(res => {
+                      if (compatibilityRequestIdRef.current === reqId) {
+                        setApiCompatibilityData(res);
+                        setLoadingCompatibility(false);
+                        onNavigate('nova-kundli', {
+                          mode: 'matching',
+                          matchingStep: 'result',
+                          profileId: selectedProfileId,
+                        });
+                      }
+                    })
+                    .catch(err => {
+                      if (compatibilityRequestIdRef.current === reqId) {
+                        setCompatibilityErrorState({ code: err.code || 'ERROR', message: err.message || 'Failed to load compatibility analysis' });
+                        setLoadingCompatibility(false);
+                      }
+                    });
+                }}
+                onSavePartnerAndMatch={handleSavePartnerAndMatch}
+                loading={loadingCompatibility}
+                formError={matchingFormError}
+              />
+            ) : (
+              <div className="animate-fadeIn pb-6 pt-2">
+                <button
+                  onClick={() => onNavigate('nova-kundli', {
+                    mode: 'matching',
+                    matchingStep: 'form',
+                    profileId: selectedProfileId,
+                  })}
+                  className="mb-4 text-[12px] font-[800] text-[#FF8A00] flex items-center hover:underline"
+                >
+                  <ArrowLeft size={14} className="mr-1" strokeWidth={3} /> Back to Details
+                </button>
+                <CompatibilityPanel
+                  apiCompatibilityData={apiCompatibilityData}
+                  loadingCompatibility={loadingCompatibility}
+                  compatibilityErrorState={compatibilityErrorState}
+                  selectedProfileId={selectedProfileId!}
+                  selectedProfileBId={selectedProfileBId}
+                  profiles={profiles}
+                  onSelectProfileB={(profileBId) => {
+                    setSelectedProfileBId(profileBId);
+                    setApiCompatibilityData(null);
+                    setCompatibilityErrorState(null);
+                  }}
+                  onRetry={() => {
+                    if (!selectedProfileBId) return;
+                    const reqId = ++compatibilityRequestIdRef.current;
+                    setCompatibilityErrorState(null);
+                    setLoadingCompatibility(true);
+                    AstrologyApi.getCompatibility(selectedProfileId!, selectedProfileBId)
+                      .then(res => {
+                        if (compatibilityRequestIdRef.current === reqId) {
+                          setApiCompatibilityData(res);
+                          setLoadingCompatibility(false);
+                        }
+                      })
+                      .catch(err => {
+                        if (compatibilityRequestIdRef.current === reqId) {
+                          setCompatibilityErrorState({ code: err.code || 'ERROR', message: err.message || 'Failed to load compatibility analysis' });
+                          setLoadingCompatibility(false);
+                        }
+                      });
+                  }}
+                  onNavigateToNovaAI={(profileBId) => {
+                    if (!apiCompatibilityData) return;
+                    
+                    const comp = apiCompatibilityData.compatibility;
+                    const man = apiCompatibilityData.manglik;
+
+                    const compatibilityContext: NormalizedCompatibilityContext = {
+                      profileAId: selectedProfileId!,
+                      profileBId,
+                      totalScore: comp.totalScore,
+                      maximumScore: comp.maximumScore,
+                      percentage: comp.compatibilityPercentage,
+                      category: getCompatibilityCategory(comp.totalScore),
+                      factors: comp.factors.map(f => {
+                        const meta = getKootaMetadata(f.name || f.code);
+                        return {
+                          key: f.code || f.name,
+                          title: meta.title,
+                          friendlyLabel: meta.friendlyLabel,
+                          score: f.score,
+                          maximumScore: f.maximumScore,
+                          ratio: f.maximumScore > 0 ? f.score / f.maximumScore : 0,
+                          isUnavailable: f.score === 0 && f.maximumScore === 0
+                        };
+                      }),
+                      manglikCompatibility: man.compatibility,
+                      profileAManglik: man.profileAManglik,
+                      profileBManglik: man.profileBManglik
+                    };
+
+                    onNavigate('nova-ai-chat', {
+                      mode: 'matching',
+                      profileId: selectedProfileId,
+                      profileBId,
+                      initialIntent: 'explain-compatibility',
+                      serviceContext: 'Kundli Matching Analysis',
+                      compatibilityContext
+                    });
+                  }}
+                  onViewKundli={(profileId) => {
+                    onNavigate('nova-kundli', {
+                      mode: 'kundli',
+                      profileId,
+                      returnTo: 'nova-kundli',
+                    });
+                  }}
+                />
+              </div>
+            )}
+          </div>
         )}
 
         {/* PANEL: DETAILED REPORT */}
@@ -1386,22 +1583,26 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
           </div>
         )}
 
-        {/* BOTTOM DOWNLOAD PDF BUTTON - Sticky behavior on bottom */}
-        <div className="pt-6 pb-2">
-          <button 
-            onClick={handleDownloadPdf}
-            disabled={(activeTab === 'compatibility' ? !apiCompatibilityData : !apiChartData) || pdfModalState === 'generating'}
-            className="w-full h-13.5 bg-[#FF8A00] hover:bg-[#E97700] text-white rounded-2xl text-[14.5px] font-[800] flex items-center justify-center space-x-2 shadow-[0_4px_16px_rgba(255,138,0,0.25)] active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 disabled:cursor-not-allowed transition-all focus:outline-none"
-          >
-            <Download size={16} strokeWidth={3} />
-            <span>Download PDF Report</span>
-          </button>
+        {/* BOTTOM DOWNLOAD PDF BUTTON — hidden on matching form step */}
+        {!(mode === 'matching' && matchingStep === 'form') && (
+          <div className="pt-6 pb-2">
+            <button
+              onClick={handleDownloadPdf}
+              disabled={
+                (mode === 'matching' ? !apiCompatibilityData : !apiChartData) ||
+                pdfModalState === 'generating'
+              }
+              className="w-full py-4 bg-[#FF8A00] hover:bg-[#E97700] text-white rounded-2xl text-[14.5px] font-[800] flex items-center justify-center space-x-2 shadow-[0_4px_16px_rgba(255,138,0,0.25)] active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 disabled:cursor-not-allowed transition-all focus:outline-none"
+            >
+              <Download size={16} strokeWidth={3} />
+              <span>Download PDF Report</span>
+            </button>
 
-          {/* Lighter Gray Subtle Footer */}
-          <p className="text-center text-[10.5px] font-bold text-neutral-400/60 uppercase tracking-widest mt-5 select-none">
-            Generated by Kundli Nova
-          </p>
-        </div>
+            <p className="text-center text-[10.5px] font-bold text-neutral-400/60 uppercase tracking-widest mt-5 select-none">
+              Generated by Kundli Nova
+            </p>
+          </div>
+        )}
 
       </div>
 
@@ -1620,6 +1821,107 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
         )}
       </AnimatePresence>
 
+
+      {/* Profile Switcher Sheet */}
+      <AnimatePresence>
+        {isProfileSwitcherOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-[#111827]/40 backdrop-blur-[2px] z-50"
+              onClick={() => setIsProfileSwitcherOpen(false)}
+            />
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl z-50 flex flex-col max-h-[85vh] overflow-hidden shadow-[0_-10px_40px_rgba(0,0,0,0.1)]"
+            >
+              <div className="px-5 pt-5 pb-4 flex items-center justify-between border-b border-neutral-100 shrink-0">
+                <div>
+                  <h3 className="text-[17px] font-[850] text-[#111827] tracking-tight">Switch Profile</h3>
+                  <p className="text-[11.5px] text-neutral-400 font-semibold mt-0.5">Select a profile to view Kundli</p>
+                </div>
+                <button
+                  onClick={() => setIsProfileSwitcherOpen(false)}
+                  className="w-8 h-8 flex items-center justify-center rounded-full bg-neutral-100 text-neutral-500 hover:bg-neutral-200 hover:text-[#111827] transition-colors"
+                >
+                  <X size={16} strokeWidth={3} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto no-scrollbar p-5 space-y-3">
+                {profiles.map(p => {
+                  const isSelected = p.id === selectedProfileId;
+                  const isMain = p.id === defaultKundliProfile?.id;
+                  
+                  return (
+                    <div
+                      key={p.id}
+                      onClick={() => {
+                        setSelectedProfileId(p.id);
+                        setIsProfileSwitcherOpen(false);
+                      }}
+                      className={`relative w-full rounded-2xl p-4 flex items-center justify-between cursor-pointer transition-all border-2 ${
+                        isSelected 
+                          ? 'bg-[#FFFDF9] border-[#FF8A00] shadow-[0_4px_12px_rgba(255,138,0,0.1)]' 
+                          : 'bg-white border-[#EBE8E0] hover:border-[#FF8A00]/40 shadow-sm'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-3.5">
+                        <div className={`w-12 h-12 rounded-full flex items-center justify-center font-[800] text-[18px] shrink-0 ${
+                          isSelected 
+                            ? 'bg-gradient-to-tr from-[#FF8A00] to-[#FFB74D] text-white shadow-sm ring-2 ring-white' 
+                            : 'bg-neutral-100 text-neutral-500'
+                        }`}>
+                          {p.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <div className="flex items-center space-x-2">
+                            <span className="text-[15px] font-[850] text-[#111827]">{p.name}</span>
+                            {isMain && (
+                              <span className="text-[9px] bg-[#111827] text-white px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                                Default
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center space-x-1.5 text-neutral-400 text-[11.5px] font-semibold mt-0.5">
+                            <span className="capitalize">{p.relation}</span>
+                            <span>•</span>
+                            <span>{new Date(((p as any).birthDetails || p).dob).toLocaleDateString()}</span>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
+                        isSelected ? 'border-[#FF8A00] bg-[#FF8A00]' : 'border-neutral-300'
+                      }`}>
+                        {isSelected && <div className="w-2 h-2 bg-white rounded-full" />}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="p-5 pt-3 pb-safe border-t border-neutral-100 bg-white shrink-0">
+                <button
+                  onClick={() => {
+                    setIsProfileSwitcherOpen(false);
+                    onNavigate('create-profile', { returnTo: 'nova-kundli', mode });
+                  }}
+                  className="w-full flex items-center justify-center space-x-2 h-12 rounded-2xl bg-neutral-100 text-[#111827] font-extrabold text-[13px] hover:bg-neutral-200 transition-colors"
+                >
+                  <Plus size={16} strokeWidth={3} />
+                  <span>Add New Profile</span>
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

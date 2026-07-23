@@ -71,6 +71,7 @@ export function createAiRouter(config: AiRouterConfig) {
 
     const messages = Array.isArray(req.body?.messages) ? req.body.messages : [];
     const profileId = req.body?.profileId || req.body?.userProfile?.id;
+    const profileBId = req.body?.profileBId;
     const userId = res.locals.user.id;
     
     const safeMessages = messages
@@ -99,7 +100,8 @@ export function createAiRouter(config: AiRouterConfig) {
 
     if (profileId) {
       try {
-        const context = await contextService.loadContext(userId, profileId, memory);
+        const compatibilityContext = req.body?.compatibilityContext;
+        const context = await contextService.loadContext(userId, profileId, memory, profileBId, compatibilityContext);
         const dynamicContext = promptBuilder.buildPromptContext(context);
         systemInstruction = `${NovaAIPromptBuilder.SYSTEM_INSTRUCTION}\n\n${dynamicContext}`;
       } catch (error) {

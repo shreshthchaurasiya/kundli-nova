@@ -11,7 +11,8 @@ import {
   CheckCircle2,
   ExternalLink,
   Share2,
-  Shield
+  Shield,
+  Heart
 } from 'lucide-react';
 import { Screen } from '../types';
 import { useRepositories } from '../repositories/repositoryProvider';
@@ -23,6 +24,7 @@ import { postAiRequest } from '../services/aiClient';
 import CelestialChatBackground from '../components/chat/CelestialChatBackground';
 import { chatStorage } from '../services/storage/chatStorage';
 import { Message, AiChatThread } from '../types/chat';
+import { NormalizedCompatibilityContext } from '../types/matchingAiContext';
 
 interface NovaAIChatScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
@@ -31,6 +33,10 @@ interface NovaAIChatScreenProps {
     initialQuery?: string;
     serviceContext?: string;
     profileId?: string;
+    profileBId?: string;
+    initialIntent?: 'explain-compatibility' | string;
+    compatibilityContext?: NormalizedCompatibilityContext;
+    mode?: string;
   };
 }
 
@@ -43,6 +49,7 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
   const [currentConvId, setCurrentConvId] = useState<string>('');
   const [currentTopic, setCurrentTopic] = useState<string>('General Guidance');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const autoAnalysisTriggeredRef = useRef(false);
 
   // PDF modal state for progress
   const [pdfModalState, setPdfModalState] = useState<'idle' | 'generating' | 'ready'>('idle');
@@ -98,7 +105,7 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
   // Load profile data and initialize chat
   useEffect(() => {
     const loadAndInit = async () => {
-      const { conversationId, initialQuery, serviceContext, profileId } = routeParams || {};
+      const { conversationId, initialQuery, serviceContext, profileId, profileBId, initialIntent } = routeParams || {};
 
       if (!profileId) {
         setLoadingError('No Kundli profile selected. Please select a profile first.');
@@ -114,41 +121,85 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
       setProfileData(profile as any);
       const profileName = profile.name.trim();
 
+      // Determine topic early to fix TDZ bug
+      const topic = serviceContext || (initialQuery ? 'Custom Query' : initialIntent === 'explain-compatibility' ? 'Kundli Matching Analysis' : 'General Guidance');
+
       // 2. Determine if loading existing conversation or creating new
-    const historyList = chatStorage.getAiHistory();
+      const historyList = chatStorage.getAiHistory();
 
-    const getFormattedTime = () => {
-      return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    };
+      const getFormattedTime = () => {
+        return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      };
 
-    if (conversationId) {
-      // Load existing conversation, ensuring it belongs to the active profile
-      const existing = historyList.find(c => c.id === conversationId && c.profileId === profile.id);
-      if (existing) {
-        setMessages(existing.messages || []);
-        setCurrentConvId(existing.id);
-        setCurrentTopic(existing.topic);
-        return;
+      if (conversationId) {
+        // Load existing conversation, ensuring it belongs to the active profile
+        const existing = historyList.find(c => c.id === conversationId && c.profileId === profile.id);
+        if (existing) {
+          setMessages(existing.messages || []);
+          setCurrentConvId(existing.id);
+          setCurrentTopic(existing.topic);
+          return;
+        }
+      } else {
+        // Find if this profile already has an active Nova session for this topic
+        const existingForProfile = historyList.find(c => c.profileId === profile.id && c.kind === 'nova' && c.topic === topic);
+        if (existingForProfile) {
+          setMessages(existingForProfile.messages || []);
+          setCurrentConvId(existingForProfile.id);
+          setCurrentTopic(existingForProfile.topic);
+          return;
+        }
       }
-    } else {
-      // Find if this profile already has an active Nova session
-      const existingForProfile = historyList.find(c => c.profileId === profile.id && c.kind === 'nova');
-      if (existingForProfile) {
-        setMessages(existingForProfile.messages || []);
-        setCurrentConvId(existingForProfile.id);
-        setCurrentTopic(existingForProfile.topic);
-        return;
-      }
-    }
 
-    // Otherwise, create a new conversation
-    const newId = `nova-session-${Date.now()}`;
-    const topic = serviceContext || (initialQuery ? 'Custom Query' : 'General Guidance');
-    setCurrentConvId(newId);
-    setCurrentTopic(topic);
+      // Otherwise, create a new conversation
+      const newId = `nova-session-${Date.now()}`;
+      setCurrentConvId(newId);
+      setCurrentTopic(topic);
 
     const initializeNewChat = async () => {
       let initialMsgs: Message[] = [];
+
+      // Handle matching-analysis auto-analysis
+      if (initialIntent === 'explain-compatibility' && profileBId && !autoAnalysisTriggeredRef.current) {
+        autoAnalysisTriggeredRef.current = true;
+        const autoQuery = 'Explain this calculated Kundli matching result.';
+        const userMsg: Message = {
+          id: `user-auto-${Date.now()}`,
+          text: autoQuery,
+          sender: 'user',
+          time: getFormattedTime(),
+          type: 'text'
+        };
+        initialMsgs = [userMsg];
+        setMessages(initialMsgs);
+
+        setIsTyping(true);
+        try {
+          const responseTexts = await requestNovaResponse(initialMsgs, profile.id, profileBId, routeParams?.compatibilityContext);
+          const aiMessages = responseTexts.map((text, index): Message => ({
+            id: `nova-matching-${Date.now()}-${index}`,
+            text,
+            sender: 'nova',
+            time: getFormattedTime(),
+            type: 'text'
+          }));
+          const finalMsgs = [...initialMsgs, ...aiMessages];
+          setMessages(finalMsgs);
+          saveToHistory(newId, topic, finalMsgs);
+        } catch (error) {
+          const errorMessage: Message = {
+            id: `nova-error-${Date.now()}`,
+            text: error instanceof Error ? error.message : 'Nova AI se connection nahi ho paaya.',
+            sender: 'system',
+            time: getFormattedTime(),
+            type: 'system'
+          };
+          setMessages([...initialMsgs, errorMessage]);
+        } finally {
+          setIsTyping(false);
+        }
+        return;
+      }
 
       if (initialQuery) {
         // User came with a search question
@@ -344,14 +395,16 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
     return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  const requestNovaResponse = async (conversation: Message[], profileId: string) => {
+  const requestNovaResponse = async (conversation: Message[], profileId: string, profileBId?: string, compatibilityContext?: NormalizedCompatibilityContext) => {
     const result = await postAiRequest<{ texts: string[] }>('/api/chat', {
       messages: conversation
         .filter(message => message.type === 'text' || !message.type)
         .filter(message => Boolean(message.text))
         .map(message => ({ sender: message.sender, text: message.text })),
       profileId: profileId,
+      profileBId: profileBId || routeParams?.profileBId,
       sessionId: currentConvId,
+      compatibilityContext: compatibilityContext || routeParams?.compatibilityContext,
     });
     if (!Array.isArray(result.texts) || result.texts.length === 0) {
       throw new Error('Nova AI ne empty response diya. Kripya dobara try karein.');
@@ -475,7 +528,13 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
       <div className="bg-[#FFFFFF]/85 backdrop-blur-md px-[16px] sm:px-[20px] pt-[max(16px,env(safe-area-inset-top))] sm:pt-[24px] pb-[16px] shadow-[0_2px_12px_rgba(0,0,0,0.02)] z-20 flex items-center justify-between border-b border-[#F3F4F6] relative">
         <div className="flex items-center">
           <button 
-            onClick={() => onNavigate('nova-ai')}
+            onClick={() => {
+              if (routeParams?.mode === 'matching') {
+                onNavigate('nova-kundli', { mode: 'matching', returnTo: 'home' });
+              } else {
+                onNavigate('nova-ai');
+              }
+            }}
             className="p-[8px] -ml-[8px] mr-[6px] rounded-full hover:bg-gray-50 active:bg-gray-100 transition-colors text-[#111827]"
           >
             <ArrowLeft size={22} strokeWidth={2.5} />
@@ -544,6 +603,31 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
               <div className="w-[18px] h-[1px] bg-neutral-200/60" />
             </div>
 
+            {routeParams?.initialIntent === 'explain-compatibility' && routeParams?.compatibilityContext && (
+              <div className="mb-6 bg-white border border-[#FF8A00]/20 rounded-[20px] p-4 shadow-[0_4px_20px_rgba(255,138,0,0.05)]">
+                <div className="flex items-center justify-between mb-3 border-b border-[#F1EFE9] pb-3">
+                  <div className="flex items-center space-x-2 text-[#FF8A00]">
+                    <Heart size={16} className="fill-[#FF8A00]/20" />
+                    <span className="text-[13px] font-[800] uppercase tracking-wide">Kundli Matching</span>
+                  </div>
+                  <div className="text-[15px] font-[850] text-[#111827]">
+                    {routeParams.compatibilityContext.totalScore.toFixed(1)} <span className="text-neutral-400 text-[12px]">/ {routeParams.compatibilityContext.maximumScore}</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-center space-x-4">
+                  <div className="flex-1 text-center font-bold text-[#111827] truncate">
+                    {profileData?.name || 'Profile A'}
+                  </div>
+                  <div className="w-8 h-8 rounded-full bg-neutral-50 flex items-center justify-center text-neutral-300">
+                    <Heart size={14} className="fill-neutral-200" />
+                  </div>
+                  <div className="flex-1 text-center font-bold text-[#111827] truncate">
+                    Partner
+                  </div>
+                </div>
+              </div>
+            )}
+
         <div className="flex flex-col space-y-[16px] flex-1">
           <AnimatePresence initial={false}>
             {messages.map((msg, index) => {
@@ -604,7 +688,7 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
                   >
                     <KundliPreviewMessage 
                       data={msg.kundliData} 
-                      onViewComplete={() => onNavigate('nova-kundli', { kundliData: msg.kundliData, returnTo: 'nova-ai-chat' })}
+                      onViewComplete={() => onNavigate('nova-kundli', { mode: 'kundli', profileId: msg.profileId, kundliData: msg.kundliData, returnTo: 'nova-ai-chat' })}
                       onDownloadPdf={handleDownloadPdf}
                     />
                   </motion.div>

@@ -78,6 +78,44 @@ Respond ONLY with a JSON array containing 2 to 4 short strings. Each string is a
       prompt += `- Detailed Report: UNAVAILABLE\n\n`;
     }
 
+    if (context.matching) {
+      prompt += `==========================================\n`;
+      prompt += `MATCHING CONTEXT (Ashtakoota & Manglik)\n`;
+      prompt += `==========================================\n`;
+      prompt += `Partner Profile:\n`;
+      prompt += `Name: ${context.matching.partnerProfile.name}\n`;
+      prompt += `Gender: ${context.matching.partnerProfile.gender}\n`;
+      prompt += `DOB: ${context.matching.partnerProfile.dob}\n`;
+      prompt += `Time of Birth: ${context.matching.partnerProfile.timeOfBirth}\n`;
+      prompt += `Birth Place: ${context.matching.partnerProfile.city}\n\n`;
+
+      if (context.matching.normalizedContext) {
+        const comp = context.matching.normalizedContext;
+        prompt += `- Total Compatibility Score: ${comp.totalScore.toFixed(1)} / ${comp.maximumScore} (${comp.percentage.toFixed(0)}%) — ${comp.category}\n`;
+        prompt += `- Ashtakoota Factors:\n`;
+        comp.factors.forEach(f => {
+          prompt += `  * ${f.title} (${f.friendlyLabel}): ${f.score}/${f.maximumScore}\n`;
+        });
+        prompt += `\n`;
+        prompt += `- Manglik Match Status: ${comp.manglikCompatibility.replace(/_/g, ' ')}\n`;
+        prompt += `  * Profile A (User): ${comp.profileAManglik ? 'Manglik' : 'Non-Manglik'}\n`;
+        prompt += `  * Profile B (Partner): ${comp.profileBManglik ? 'Manglik' : 'Non-Manglik'}\n\n`;
+
+        if (context.memory.topic === 'Kundli Matching Analysis' && context.memory.recentMessages.length <= 1) {
+          prompt += `\nINSTRUCTIONS FOR THIS MATCHING ANALYSIS:
+1. Greet the user by name.
+2. Confirm the exact score (e.g., "${comp.totalScore.toFixed(1)} / ${comp.maximumScore}").
+3. State the compatibility category (${comp.category}).
+4. Highlight the strongest Koota factors and the weakest Koota factors.
+5. Mention the Manglik status clearly.
+6. Provide a neutral, objective explanation. Do NOT invent remedies, doshas, or guarantee marriage success.
+7. Ask exactly one relevant follow-up question at the end.`;
+        }
+      } else {
+        prompt += `- Compatibility Analysis: UNAVAILABLE\n\n`;
+      }
+    }
+
     return prompt.trim();
   }
 }

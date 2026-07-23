@@ -8,6 +8,11 @@ import {
   KundliNovaCompatibilityAnalysis,
   KundliNovaManglikAnalysis
 } from '../server/types/astrologyProvider';
+import {
+  getKootaMetadata,
+  getCompatibilityCategory,
+  buildMatchSummary
+} from '../features/astrology/compatibilityMetadata';
 
 export interface KundliPdfPayload {
   birthDetails: {
@@ -272,6 +277,24 @@ export const generateKundliPdf = async (data: KundliPdfPayload): Promise<Generat
     doc.setFontSize(7.5);
     doc.setTextColor(107, 114, 128);
     doc.text(`Mahadasha ends on ${new Date(dasha.currentMahadasha.endDate).toLocaleDateString()}`, 25, yOffset + 15);
+    
+    // Render timeline
+    yOffset += 25;
+    doc.setFont('Helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(17, 24, 39);
+    doc.text('Mahadasha Timeline', 20, yOffset);
+    yOffset += 5;
+    
+    doc.setFont('Helvetica', 'normal');
+    doc.setFontSize(8);
+    dasha.mahadashaTimeline.forEach((period, idx) => {
+      const isRightCol = idx >= 5;
+      const x = isRightCol ? 110 : 25;
+      const y = yOffset + (idx % 5) * 5;
+      doc.text(`${period.planet}: ${new Date(period.startDate).toLocaleDateString()} - ${new Date(period.endDate).toLocaleDateString()}`, x, y);
+    });
+    
   } else {
     doc.setFont('Helvetica', 'normal');
     doc.setFontSize(8.5);
@@ -514,21 +537,37 @@ export const generateKundliMatchingPdf = async (data: KundliMatchingPdfPayload):
   doc.setTextColor(17, 24, 39);
   doc.text('Ashtakoota Milan (36 Points)', 20, 82);
 
+  const category = getCompatibilityCategory(compatibility.totalScore);
+
   doc.setFontSize(18);
   doc.setTextColor(255, 138, 0);
   doc.text(`${compatibility.totalScore.toFixed(1)} / ${compatibility.maximumScore}`, 20, 92);
   doc.setFontSize(10);
   doc.setTextColor(107, 114, 128);
-  doc.text(`${compatibility.compatibilityPercentage.toFixed(0)}% Compatibility`, 60, 91);
+  doc.text(`${compatibility.compatibilityPercentage.toFixed(0)}% · ${category}`, 60, 91);
 
-  // 4. Koota Breakdown
-  let yOffset = 105;
+  // 3b. Summary paragraph
+  const summaryText = buildMatchSummary(
+    profileA.name,
+    profileB.name,
+    compatibility.totalScore,
+    compatibility.maximumScore,
+    compatibility.factors,
+    manglik.compatibility
+  );
+  doc.setFontSize(9);
+  doc.setTextColor(55, 65, 81);
+  doc.setFont('Helvetica', 'normal');
+  const summaryLines = doc.splitTextToSize(summaryText, 170);
+  doc.text(summaryLines, 20, 100);
+  let yOffset = 100 + summaryLines.length * 5 + 4;
   doc.setFont('Helvetica', 'bold');
   doc.setFontSize(9);
   doc.setTextColor(17, 24, 39);
-  doc.text('Koota Name', 20, yOffset);
-  doc.text('Score', 80, yOffset);
-  doc.text('Maximum', 110, yOffset);
+  doc.text('Koota', 20, yOffset);
+  doc.text('Label', 70, yOffset);
+  doc.text('Score', 140, yOffset);
+  doc.text('Max', 160, yOffset);
   
   yOffset += 5;
   doc.setLineWidth(0.1);
@@ -538,10 +577,15 @@ export const generateKundliMatchingPdf = async (data: KundliMatchingPdfPayload):
 
   doc.setFont('Helvetica', 'normal');
   compatibility.factors.forEach(factor => {
+    const meta = getKootaMetadata(factor.name || factor.code);
+
     doc.setTextColor(17, 24, 39);
-    doc.text(factor.name || factor.code, 20, yOffset);
-    doc.text(`${factor.score.toFixed(1)}`, 80, yOffset);
-    doc.text(`${factor.maximumScore}`, 110, yOffset);
+    doc.text(meta.title, 20, yOffset);
+    doc.setTextColor(107, 114, 128);
+    doc.text(meta.friendlyLabel, 70, yOffset);
+    doc.setTextColor(17, 24, 39);
+    doc.text(`${factor.score.toFixed(1)}`, 140, yOffset);
+    doc.text(`${factor.maximumScore}`, 160, yOffset);
     yOffset += 7;
   });
 

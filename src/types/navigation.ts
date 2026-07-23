@@ -76,4 +76,13 @@ export interface KundliProfileFormNavParams extends ConsultationNavParams {
   fromScreen?: Screen;
   action?: 'create' | 'edit';
   profileId?: string;
+  mode?: 'kundli' | 'matching';
+}
+
+export interface NovaAIChatScreenProps {
+  onNavigate: (screen: string, params?: any) => void;
+  routeParams?: {
+    mode?: 'kundli' | 'matching';
+    profileBId?: string;
+  };
 }

@@ -86,6 +86,7 @@ export default function KundliProfileFormScreen({ onNavigate, routeParams }: Kun
 
   const action = routeParams?.action || 'create';
   const profileIdToEdit = routeParams?.profileId;
+  const mode = routeParams?.mode;
 
   // ── Form state ───────────────────────────────────────────────────────────────
   const [name,     setName]     = useState('');
@@ -179,7 +180,7 @@ export default function KundliProfileFormScreen({ onNavigate, routeParams }: Kun
 
       // Return to the originating screen (consultation-chat or profile)
       // and carry the consultation context so astrologerId is not lost.
-      onNavigate(returnTo, { astrologerId, intent, createdProfileId: savedProfile.id });
+      onNavigate(returnTo, { astrologerId, intent, createdProfileId: savedProfile.id, mode: routeParams?.mode });
     } catch (err: any) {
       setError(err?.message || 'Failed to save. Please try again.');
     } finally {
@@ -338,8 +339,8 @@ export default function KundliProfileFormScreen({ onNavigate, routeParams }: Kun
 
       </div>
 
-      {/* ── Footer CTA ── */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-[#F1EFE9] px-5 pt-4 pb-[max(20px,env(safe-area-inset-bottom))] space-y-3 shadow-[0_-4px_20px_rgba(0,0,0,0.04)]">
+      {/* ── Footer CTA ── constrained inside mobile frame */}
+      <div className="sticky bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-[#F1EFE9] px-5 pt-4 pb-[max(20px,env(safe-area-inset-bottom))] space-y-3 shadow-[0_-4px_20px_rgba(0,0,0,0.04)]">
         <AnimatePresence>
           {error && (
             <motion.div
@@ -385,7 +386,7 @@ export default function KundliProfileFormScreen({ onNavigate, routeParams }: Kun
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed bottom-0 left-0 right-0 h-[70%] bg-white rounded-t-3xl z-50 flex flex-col overflow-hidden"
+              className="fixed bottom-0 inset-x-0 max-w-md mx-auto h-[70%] bg-white rounded-t-3xl z-50 flex flex-col overflow-hidden"
             >
               <div className="px-5 pt-5 pb-3 border-b border-neutral-100">
                 <h3 className="text-[16px] font-[900] text-neutral-900 mb-3">Select State</h3>
