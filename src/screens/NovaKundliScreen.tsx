@@ -29,7 +29,6 @@ import {
 import { Screen } from '../types';
 import { KundliData } from '../services/kundliStorage';
 import { useRepositories } from '../repositories/repositoryProvider';
-import { generateKundli } from '../services/kundliService';
 import { generateKundliPdf } from '../services/kundliPdfService';
 import { postAiRequest } from '../services/aiClient';
 import { AstrologyApi } from '../services/api/astrologyApi';

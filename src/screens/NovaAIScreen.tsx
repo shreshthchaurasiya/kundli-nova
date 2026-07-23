@@ -40,7 +40,7 @@ export default function NovaAIScreen({ onNavigate, onOpenDrawer }: NovaAIScreenP
   const { profile } = useProfile();
   const { wallet } = useWallet();
   const walletBalance = wallet.balance;
-  const [userName, setUserName] = useState<string>('Shreshth');
+  const [userName, setUserName] = useState<string>('');
   const [inputVal, setInputVal] = useState<string>('');
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   const [history, setHistory] = useState<SavedConversation[]>([]);

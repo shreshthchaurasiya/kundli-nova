@@ -10,18 +10,14 @@ import {
   Sparkle,
   CheckCircle2,
   ExternalLink,
-  Share2
+  Share2,
+  Shield
 } from 'lucide-react';
 import { Screen } from '../types';
-import { 
-  getSavedKundli, 
-  saveKundliData, 
-  KundliData 
-} from '../services/kundliStorage';
 import { useRepositories } from '../repositories/repositoryProvider';
 import { UserProfile } from '../types/profile';
-import { generateKundli } from '../services/kundliService';
-import { generateKundliPdf } from '../services/kundliPdfService';
+import { AstrologyApi } from '../services/api/astrologyApi';
+import { generateKundliPdf, KundliPdfPayload } from '../services/kundliPdfService';
 import KundliPreviewMessage from '../components/KundliPreviewMessage';
 import { postAiRequest } from '../services/aiClient';
 import CelestialChatBackground from '../components/chat/CelestialChatBackground';
@@ -33,6 +29,7 @@ interface NovaAIChatScreenProps {
     conversationId?: string;
     initialQuery?: string;
     serviceContext?: string;
+    profileId?: string;
   };
 }
 
@@ -43,7 +40,7 @@ interface Message {
   time: string;
   type?: 'text' | 'kundli-loading' | 'kundli-card';
   kundliLoadingStep?: number; // 1, 2, 3
-  kundliData?: KundliData;
+  kundliData?: KundliPdfPayload;
 }
 
 interface SavedConversation {
@@ -69,21 +66,39 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
   const [pdfModalState, setPdfModalState] = useState<'idle' | 'generating' | 'ready'>('idle');
   const [pdfUrls, setPdfUrls] = useState<{ blobUrl: string; base64: string } | null>(null);
 
+  const [loadingError, setLoadingError] = useState<string | null>(null);
+
   const handleDownloadPdf = async () => {
-    // Look for active generated Kundli
     const profile = profileData as any;
-    const activeKundli = getSavedKundli(profile?.name || 'Shreshth') || generateKundli(profile || {
-      name: 'Shreshth',
-      gender: 'male',
-      dob: '1995-10-15',
-      tob: '10:30',
-      state: 'Uttar Pradesh',
-      district: 'Varanasi',
-      city: 'Varanasi'
-    });
+    if (!profile?.id) return;
     
     setPdfModalState('generating');
     try {
+      const [chart, dasha, dosha, yoga, detailedReport] = await Promise.all([
+        AstrologyApi.getKundli(profile.id),
+        AstrologyApi.getDasha(profile.id).catch(() => null),
+        AstrologyApi.getDoshaAnalysis(profile.id).catch(() => null),
+        AstrologyApi.getYogaAnalysis(profile.id).catch(() => null),
+        AstrologyApi.getDetailedKundliReport(profile.id).catch(() => null)
+      ]);
+
+      const activeKundli: KundliPdfPayload = {
+        birthDetails: {
+          name: profile.name || 'Kundli Report',
+          gender: profile.birthDetails?.gender || 'unknown',
+          dob: profile.birthDetails?.dob || '',
+          tob: profile.birthDetails?.tob || '',
+          city: profile.birthDetails?.city || 'Unknown',
+          state: profile.birthDetails?.state || 'Unknown'
+        },
+        chart,
+        dasha,
+        dosha,
+        yoga,
+        detailedReport,
+        generatedAt: new Date().toLocaleDateString()
+      };
+
       const result = await generateKundliPdf(activeKundli);
       setPdfUrls({
         blobUrl: result.pdfBlobUrl,
@@ -101,13 +116,24 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
   // Load profile data and initialize chat
   useEffect(() => {
     const loadAndInit = async () => {
-      // 1. Get user first name
-      const profile = await repositories.profile.getProfile();
-      setProfileData(profile);
+      const { conversationId, initialQuery, serviceContext, profileId } = routeParams || {};
+
+      if (!profileId) {
+        setLoadingError('No Kundli profile selected. Please select a profile first.');
+        return;
+      }
+
+      const profile = await repositories.kundliProfile.getProfileById(profileId).catch(() => null);
+      if (!profile || !profile.name) {
+        setLoadingError('The selected profile is unavailable, incomplete, or unauthorized.');
+        return;
+      }
+
+      setProfileData(profile as any);
+      const profileName = profile.name.trim();
+
       // 2. Determine if loading existing conversation or creating new
     const historyList = chatStorage.getAiHistory() as SavedConversation[];
-
-    const { conversationId, initialQuery, serviceContext } = routeParams || {};
 
     const getFormattedTime = () => {
       return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -147,7 +173,7 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
         // Request a real Gemini response through the authenticated server API.
         setIsTyping(true);
         try {
-          const responseTexts = await requestNovaResponse(initialMsgs, profile);
+          const responseTexts = await requestNovaResponse(initialMsgs, profile.id);
           const aiMessages = responseTexts.map((text, index): Message => ({
             id: `nova-resp-${Date.now()}-${index}`,
             text,
@@ -169,69 +195,47 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
           setIsTyping(false);
         }
       } else {
-        // Get actual profile data (already fetched)
-        const activeProfileData = profile;
-        const profileName = activeProfileData?.name || 'Shreshth';
-
         setIsTyping(true);
         await new Promise(resolve => setTimeout(resolve, 800));
 
-        // Check if Kundli is already cached/saved
-        const savedKundli = getSavedKundli(profileName);
+        // Fresh loading flow with real backend:
+        const greetMsg: Message = {
+          id: `greet-${Date.now()}`,
+          text: `Radhe Radhe, ${profileName} Ji. Main aapki janam kundli taiyar kar raha hoon.`,
+          sender: 'nova',
+          time: getFormattedTime(),
+          type: 'text'
+        };
 
-        if (savedKundli) {
-          // Cached flow: Send direct message & show card immediately without loading process
-          const greetMsg: Message = {
-            id: `greet-${Date.now()}`,
-            text: `Radhe Radhe, ${profileName} Ji. Aapki Kundli pehle se taiyar hai.`,
-            sender: 'nova',
-            time: getFormattedTime(),
-            type: 'text'
-          };
-          
-          setMessages([greetMsg]);
-          setIsTyping(true);
-          await new Promise(resolve => setTimeout(resolve, 800));
+        setMessages([greetMsg]);
+        
+        // Wait and then show the loading message card
+        setIsTyping(true);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        setIsTyping(false);
 
-          const cardMsg: Message = {
-            id: `kundli-card-${Date.now()}`,
-            sender: 'nova',
-            time: getFormattedTime(),
-            type: 'kundli-card',
-            kundliData: savedKundli
-          };
+        const loadingMsgId = `loading-${Date.now()}`;
+        const loadingMsg: Message = {
+          id: loadingMsgId,
+          sender: 'nova',
+          time: getFormattedTime(),
+          type: 'kundli-loading',
+          kundliLoadingStep: 1
+        };
 
-          const finalMsgs = [greetMsg, cardMsg];
-          setMessages(finalMsgs);
-          saveToHistory(newId, topic, finalMsgs);
-          setIsTyping(false);
-        } else {
-          // Fresh loading flow:
-          const greetMsg: Message = {
-            id: `greet-${Date.now()}`,
-            text: `Radhe Radhe, ${profileName} Ji. Main aapki janam kundli taiyar kar raha hoon.`,
-            sender: 'nova',
-            time: getFormattedTime(),
-            type: 'text'
-          };
+        setMessages(prev => [...prev, loadingMsg]);
 
-          setMessages([greetMsg]);
-          
-          // Wait and then show the loading message card
-          setIsTyping(true);
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          setIsTyping(false);
+        try {
+          if (!profile?.id) throw new Error("No profile selected");
 
-          const loadingMsgId = `loading-${Date.now()}`;
-          const loadingMsg: Message = {
-            id: loadingMsgId,
-            sender: 'nova',
-            time: getFormattedTime(),
-            type: 'kundli-loading',
-            kundliLoadingStep: 1
-          };
-
-          setMessages(prev => [...prev, loadingMsg]);
+          // Start fetching from real backend API
+          const fetchPromise = Promise.all([
+            AstrologyApi.getKundli(profile.id),
+            AstrologyApi.getDasha(profile.id).catch(() => null),
+            AstrologyApi.getDoshaAnalysis(profile.id).catch(() => null),
+            AstrologyApi.getYogaAnalysis(profile.id).catch(() => null),
+            AstrologyApi.getDetailedKundliReport(profile.id).catch(() => null)
+          ]);
 
           // Step 1: Reading birth details…
           await new Promise(resolve => setTimeout(resolve, 800));
@@ -241,21 +245,28 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
           await new Promise(resolve => setTimeout(resolve, 800));
           setMessages(prev => prev.map(m => m.id === loadingMsgId ? { ...m, kundliLoadingStep: 3 } : m));
 
+          // Wait for API calls to complete
+          const [chart, dasha, dosha, yoga, detailedReport] = await fetchPromise;
+
+          const freshKundli: KundliPdfPayload = {
+            birthDetails: {
+              name: profile.name,
+              gender: profile.birthDetails?.gender || 'unknown',
+              dob: profile.birthDetails?.dob || '',
+              tob: profile.birthDetails?.tob || '',
+              city: profile.birthDetails?.city || 'Unknown',
+              state: profile.birthDetails?.state || 'Unknown'
+            },
+            chart,
+            dasha,
+            dosha,
+            yoga,
+            detailedReport,
+            generatedAt: new Date().toLocaleDateString()
+          };
+
           // Step 3: Preparing your Kundli chart…
           await new Promise(resolve => setTimeout(resolve, 800));
-
-          // Generate real Kundli using saved profile
-          const activeProfile = activeProfileData || {
-            name: 'Shreshth',
-            gender: 'male',
-            dob: '1995-10-15',
-            tob: '10:30',
-            state: 'Uttar Pradesh',
-            district: 'Varanasi',
-            city: 'Varanasi'
-          };
-          const freshKundli = generateKundli(activeProfile);
-          saveKundliData(freshKundli);
 
           // Replace loading message with rich card attachment
           setMessages(prev => {
@@ -271,16 +282,32 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
             saveToHistory(newId, topic, updated);
             return updated;
           });
-
-          setIsTyping(false);
+        } catch (error) {
+           console.error("Kundli generation failed", error);
+           setMessages(prev => {
+              const listWithoutLoading = prev.filter(m => m.id !== loadingMsgId);
+              return [...listWithoutLoading, {
+                id: `error-${Date.now()}`,
+                text: "Kshama karein, aapki kundli banate samay kuch dikkat aayi.",
+                sender: 'nova',
+                time: getFormattedTime(),
+                type: 'text'
+              }];
+           });
         }
+
+        setIsTyping(false);
       }
     };
 
     initializeNewChat();
     };
+
+    setMessages([]);
+    setProfileData(null);
+    setLoadingError(null);
     loadAndInit();
-  }, [routeParams, repositories.profile]);
+  }, [routeParams, repositories.kundliProfile]);
 
   // Scroll to bottom whenever messages list updates
   useEffect(() => {
@@ -321,13 +348,14 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
     return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  const requestNovaResponse = async (conversation: Message[], profile: UserProfile | null) => {
+  const requestNovaResponse = async (conversation: Message[], profileId: string) => {
     const result = await postAiRequest<{ texts: string[] }>('/api/chat', {
       messages: conversation
         .filter(message => message.type === 'text' || !message.type)
         .filter(message => Boolean(message.text))
         .map(message => ({ sender: message.sender, text: message.text })),
-      userProfile: profile,
+      profileId: profileId,
+      sessionId: currentConvId,
     });
     if (!Array.isArray(result.texts) || result.texts.length === 0) {
       throw new Error('Nova AI ne empty response diya. Kripya dobara try karein.');
@@ -352,7 +380,7 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
     // Request a real Gemini response.
     setIsTyping(true);
     try {
-      const responseTexts = await requestNovaResponse(newMsgsList, profileData);
+      const responseTexts = await requestNovaResponse(newMsgsList, profileData?.id || '');
       const aiMessages = responseTexts.map((text, index): Message => ({
         id: `ai-${Date.now()}-${index}`,
         text,
@@ -398,7 +426,7 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
     // Request a real Gemini response.
     setIsTyping(true);
     try {
-      const responseTexts = await requestNovaResponse(newMsgsList, profileData);
+      const responseTexts = await requestNovaResponse(newMsgsList, profileData?.id || '');
       const aiMessages = responseTexts.map((text, index): Message => ({
         id: `ai-${Date.now()}-${index}`,
         text,
@@ -489,12 +517,28 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
 
       {/* Chat Messages Scrolling Area */}
       <div className="flex-1 overflow-y-auto px-[20px] pt-4 pb-[24px] z-10 flex flex-col no-scrollbar">
-        {/* Today Header Marker */}
-        <div className="flex items-center w-full justify-center space-x-[12px] mb-6 pt-1">
-          <div className="w-[18px] h-[1px] bg-neutral-200/60" />
-          <span className="text-[10.5px] font-[700] text-neutral-400 uppercase tracking-widest">Personal consultation</span>
-          <div className="w-[18px] h-[1px] bg-neutral-200/60" />
-        </div>
+        {loadingError ? (
+          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-4">
+            <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center text-red-500 mb-2">
+              <Shield size={32} />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900">Profile Required</h3>
+            <p className="text-sm text-gray-500">{loadingError}</p>
+            <button 
+              onClick={() => onNavigate('nova-ai')}
+              className="mt-6 px-6 py-2.5 bg-[#FF8A00] text-white rounded-xl text-sm font-bold hover:bg-[#E97700] transition-colors"
+            >
+              Select Profile
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* Today Header Marker */}
+            <div className="flex items-center w-full justify-center space-x-[12px] mb-6 pt-1">
+              <div className="w-[18px] h-[1px] bg-neutral-200/60" />
+              <span className="text-[10.5px] font-[700] text-neutral-400 uppercase tracking-widest">Personal consultation</span>
+              <div className="w-[18px] h-[1px] bg-neutral-200/60" />
+            </div>
 
         <div className="flex flex-col space-y-[16px] flex-1">
           <AnimatePresence initial={false}>
@@ -608,6 +652,8 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
           </AnimatePresence>
           <div ref={messagesEndRef} className="h-[2px]" />
         </div>
+        </>
+        )}
       </div>
 
 

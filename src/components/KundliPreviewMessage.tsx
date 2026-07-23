@@ -1,19 +1,20 @@
 import React from 'react';
-import { Sparkles, Download, Eye, Compass, ShieldCheck } from 'lucide-react';
-import { KundliData } from '../services/kundliStorage';
+import { Sparkles, Download, Compass } from 'lucide-react';
+import { KundliPdfPayload } from '../services/kundliPdfService';
 
 interface KundliPreviewMessageProps {
-  data: KundliData;
+  data: KundliPdfPayload;
   onViewComplete: () => void;
   onDownloadPdf: () => void;
 }
 
 export default function KundliPreviewMessage({ data, onViewComplete, onDownloadPdf }: KundliPreviewMessageProps) {
-  const { birthDetails, astrologySummary, planetaryPositions } = data;
+  const { birthDetails, chart } = data;
 
   // Astrological helper functions for dynamic North Indian Chart drawing
   const getLagnaZodiacNumber = (): number => {
-    const lagnaLower = astrologySummary.lagna.toLowerCase();
+    if (!chart?.ascendant?.sign) return 1;
+    const lagnaLower = chart.ascendant.sign.toLowerCase();
     if (lagnaLower.includes('mesh') || lagnaLower.includes('aries')) return 1;
     if (lagnaLower.includes('vrishabha') || lagnaLower.includes('taurus')) return 2;
     if (lagnaLower.includes('mithuna') || lagnaLower.includes('gemini')) return 3;
@@ -36,31 +37,25 @@ export default function KundliPreviewMessage({ data, onViewComplete, onDownloadP
   };
 
   const getPlanetsInHouse = (houseNum: number): string => {
+    if (!chart?.planets) {
+      // Fallback if not loaded
+      if (houseNum === 1) return 'Lg';
+      return '';
+    }
+
     const abbreviations: { [key: string]: string } = {
-      'Sun (Surya)': 'Su',
-      'Moon (Chandra)': 'Mo',
-      'Mars (Mangal)': 'Ma',
-      'Mercury (Budh)': 'Me',
-      'Jupiter (Guru)': 'Ju',
-      'Venus (Shukra)': 'Ve',
-      'Saturn (Shani)': 'Sa',
+      'Sun': 'Su',
+      'Moon': 'Mo',
+      'Mars': 'Ma',
+      'Mercury': 'Me',
+      'Jupiter': 'Ju',
+      'Venus': 'Ve',
+      'Saturn': 'Sa',
       'Rahu': 'Ra',
       'Ketu': 'Ke'
     };
 
-    if (!planetaryPositions) {
-      // Fallback if not loaded
-      if (houseNum === 1) return 'Lg, Su, Bu';
-      if (houseNum === 2) return 'Ch';
-      if (houseNum === 4) return 'Sa, Sk';
-      if (houseNum === 5) return 'Gu';
-      if (houseNum === 6) return 'Ra';
-      if (houseNum === 8) return 'Ma';
-      if (houseNum === 10) return 'Ke';
-      return '';
-    }
-
-    const found = planetaryPositions
+    const found = chart.planets
       .filter(p => p.house === houseNum)
       .map(p => abbreviations[p.name] || p.name.substring(0, 2));
 
@@ -183,15 +178,15 @@ export default function KundliPreviewMessage({ data, onViewComplete, onDownloadP
         <div className="w-full mt-3.5 grid grid-cols-3 gap-2 text-center">
           <div className="bg-white border border-[#EBE8E0] px-1 py-1.5 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.01)]">
             <span className="text-[8px] font-bold text-neutral-400 block uppercase tracking-wider">Lagna</span>
-            <span className="text-[10px] font-extrabold text-[#111827] truncate block mt-0.5">{astrologySummary.lagna.split(' ')[0]}</span>
+            <span className="text-[10px] font-extrabold text-[#111827] truncate block mt-0.5">{chart?.ascendant?.sign ? chart.ascendant.sign.split(' ')[0] : 'N/A'}</span>
           </div>
           <div className="bg-white border border-[#EBE8E0] px-1 py-1.5 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.01)]">
             <span className="text-[8px] font-bold text-neutral-400 block uppercase tracking-wider">Rashi</span>
-            <span className="text-[10px] font-extrabold text-[#111827] truncate block mt-0.5">{astrologySummary.moonSign.split(' ')[0]}</span>
+            <span className="text-[10px] font-extrabold text-[#111827] truncate block mt-0.5">{chart?.moonSign ? chart.moonSign.split(' ')[0] : 'N/A'}</span>
           </div>
           <div className="bg-white border border-[#EBE8E0] px-1 py-1.5 rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.01)]">
             <span className="text-[8px] font-bold text-neutral-400 block uppercase tracking-wider">Nakshatra</span>
-            <span className="text-[10px] font-extrabold text-[#111827] truncate block mt-0.5">{astrologySummary.nakshatra}</span>
+            <span className="text-[10px] font-extrabold text-[#111827] truncate block mt-0.5">{chart?.nakshatra || 'N/A'}</span>
           </div>
         </div>
       </div>

@@ -3,15 +3,17 @@ import rateLimit from 'express-rate-limit';
 import { GoogleGenAI } from '@google/genai';
 import { createClient } from '@supabase/supabase-js';
 
+import { NavamshaProvider } from '../providers/navamshaProvider';
+import { KundliCalculationService } from '../services/kundliCalculationService';
+import { NovaAIContextService } from '../services/ai/NovaAIContextService';
+import { NovaAIPromptBuilder } from '../services/ai/NovaAIPromptBuilder';
+import { NovaAIConversationMemory } from '../types/novaAiContext';
+
 export interface AiRouterConfig {
   geminiApiKey?: string;
   supabaseUrl?: string;
   supabaseAnonKey?: string;
 }
-
-const CHAT_SYSTEM_INSTRUCTION = `You are a professional, calm, respectful Vedic astrologer named Acharya Dev Sharma working in the Kundli Nova app.
-Use simple, supportive Hinglish. Keep each message short and practical. Do not make medical, legal, or guaranteed financial claims.
-Respond only with a JSON array containing 2 to 4 short strings. Each string is a separate chat bubble. End with one relevant follow-up question.`;
 
 export function createAiRouter(config: AiRouterConfig) {
   const router = express.Router();
@@ -22,9 +24,12 @@ export function createAiRouter(config: AiRouterConfig) {
       })
     : null;
 
-  // The router is mounted at the Vite/Express app root, so middleware must
-  // only run for Nova AI endpoints. Otherwise it intercepts the React SPA
-  // (including "/") and returns UNAUTHORIZED before Vite can serve index.html.
+  // AI Services
+  const provider = new NavamshaProvider();
+  const kundliService = new KundliCalculationService(provider);
+  const contextService = new NovaAIContextService(kundliService);
+  const promptBuilder = new NovaAIPromptBuilder();
+
   const protectedAiPaths = ['/api/ai', '/api/chat', '/api/explain'];
 
   router.use(protectedAiPaths, express.json({ limit: '256kb' }));
@@ -65,47 +70,87 @@ export function createAiRouter(config: AiRouterConfig) {
     }
 
     const messages = Array.isArray(req.body?.messages) ? req.body.messages : [];
-    const userProfile = req.body?.userProfile ?? {};
+    const profileId = req.body?.profileId || req.body?.userProfile?.id;
+    const userId = res.locals.user.id;
+    
     const safeMessages = messages
       .filter((message: any) => typeof message?.text === 'string' && ['user', 'nova'].includes(message?.sender))
       .map((message: any) => ({ sender: message.sender, text: message.text.trim().slice(0, 2000) }))
       .filter((message: any) => message.text)
       .slice(-20);
+      
     const firstUserMessage = safeMessages.findIndex((message: any) => message.sender === 'user');
 
     if (firstUserMessage === -1) {
       return res.status(400).json({ code: 'INVALID_REQUEST', error: 'Please enter a message for Nova AI.' });
     }
 
+    const memory: NovaAIConversationMemory = {
+      sessionId: req.body?.sessionId || `session-${Date.now()}`,
+      topic: req.body?.topic || 'General Guidance',
+      recentMessages: safeMessages.slice(firstUserMessage).map((m: any) => ({
+        sender: m.sender,
+        text: m.text,
+        time: new Date().toISOString()
+      }))
+    };
+
+    let systemInstruction = NovaAIPromptBuilder.SYSTEM_INSTRUCTION;
+
+    if (profileId) {
+      try {
+        const context = await contextService.loadContext(userId, profileId, memory);
+        const dynamicContext = promptBuilder.buildPromptContext(context);
+        systemInstruction = `${NovaAIPromptBuilder.SYSTEM_INSTRUCTION}\n\n${dynamicContext}`;
+      } catch (error) {
+        console.error('[Nova AI] Error loading context:', error);
+        systemInstruction = `${NovaAIPromptBuilder.SYSTEM_INSTRUCTION}\n\nAstrology Context: UNAVAILABLE`;
+      }
+    } else {
+      systemInstruction = `${NovaAIPromptBuilder.SYSTEM_INSTRUCTION}\n\nAstrology Context: UNAVAILABLE`;
+    }
+
     const conversation = safeMessages.slice(firstUserMessage).map((message: any) => ({
       role: message.sender === 'user' ? 'user' : 'model',
       parts: [{ text: message.text }],
     }));
-    const profileContext = [
-      userProfile?.name && `Name: ${String(userProfile.name).slice(0, 100)}`,
-      userProfile?.gender && `Gender: ${String(userProfile.gender).slice(0, 30)}`,
-      userProfile?.dob && `DOB: ${String(userProfile.dob).slice(0, 20)}`,
-      userProfile?.tob && `TOB: ${String(userProfile.tob).slice(0, 20)}`,
-      userProfile?.city && `Birth place: ${String(userProfile.city).slice(0, 100)}`,
-    ].filter(Boolean).join('\n');
 
     try {
       const response = await ai.models.generateContent({
         model: 'gemini-flash-lite-latest',
         contents: conversation,
         config: {
-          systemInstruction: `${CHAT_SYSTEM_INSTRUCTION}\n\nUser profile:\n${profileContext || 'Profile unavailable'}`,
+          systemInstruction,
           temperature: 0.7,
           responseMimeType: 'application/json',
         },
       });
 
       let texts: string[];
+      let rawText = response.text || '[]';
+      
+      // Clean up markdown formatting (e.g., ```json\n...\n```)
+      const jsonMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      if (jsonMatch && jsonMatch[1]) {
+        rawText = jsonMatch[1];
+      }
+
       try {
-        const parsed = JSON.parse(response.text || '[]');
-        texts = Array.isArray(parsed) ? parsed.map(String).filter(Boolean).slice(0, 4) : [String(parsed)];
+        const parsed = JSON.parse(rawText);
+        if (Array.isArray(parsed)) {
+          texts = parsed
+            .filter(item => item !== null && item !== undefined)
+            .map(item => String(item).trim())
+            .filter(Boolean)
+            .map(item => item.slice(0, 800)) // reasonable max length per bubble
+            .slice(0, 4); // max 4 bubbles
+        } else {
+          texts = [String(parsed).trim().slice(0, 2000)];
+        }
       } catch {
-        texts = response.text ? [response.text] : [];
+        // Fallback: safely render the plain response as one message, stripping markdown fences if any remain
+        const cleanText = (response.text || '').replace(/```(?:json)?|```/g, '').trim();
+        texts = cleanText ? [cleanText.slice(0, 2000)] : [];
       }
 
       if (!texts.length) throw new Error('Gemini returned an empty response');
