@@ -1,5 +1,28 @@
 import { jsPDF } from 'jspdf';
-import { KundliData } from './kundliStorage';
+import { 
+  KundliNovaNatalChart, 
+  KundliNovaVimshottariDasha, 
+  KundliNovaDoshaAnalysis, 
+  KundliNovaYogaAnalysis,
+  KundliNovaDetailedReport 
+} from '../server/types/astrologyProvider';
+
+export interface KundliPdfPayload {
+  birthDetails: {
+    name: string;
+    gender: string;
+    dob: string;
+    tob: string;
+    city: string;
+    state: string;
+  };
+  chart: KundliNovaNatalChart;
+  dasha: KundliNovaVimshottariDasha | null;
+  dosha: KundliNovaDoshaAnalysis | null;
+  yoga: KundliNovaYogaAnalysis | null;
+  detailedReport: KundliNovaDetailedReport | null;
+  generatedAt: string;
+}
 
 export interface GeneratedPdfResult {
   pdfBlobUrl: string;
@@ -7,9 +30,9 @@ export interface GeneratedPdfResult {
   download: (fileName?: string) => void;
 }
 
-export const generateKundliPdf = async (data: KundliData): Promise<GeneratedPdfResult> => {
-  // Simulate heavy processing for realism
-  await new Promise((resolve) => setTimeout(resolve, 2000));
+export const generateKundliPdf = async (data: KundliPdfPayload): Promise<GeneratedPdfResult> => {
+  // Simulate processing time
+  await new Promise((resolve) => setTimeout(resolve, 500));
 
   const doc = new jsPDF({
     orientation: 'portrait',
@@ -17,14 +40,9 @@ export const generateKundliPdf = async (data: KundliData): Promise<GeneratedPdfR
     format: 'a4',
   });
 
-  const { birthDetails, astrologySummary, planetaryPositions, currentDasha, lifeInsights } = data;
+  const { birthDetails, chart, dasha, dosha, yoga, detailedReport, generatedAt } = data;
 
   // -- Page Styling & Layout Configurations --
-  const orangeHex = '#FF8A00';
-  const neutralDark = '#111827';
-  const neutralGray = '#4B5563';
-  const softBorder = '#E5E7EB';
-
   const drawSubtleOrangeDivider = (y: number) => {
     doc.setDrawColor(255, 138, 0); // Orange
     doc.setLineWidth(0.15);
@@ -43,8 +61,8 @@ export const generateKundliPdf = async (data: KundliData): Promise<GeneratedPdfR
   doc.setFont('Helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(100, 116, 139);
-  doc.text('Your Personal Astro-AI Companion', 20, 25);
-  doc.text(`Generated on: ${data.generatedAt}`, 140, 20);
+  doc.text('Your Personal Astrology Companion', 20, 25);
+  doc.text(`Generated on: ${generatedAt}`, 140, 20);
 
   // Subtle separator line
   doc.setDrawColor(245, 242, 235);
@@ -76,7 +94,7 @@ export const generateKundliPdf = async (data: KundliData): Promise<GeneratedPdfR
   doc.text(`DOB: ${birthDetails.dob}`, 24, 58);
   doc.text(`TOB: ${birthDetails.tob}`, 24, 62);
 
-  doc.text(`Place: ${birthDetails.city}, ${birthDetails.district}`, 100, 52);
+  doc.text(`Place: ${birthDetails.city}`, 100, 52);
   doc.text(`State: ${birthDetails.state}`, 100, 58);
   doc.text(`Timezone: India Standard Time (IST)`, 100, 62);
 
@@ -88,7 +106,7 @@ export const generateKundliPdf = async (data: KundliData): Promise<GeneratedPdfR
   doc.setTextColor(17, 24, 39);
   doc.text('Astrological Constants', 20, yOffset);
 
-  // Draw 6 grid boxes for constants
+  // Draw grid boxes for constants
   const cols = 3;
   const colWidth = 54;
   const rowHeight = 11;
@@ -96,12 +114,11 @@ export const generateKundliPdf = async (data: KundliData): Promise<GeneratedPdfR
   const boxYStart = 78;
 
   const constants = [
-    { label: 'Lagna (Ascendant)', val: astrologySummary.lagna },
-    { label: 'Sun Sign', val: astrologySummary.sunSign },
-    { label: 'Moon Sign (Rashi)', val: astrologySummary.moonSign },
-    { label: 'Nakshatra', val: astrologySummary.nakshatra },
-    { label: 'Moolank (Psychic)', val: String(astrologySummary.moolank) },
-    { label: 'Bhagyank (Destiny)', val: String(astrologySummary.bhagyank) },
+    { label: 'Lagna (Ascendant)', val: chart.ascendant.sign },
+    { label: 'Sun Sign', val: chart.sunSign || 'Unknown' },
+    { label: 'Moon Sign (Rashi)', val: chart.moonSign || 'Unknown' },
+    { label: 'Nakshatra', val: chart.nakshatra || 'Unknown' },
+    { label: 'Ascendant Degree', val: String(chart.ascendant.degree) },
   ];
 
   constants.forEach((item, index) => {
@@ -122,7 +139,7 @@ export const generateKundliPdf = async (data: KundliData): Promise<GeneratedPdfR
     doc.setFont('Helvetica', 'bold');
     doc.setFontSize(8.5);
     doc.setTextColor(255, 138, 0);
-    doc.text(item.val, boxX + 3, boxY + 8);
+    doc.text(item.val.toString(), boxX + 3, boxY + 8);
   });
 
   // 4. North Indian Kundli Chart Drawing
@@ -153,24 +170,44 @@ export const generateKundliPdf = async (data: KundliData): Promise<GeneratedPdfR
   doc.line(cx + size / 2, cy + size, cx + size, cy + size / 2);
   doc.line(cx + size, cy + size / 2, cx + size / 2, cy);
 
-  // Add House labels & Planet placements inside triangles
-  doc.setFont('Helvetica', 'bold');
-  doc.setFontSize(7.5);
-  doc.setTextColor(255, 138, 0);
+  const getPlanetsInHouse = (houseNum: number): string => {
+    const abbreviations: { [key: string]: string } = {
+      'Sun (Surya)': 'Su', 'Sun': 'Su',
+      'Moon (Chandra)': 'Mo', 'Moon': 'Mo',
+      'Mars (Mangal)': 'Ma', 'Mars': 'Ma',
+      'Mercury (Budh)': 'Me', 'Mercury': 'Me',
+      'Jupiter (Guru)': 'Ju', 'Jupiter': 'Ju',
+      'Venus (Shukra)': 'Ve', 'Venus': 'Ve',
+      'Saturn (Shani)': 'Sa', 'Saturn': 'Sa',
+      'Rahu': 'Ra',
+      'Ketu': 'Ke'
+    };
+    const found = chart.planets
+      .filter(p => p.house === houseNum)
+      .map(p => abbreviations[p.name] || p.name.substring(0, 2));
+    if (houseNum === 1) found.unshift('Lg');
+    return found.join(',');
+  };
 
-  // Helper labels
-  doc.setFontSize(7);
-  doc.text('Lagna', cx + size / 2 - 4, cy + size / 4 + 3);
   doc.setFont('Helvetica', 'normal');
-  doc.setTextColor(107, 114, 128);
-  doc.text('Su, Bu', cx + size / 2 - 4.5, cy + size / 4 + 7);
+  doc.setFontSize(7.5);
+  doc.setTextColor(17, 24, 39);
 
-  doc.text('Ch', cx + size / 4 - 4, cy + size / 8 + 3);
-  doc.text('Sa, Sk', cx + size / 4 - 5, cy + size / 2 + 5);
-  doc.text('Gu', cx + size / 8 - 1, cy + size / 4 + 10);
-  doc.text('Ra', cx + size / 4 - 4, cy + 7 * size / 8 - 1);
-  doc.text('Ma', cx + size / 2 - 2, cy + 3 * size / 4 + 8);
-  doc.text('Ke', cx + 3 * size / 4 - 2, cy + size / 2 + 5);
+  // We are not meticulously calculating bounding boxes here for the 12 houses due to PDF canvas complexity, 
+  // but placing them in rough diamond regions.
+  doc.text(getPlanetsInHouse(1), cx + size / 2 - 4.5, cy + size / 4 + 7);
+  doc.text(getPlanetsInHouse(2), cx + size / 4 - 4, cy + size / 8 + 3);
+  doc.text(getPlanetsInHouse(3), cx + size / 8 - 1, cy + size / 4 + 10);
+  doc.text(getPlanetsInHouse(4), cx + size / 4 - 5, cy + size / 2 + 5);
+  doc.text(getPlanetsInHouse(5), cx + size / 8 - 1, cy + 3 * size / 4 - 2);
+  doc.text(getPlanetsInHouse(6), cx + size / 4 - 4, cy + 7 * size / 8 + 2);
+  doc.text(getPlanetsInHouse(7), cx + size / 2 - 2, cy + 3 * size / 4 + 8);
+  doc.text(getPlanetsInHouse(8), cx + 3 * size / 4 - 2, cy + 7 * size / 8 + 2);
+  doc.text(getPlanetsInHouse(9), cx + 7 * size / 8 - 2, cy + 3 * size / 4 - 2);
+  doc.text(getPlanetsInHouse(10), cx + 3 * size / 4 - 2, cy + size / 2 + 5);
+  doc.text(getPlanetsInHouse(11), cx + 7 * size / 8 - 2, cy + size / 4 + 10);
+  doc.text(getPlanetsInHouse(12), cx + 3 * size / 4 - 2, cy + size / 8 + 3);
+
 
   // 5. Planetary Positions Table
   const tableX = 78;
@@ -178,7 +215,7 @@ export const generateKundliPdf = async (data: KundliData): Promise<GeneratedPdfR
   doc.setFont('Helvetica', 'bold');
   doc.setFontSize(11);
   doc.setTextColor(17, 24, 39);
-  doc.text('Planetary Positions & Coordinates', tableX, tableY);
+  doc.text('Planetary Positions', tableX, tableY);
 
   // Draw Table Headers
   doc.setFillColor(249, 250, 251);
@@ -199,13 +236,12 @@ export const generateKundliPdf = async (data: KundliData): Promise<GeneratedPdfR
   doc.setFontSize(7.5);
   doc.setTextColor(17, 24, 39);
 
-  planetaryPositions.forEach((p, idx) => {
+  chart.planets.forEach((p, idx) => {
     const rowY = tableY + 14 + idx * 5.1;
     doc.text(p.name, tableX + 3, rowY);
     doc.text(p.zodiac, tableX + 38, rowY);
     doc.text(String(p.house), tableX + 68, rowY);
-    doc.text(p.degree, tableX + 85, rowY);
-
+    doc.text(p.degree || String(p.normDegree) || '-', tableX + 85, rowY);
     doc.line(tableX, rowY + 1.5, tableX + 112, rowY + 1.5);
   });
 
@@ -217,79 +253,155 @@ export const generateKundliPdf = async (data: KundliData): Promise<GeneratedPdfR
   doc.setTextColor(17, 24, 39);
   doc.text('Vimshottari Dasha Status', 20, yOffset);
 
-  doc.setFillColor(253, 252, 247);
-  doc.rect(20, yOffset + 4, 170, 14, 'F');
-  doc.rect(20, yOffset + 4, 170, 14, 'S');
-
-  doc.setFont('Helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.setTextColor(17, 24, 39);
-  doc.text(`Active Mahadasha: ${currentDasha.mahadasha}`, 25, yOffset + 10);
-  doc.text(`Active Antardasha: ${currentDasha.antardasha}`, 105, yOffset + 10);
-
-  doc.setFont('Helvetica', 'normal');
-  doc.setFontSize(7.5);
-  doc.setTextColor(107, 114, 128);
-  doc.text('Note: The current planetary transition phase shows elevated wisdom and auspicious professional beginnings.', 25, yOffset + 15);
-
-  // 7. Life Insights & Guidance
-  yOffset = 202;
-  drawSubtleOrangeDivider(yOffset - 3.5);
-  doc.setFont('Helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.setTextColor(17, 24, 39);
-  doc.text('Personalized Life Insights', 20, yOffset);
-
-  const insights = [
-    { label: 'Career & Growth', val: lifeInsights.career },
-    { label: 'Marriage & Relationship', val: lifeInsights.marriage },
-    { label: 'Wealth & Finance', val: lifeInsights.finance },
-    { label: 'Health & Well-being', val: lifeInsights.health },
-  ];
-
-  insights.forEach((ins, idx) => {
-    const rowY = yOffset + 4 + idx * 13;
-    doc.setFillColor(255, 255, 255);
-    doc.rect(20, rowY, 170, 11, 'S');
+  if (dasha) {
+    doc.setFillColor(253, 252, 247);
+    doc.rect(20, yOffset + 4, 170, 14, 'F');
+    doc.rect(20, yOffset + 4, 170, 14, 'S');
 
     doc.setFont('Helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor(255, 138, 0);
-    doc.text(ins.label, 24, rowY + 4);
+    doc.setFontSize(9);
+    doc.setTextColor(17, 24, 39);
+    doc.text(`Active Mahadasha: ${dasha.currentMahadasha.planet}`, 25, yOffset + 10);
+    if (dasha.currentAntardasha) {
+      doc.text(`Active Antardasha: ${dasha.currentAntardasha.planet}`, 105, yOffset + 10);
+    }
 
     doc.setFont('Helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(17, 24, 39);
-    doc.text(ins.val, 24, rowY + 8, { maxWidth: 162 });
-  });
+    doc.setFontSize(7.5);
+    doc.setTextColor(107, 114, 128);
+    doc.text(`Mahadasha ends on ${new Date(dasha.currentMahadasha.endDate).toLocaleDateString()}`, 25, yOffset + 15);
+  } else {
+    doc.setFont('Helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(107, 114, 128);
+    doc.text('Dasha information is unavailable.', 20, yOffset + 8);
+  }
 
-  // 8. Dynamic Remedies & Aura Balance
-  yOffset = 260;
-  drawSubtleOrangeDivider(yOffset - 3.5);
+  // Next page for Dosha, Yoga, Detailed Report
+  doc.addPage();
+  yOffset = 20;
+
+  // Header again
   doc.setFont('Helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(17, 24, 39);
-  doc.text('Aura Balance Remedies:', 20, yOffset);
+  doc.setFontSize(14);
+  doc.setTextColor(255, 138, 0); // Orange
+  doc.text('KUNDLI NOVA - DETAILED REPORT', 20, yOffset);
+  yOffset += 10;
+  
+  if (dosha) {
+    doc.setFont('Helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(17, 24, 39);
+    doc.text('Dosha Analysis', 20, yOffset);
+    yOffset += 6;
 
-  doc.setFont('Helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.setTextColor(75, 85, 99);
-  doc.text('• Light a ghee lamp every Saturday evening near a peepal tree to support Shani Dev stability.', 20, yOffset + 4.5);
-  doc.text('• Offer fresh copper-colored water to Surya Dev every morning during sunrise to energize career confidence.', 20, yOffset + 8.5);
+    dosha.results.forEach(d => {
+      if (yOffset > 270) { doc.addPage(); yOffset = 20; }
+      doc.setFont('Helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.setTextColor(17, 24, 39);
+      const status = d.calculationStatus === 'unavailable' ? 'Unavailable' : (d.detected ? 'Present' : 'Not Present');
+      doc.text(`${d.name}: ${status}`, 20, yOffset);
+      yOffset += 5;
+      
+      if (d.detected && d.summary) {
+        doc.setFont('Helvetica', 'normal');
+        doc.setFontSize(8.5);
+        doc.setTextColor(75, 85, 99);
+        const lines = doc.splitTextToSize(d.summary, 170);
+        doc.text(lines, 20, yOffset);
+        yOffset += (lines.length * 4) + 2;
+      }
+    });
+  }
 
-  // Footer Branding
+  yOffset += 5;
+  if (yoga) {
+    if (yOffset > 260) { doc.addPage(); yOffset = 20; }
+    drawSubtleOrangeDivider(yOffset - 3);
+    doc.setFont('Helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(17, 24, 39);
+    doc.text('Yoga Analysis', 20, yOffset);
+    yOffset += 6;
+
+    const presentYogas = yoga.results.filter(y => y.detected);
+    if (presentYogas.length === 0) {
+      doc.setFont('Helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.text('No significant planetary yogas detected.', 20, yOffset);
+      yOffset += 6;
+    } else {
+      presentYogas.forEach(y => {
+        if (yOffset > 270) { doc.addPage(); yOffset = 20; }
+        doc.setFont('Helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.setTextColor(17, 24, 39);
+        doc.text(`${y.name}`, 20, yOffset);
+        yOffset += 5;
+        
+        doc.setFont('Helvetica', 'normal');
+        doc.setFontSize(8.5);
+        doc.setTextColor(75, 85, 99);
+        if (y.summary) {
+          const lines = doc.splitTextToSize(y.summary, 170);
+          doc.text(lines, 20, yOffset);
+          yOffset += (lines.length * 4) + 2;
+        }
+      });
+    }
+  }
+
+  yOffset += 5;
+  if (detailedReport) {
+    if (yOffset > 250) { doc.addPage(); yOffset = 20; }
+    drawSubtleOrangeDivider(yOffset - 3);
+    doc.setFont('Helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(17, 24, 39);
+    doc.text('Detailed Kundli Report', 20, yOffset);
+    yOffset += 6;
+
+    detailedReport.sections.forEach(sec => {
+      if (yOffset > 260) { doc.addPage(); yOffset = 20; }
+      doc.setFont('Helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(17, 24, 39);
+      doc.text(sec.heading, 20, yOffset);
+      yOffset += 5;
+
+      doc.setFont('Helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(75, 85, 99);
+      sec.paragraphs.forEach(p => {
+        if (yOffset > 270) { doc.addPage(); yOffset = 20; }
+        const lines = doc.splitTextToSize(p, 170);
+        doc.text(lines, 20, yOffset);
+        yOffset += (lines.length * 4) + 2;
+      });
+      yOffset += 3;
+    });
+  }
+
+  // Footer Branding on final page
+  if (yOffset > 280) { doc.addPage(); }
   doc.setFont('Helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(156, 163, 175);
   doc.text('Generated by Kundli Nova • Your Trusted Astrology Partner', 20, 285);
-  doc.text('Page 1 of 1', 170, 285);
+  const pageCount = (doc as any).internal.getNumberOfPages();
+  for(let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.text(`Page ${i} of ${pageCount}`, 180, 285);
+  }
 
   // PDF Outputs
   const pdfBlob = doc.output('blob');
   const pdfBlobUrl = URL.createObjectURL(pdfBlob);
   const pdfBase64 = doc.output('datauristring');
 
-  const download = (fileName = `Janam_Kundli_${birthDetails.name}.pdf`) => {
+  const download = (fileName = `Janam_Kundli_${birthDetails.name.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`) => {
     doc.save(fileName);
   };
 

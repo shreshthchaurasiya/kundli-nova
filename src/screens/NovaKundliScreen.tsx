@@ -430,12 +430,14 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
   const handleDownloadPdf = async () => {
     setPdfModalState('generating');
     try {
-      const mockKundliData: any = {
+      const mockKundliData: import('../services/kundliPdfService').KundliPdfPayload = {
         birthDetails, 
-        astrologySummary, 
-        planetaryPositions, 
-        currentDasha, 
-        lifeInsights
+        chart: apiChartData,
+        dasha: apiDashaData,
+        dosha: apiDoshaData,
+        yoga: apiYogaData,
+        detailedReport: detailedReportData,
+        generatedAt: new Date().toLocaleDateString()
       };
       const result = await generateKundliPdf(mockKundliData);
       setPdfUrls({
