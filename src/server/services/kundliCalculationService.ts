@@ -83,8 +83,25 @@ export class KundliCalculationService {
     if (this.natalInflight.has(cacheKey)) return this.natalInflight.get(cacheKey)!;
 
     const promise = this.provider.getNatalChart(input)
-      .then(chart => {
+      .then(async chart => {
         this.natalCache.set(cacheKey, chart);
+        
+        try {
+          const moon = chart.planets.find(p => p.name.toLowerCase() === 'moon');
+          const updatePayload = {
+            rashi: moon?.sign || null,
+            nakshatra: moon?.nakshatra || null,
+            lagna: chart.ascendant?.sign || null,
+          };
+          
+          await supabaseAdmin
+            .from('kundli_profiles')
+            .update(updatePayload)
+            .eq('id', input.profileId);
+        } catch (e) {
+          console.error('Failed to sync astrology data to kundli_profiles:', e);
+        }
+        
         return chart;
       })
       .finally(() => this.natalInflight.delete(cacheKey));
@@ -119,6 +136,18 @@ export class KundliCalculationService {
         }
         if (dasha.currentAntardasha?.endDate) {
           dasha.currentAntardasha.remainingDays = calcRemaining(dasha.currentAntardasha.endDate);
+        }
+
+        try {
+          if (dasha.currentMahadasha?.planet) {
+            supabaseAdmin
+              .from('kundli_profiles')
+              .update({ mahadasha: dasha.currentMahadasha.planet })
+              .eq('id', input.profileId)
+              .then(); // Fire and forget
+          }
+        } catch (e) {
+          console.error('Failed to sync mahadasha to kundli_profiles:', e);
         }
 
         this.dashaCache.set(cacheKey, dasha);

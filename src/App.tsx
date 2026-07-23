@@ -184,7 +184,7 @@ export default function App() {
       case 'otp': return <OtpScreen onNavigate={navigate} routeParams={routeParams} />;
       case 'create-profile': return <CreateProfileScreen onNavigate={navigate} />;
       case 'edit-profile': return <EditProfileScreen onNavigate={navigate} />;
-      case 'view-kundli': return <NovaKundliScreen onNavigate={navigate} routeParams={{ fromScreen: 'profile' }} />;
+      case 'view-kundli': return <NovaKundliScreen onNavigate={navigate} routeParams={{ ...routeParams, returnTo: 'profile' }} />;
       case 'consultation-chat': return (
         <ConsultationChatScreen
           astrologerId={routeParams?.astrologerId}

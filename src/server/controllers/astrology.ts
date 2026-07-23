@@ -8,7 +8,7 @@ import type { AuthenticatedRequest } from '../types';
 import { KundliCalculationService } from '../services/kundliCalculationService';
 import { NavamshaProvider } from '../providers/navamshaProvider';
 
-const navamshaProvider = new NavamshaProvider();
+const navamshaProvider = new NavamshaProvider({ timeoutMs: 15000 });
 const kundliCalculationService = new KundliCalculationService(navamshaProvider);
 
 export const getDailyHoroscope = async (req: Request, res: Response, next: NextFunction) => {

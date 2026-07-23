@@ -170,15 +170,16 @@ export default function KundliProfileFormScreen({ onNavigate, routeParams }: Kun
               birth_city: trimmed.birth_city } as any),
       };
 
+      let savedProfile;
       if (action === 'edit' && profileIdToEdit) {
-        await kundliProfileRepository.updateProfile(profileIdToEdit, payload);
+        savedProfile = await kundliProfileRepository.updateProfile(profileIdToEdit, payload);
       } else {
-        await kundliProfileRepository.createProfile(payload);
+        savedProfile = await kundliProfileRepository.createProfile(payload);
       }
 
       // Return to the originating screen (consultation-chat or profile)
       // and carry the consultation context so astrologerId is not lost.
-      onNavigate(returnTo, { astrologerId, intent });
+      onNavigate(returnTo, { astrologerId, intent, createdProfileId: savedProfile.id });
     } catch (err: any) {
       setError(err?.message || 'Failed to save. Please try again.');
     } finally {

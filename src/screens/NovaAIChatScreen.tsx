@@ -604,7 +604,7 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
                   >
                     <KundliPreviewMessage 
                       data={msg.kundliData} 
-                      onViewComplete={() => onNavigate('nova-kundli', { kundliData: msg.kundliData })}
+                      onViewComplete={() => onNavigate('nova-kundli', { kundliData: msg.kundliData, returnTo: 'nova-ai-chat' })}
                       onDownloadPdf={handleDownloadPdf}
                     />
                   </motion.div>

@@ -282,9 +282,57 @@ export const ensureSelfKundliProfile = async (
 
     const rpcResult = data as { profile: Record<string, unknown> | null; reason: string };
 
+    // If the RPC returned a profile but it is missing geocoordinates (i.e. it was
+    // created by an earlier version of sync-self that did not geocode), resolve and
+    // persist coordinates now.  Non-fatal: if geocoding fails we still return the
+    // profile — the frontend geocode gate in NovaKundliScreen will surface the error.
+    let enrichedProfile = rpcResult.profile;
+    if (
+      enrichedProfile &&
+      (enrichedProfile.latitude == null ||
+        enrichedProfile.longitude == null ||
+        !enrichedProfile.timezone)
+    ) {
+      try {
+        const profileId = enrichedProfile.id as string;
+        const birth_city = enrichedProfile.birth_city as string;
+        const birth_district = enrichedProfile.birth_district as string;
+        const birth_state = enrichedProfile.birth_state as string;
+
+        if (birth_city && birth_state) {
+          const locationResolver = new ApiNinjasLocationResolver();
+          const location = await locationResolver.resolve({
+            city: birth_city,
+            district: birth_district || birth_city,
+            state: birth_state,
+            country: 'India',
+          });
+
+          const { data: updatedRow, error: updateError } = await supabaseAdmin
+            .from('kundli_profiles')
+            .update({
+              latitude: location.latitude,
+              longitude: location.longitude,
+              timezone: location.timezone,
+            })
+            .eq('id', profileId)
+            .select()
+            .maybeSingle();
+
+          if (!updateError && updatedRow) {
+            enrichedProfile = updatedRow;
+          }
+        }
+      } catch (_geocodeErr) {
+        // Geocoding is best-effort during sync-self.  Existing data is still
+        // returned; the frontend will surface the error when the user opens
+        // View Kundli or Nova AI.
+      }
+    }
+
     res.json({
       status: 'success',
-      data: rpcResult.profile ?? null,
+      data: enrichedProfile ?? null,
       reason: rpcResult.reason,
     });
   } catch (error) {

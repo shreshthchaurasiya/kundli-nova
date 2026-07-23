@@ -12,6 +12,7 @@ interface CompatibilityPanelProps {
   profiles: KundliProfile[];
   onSelectProfileB: (profileId: string) => void;
   onRetry: () => void;
+  onAddPartner: () => void;
 }
 
 const formatManglikValue = (val: string) => {
@@ -31,7 +32,8 @@ export const CompatibilityPanel: React.FC<CompatibilityPanelProps> = ({
   selectedProfileBId,
   profiles,
   onSelectProfileB,
-  onRetry
+  onRetry,
+  onAddPartner
 }) => {
   // Filter out the primary profile so user can't select themselves
   const availableProfilesForB = profiles.filter(p => p.id !== selectedProfileId);
@@ -50,27 +52,44 @@ export const CompatibilityPanel: React.FC<CompatibilityPanelProps> = ({
       <div className="bg-white border border-[#EBE8E0] rounded-2xl p-4 shadow-[0_2px_8px_rgba(0,0,0,0.01)]">
         <label htmlFor="partner-profile-select" className="block text-[11px] font-bold text-neutral-500 uppercase tracking-widest mb-2">Select Partner Profile</label>
         {availableProfilesForB.length === 0 ? (
-          <div className="bg-orange-50 border border-orange-100 rounded-xl p-3 text-[12px] text-orange-700 font-semibold text-center">
-            You need to create another profile to check compatibility.
+          <div className="flex flex-col items-center justify-center py-4 bg-[#FCFBF8] border border-[#EBE8E0] rounded-xl space-y-3">
+            <p className="text-[12px] text-neutral-500 font-semibold text-center px-4">
+              Add your partner's details to match Kundlis.
+            </p>
+            <button
+              onClick={onAddPartner}
+              className="px-6 py-2.5 bg-[#FF8A00] text-white rounded-full text-[13px] font-[800] active:scale-[0.98] transition-all flex items-center shadow-md shadow-[#FF8A00]/20"
+            >
+              <span className="text-[16px] mr-1.5 leading-none mb-0.5">+</span> Add Partner
+            </button>
           </div>
         ) : (
-          <div className="relative">
-            <select
-              id="partner-profile-select"
-              className="w-full appearance-none bg-[#FCFBF8] border border-[#EBE8E0] text-[14px] font-[800] text-[#111827] rounded-xl px-4 py-3 outline-none focus:border-[#FF8A00] transition-colors"
-              value={selectedProfileBId || ''}
-              onChange={(e) => onSelectProfileB(e.target.value)}
-            >
-              <option value="" disabled>Select a profile...</option>
-              {availableProfilesForB.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-            <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-neutral-400">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                <path d="m6 9 6 6 6-6"/>
-              </svg>
+          <div className="space-y-3">
+            <div className="relative">
+              <select
+                id="partner-profile-select"
+                className="w-full appearance-none bg-[#FCFBF8] border border-[#EBE8E0] text-[14px] font-[800] text-[#111827] rounded-xl px-4 py-3 outline-none focus:border-[#FF8A00] transition-colors"
+                value={selectedProfileBId || ''}
+                onChange={(e) => onSelectProfileB(e.target.value)}
+              >
+                <option value="" disabled>Select a profile...</option>
+                {availableProfilesForB.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+              <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-neutral-400">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="m6 9 6 6 6-6"/>
+                </svg>
+              </div>
             </div>
+            
+            <button
+              onClick={onAddPartner}
+              className="w-full py-3 bg-[#FFFDF9] border border-[#F5E6D3] text-[#FF8A00] rounded-xl text-[13px] font-[800] active:scale-[0.98] transition-all flex justify-center items-center hover:bg-[#FFF9F0]"
+            >
+              <span className="text-[16px] mr-1.5 leading-none mb-0.5">+</span> Add New Partner
+            </button>
           </div>
         )}
       </div>

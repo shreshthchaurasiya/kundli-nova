@@ -4,7 +4,9 @@ import {
   KundliNovaVimshottariDasha, 
   KundliNovaDoshaAnalysis, 
   KundliNovaYogaAnalysis,
-  KundliNovaDetailedReport 
+  KundliNovaDetailedReport,
+  KundliNovaCompatibilityAnalysis,
+  KundliNovaManglikAnalysis
 } from '../server/types/astrologyProvider';
 
 export interface KundliPdfPayload {
@@ -411,6 +413,197 @@ export const generateKundliPdf = async (data: KundliPdfPayload): Promise<Generat
   const pdfBase64 = doc.output('datauristring');
 
   const download = (fileName = `Janam_Kundli_${birthDetails.name.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`) => {
+    doc.save(fileName);
+  };
+
+  return {
+    pdfBlobUrl,
+    pdfBase64,
+    download,
+  };
+};
+
+export interface KundliMatchingPdfPayload {
+  profileA: {
+    name: string;
+    dob: string;
+    tob: string;
+    city: string;
+    state: string;
+  };
+  profileB: {
+    name: string;
+    dob: string;
+    tob: string;
+    city: string;
+    state: string;
+  };
+  compatibility: KundliNovaCompatibilityAnalysis;
+  manglik: KundliNovaManglikAnalysis;
+  generatedAt: string;
+}
+
+export const generateKundliMatchingPdf = async (data: KundliMatchingPdfPayload): Promise<GeneratedPdfResult> => {
+  await new Promise((resolve) => setTimeout(resolve, 500));
+
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  const { profileA, profileB, compatibility, manglik, generatedAt } = data;
+
+  const drawSubtleOrangeDivider = (y: number) => {
+    doc.setDrawColor(255, 138, 0);
+    doc.setLineWidth(0.15);
+    doc.line(20, y, 190, y);
+    doc.setDrawColor(229, 231, 235);
+    doc.setLineWidth(0.25);
+  };
+
+  // 1. Title Header & Branding
+  doc.setFont('Helvetica', 'bold');
+  doc.setFontSize(22);
+  doc.setTextColor(255, 138, 0); // Orange
+  doc.text('KUNDLI NOVA', 20, 20);
+  
+  doc.setFont('Helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(100, 116, 139);
+  doc.text('Kundli Matching Report', 20, 25);
+  doc.text(`Generated on: ${generatedAt}`, 140, 20);
+
+  doc.setDrawColor(245, 242, 235);
+  doc.setLineWidth(0.5);
+  doc.line(20, 28, 190, 28);
+
+  // 2. Profiles Summary
+  doc.setFillColor(253, 252, 247);
+  doc.rect(20, 32, 170, 36, 'F');
+  doc.setDrawColor(245, 242, 235);
+  doc.rect(20, 32, 170, 36, 'S');
+
+  doc.setFont('Helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(17, 24, 39);
+  doc.text('Profile A', 24, 38);
+  doc.text('Profile B', 100, 38);
+
+  doc.setFont('Helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(107, 114, 128);
+
+  // Profile A
+  doc.text(`Name: ${profileA.name}`, 24, 44);
+  doc.text(`DOB: ${profileA.dob}`, 24, 50);
+  doc.text(`TOB: ${profileA.tob}`, 24, 56);
+  doc.text(`Place: ${profileA.city}, ${profileA.state}`, 24, 62);
+
+  // Profile B
+  doc.text(`Name: ${profileB.name}`, 100, 44);
+  doc.text(`DOB: ${profileB.dob}`, 100, 50);
+  doc.text(`TOB: ${profileB.tob}`, 100, 56);
+  doc.text(`Place: ${profileB.city}, ${profileB.state}`, 100, 62);
+
+  drawSubtleOrangeDivider(72);
+
+  // 3. Ashtakoota Summary
+  doc.setFont('Helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(17, 24, 39);
+  doc.text('Ashtakoota Milan (36 Points)', 20, 82);
+
+  doc.setFontSize(18);
+  doc.setTextColor(255, 138, 0);
+  doc.text(`${compatibility.totalScore.toFixed(1)} / ${compatibility.maximumScore}`, 20, 92);
+  doc.setFontSize(10);
+  doc.setTextColor(107, 114, 128);
+  doc.text(`${compatibility.compatibilityPercentage.toFixed(0)}% Compatibility`, 60, 91);
+
+  // 4. Koota Breakdown
+  let yOffset = 105;
+  doc.setFont('Helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(17, 24, 39);
+  doc.text('Koota Name', 20, yOffset);
+  doc.text('Score', 80, yOffset);
+  doc.text('Maximum', 110, yOffset);
+  
+  yOffset += 5;
+  doc.setLineWidth(0.1);
+  doc.setDrawColor(229, 231, 235);
+  doc.line(20, yOffset, 190, yOffset);
+  yOffset += 6;
+
+  doc.setFont('Helvetica', 'normal');
+  compatibility.factors.forEach(factor => {
+    doc.setTextColor(17, 24, 39);
+    doc.text(factor.name || factor.code, 20, yOffset);
+    doc.text(`${factor.score.toFixed(1)}`, 80, yOffset);
+    doc.text(`${factor.maximumScore}`, 110, yOffset);
+    yOffset += 7;
+  });
+
+  drawSubtleOrangeDivider(yOffset + 2);
+  yOffset += 12;
+
+  // 5. Manglik Analysis
+  doc.setFont('Helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(17, 24, 39);
+  doc.text('Manglik Match', 20, yOffset);
+  yOffset += 8;
+
+  doc.setFontSize(10);
+  doc.text(`Match Status:`, 20, yOffset);
+  doc.setFont('Helvetica', 'normal');
+  const formatManglikValue = (val: string) => {
+    if (!val) return 'Unknown';
+    if (val === 'both_manglik') return 'Both profiles are Manglik';
+    if (val === 'neither_manglik') return 'Neither profile is Manglik';
+    if (val === 'manglik_non_manglik') return 'Manglik status differs';
+    if (val === 'not_evaluated') return 'Not evaluated';
+    return val.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  };
+  doc.text(formatManglikValue(manglik.compatibility), 60, yOffset);
+  yOffset += 6;
+
+  doc.text(`Profile A Status:`, 20, yOffset);
+  doc.text(manglik.profileAManglik ? 'Manglik' : 'Non-Manglik', 60, yOffset);
+  if (manglik.profileACancellation && manglik.profileACancellation !== 'not_evaluated') {
+    doc.setTextColor(107, 114, 128);
+    doc.text(`Cancellation: ${formatManglikValue(manglik.profileACancellation)}`, 110, yOffset);
+    doc.setTextColor(17, 24, 39);
+  }
+  yOffset += 6;
+
+  doc.text(`Profile B Status:`, 20, yOffset);
+  doc.text(manglik.profileBManglik ? 'Manglik' : 'Non-Manglik', 60, yOffset);
+  if (manglik.profileBCancellation && manglik.profileBCancellation !== 'not_evaluated') {
+    doc.setTextColor(107, 114, 128);
+    doc.text(`Cancellation: ${formatManglikValue(manglik.profileBCancellation)}`, 110, yOffset);
+    doc.setTextColor(17, 24, 39);
+  }
+  yOffset += 15;
+
+  // 6. Disclaimer
+  doc.setFillColor(249, 250, 251);
+  doc.rect(20, yOffset, 170, 16, 'F');
+  doc.setFontSize(8);
+  doc.setTextColor(107, 114, 128);
+  doc.text('Disclaimer: This score is one traditional compatibility factor and does not guarantee marriage success.', 24, yOffset + 9);
+
+  // Footer Branding
+  doc.text('Generated by Kundli Nova • Your Trusted Astrology Partner', 20, 285);
+  
+  const pdfBlob = doc.output('blob');
+  const pdfBlobUrl = URL.createObjectURL(pdfBlob);
+  const pdfBase64 = doc.output('datauristring');
+
+  const cleanNameA = profileA.name.replace(/[^a-zA-Z0-9]/g, '_');
+  const cleanNameB = profileB.name.replace(/[^a-zA-Z0-9]/g, '_');
+  const download = (fileName = `Kundli_Matching_${cleanNameA}_${cleanNameB}.pdf`) => {
     doc.save(fileName);
   };
 

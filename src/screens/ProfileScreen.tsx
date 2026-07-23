@@ -12,7 +12,7 @@ import { useWallet } from '../contexts/WalletContext';
 import { APPLICATION_STATUS_CONTENT, useAstrologerPartner } from '../features/astrologer';
 
 interface ProfileScreenProps {
-  onNavigate: (screen: Screen) => void;
+  onNavigate: (screen: Screen, params?: any) => void;
 }
 
 interface AstrologyDetails {
@@ -26,7 +26,7 @@ interface AstrologyDetails {
 
 export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
   const { user } = useAuth();
-  const { profile: profileData, isLoadingProfile } = useProfile();
+  const { profile: profileData, defaultKundliProfile, isLoadingProfile } = useProfile();
   const { wallet, isLoadingWallet } = useWallet();
   const { application: astrologerApplication, publicProfile: astrologerProfile } = useAstrologerPartner();
   const loading = isLoadingProfile || isLoadingWallet;
@@ -124,10 +124,10 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
       return {
         moolank: String(moolankNum),
         bhagyank: String(bhagyankNum),
-        zodiac: profileData?.zodiacSign || profileData?.rashi || profileData?.zodiac || 'Will be generated after Kundli analysis',
-        nakshatra: profileData?.nakshatra || 'Will be generated after Kundli analysis',
-        lagna: profileData?.lagna || 'Will be generated after Kundli analysis',
-        mahadasha: profileData?.mahadasha || 'Will be generated after Kundli analysis'
+        zodiac: defaultKundliProfile?.rashi || 'Will be generated after Kundli analysis',
+        nakshatra: defaultKundliProfile?.nakshatra || 'Will be generated after Kundli analysis',
+        lagna: defaultKundliProfile?.lagna || 'Will be generated after Kundli analysis',
+        mahadasha: defaultKundliProfile?.mahadasha || 'Will be generated after Kundli analysis'
       };
     } catch (e) {
       return null;
@@ -344,7 +344,7 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
                   showToast('Please add Birth Details to view Kundli');
                   return;
                 }
-                onNavigate('view-kundli');
+                onNavigate('view-kundli', { returnTo: 'profile' });
               }}
               className="bg-[#FF8A00] text-white font-bold px-4 py-2.5 rounded-xl text-xs tracking-tight shrink-0 shadow-md shadow-[#FF8A00]/25 cursor-pointer hover:bg-[#E07A00] transition-colors"
             >

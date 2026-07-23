@@ -29,7 +29,7 @@ import {
 import { Screen } from '../types';
 import { KundliData } from '../services/kundliStorage';
 import { useRepositories } from '../repositories/repositoryProvider';
-import { generateKundliPdf } from '../services/kundliPdfService';
+import { generateKundliPdf, generateKundliMatchingPdf } from '../services/kundliPdfService';
 import { postAiRequest } from '../services/aiClient';
 import { AstrologyApi } from '../services/api/astrologyApi';
 import { KundliNovaNatalChart, KundliNovaDoshaAnalysis, KundliNovaYogaAnalysis, KundliNovaCompatibilityAnalysis } from '../server/types/astrologyProvider';
@@ -39,22 +39,28 @@ import { DetailedKundliReportPanel } from '../components/astrology/DetailedKundl
 import { KundliProfile } from '../types/kundli';
 import { KundliChart } from '../components/astrology/KundliChart';
 import { ApiError } from '../services/api/apiErrors';
+import { useProfile } from '../contexts/ProfileContext';
 
 interface NovaKundliScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
   routeParams?: {
     kundliData?: any; // fallback legacy
     fromScreen?: Screen;
+    returnTo?: Screen;
+    initialTab?: string;
+    createdProfileId?: string;
   };
 }
 
 export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundliScreenProps) {
   const repositories = useRepositories();
-  const fromScreen = routeParams?.fromScreen || 'nova-ai-chat';
+  const { defaultKundliProfile, isLoadingProfile } = useProfile();
+  const returnToScreen = routeParams?.returnTo || routeParams?.fromScreen || 'home';
 
   // Profile selection
   const [profiles, setProfiles] = useState<KundliProfile[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
+  const [hasInitializedDefault, setHasInitializedDefault] = useState(false);
 
   // New API Data
   const [apiChartData, setApiChartData] = useState<KundliNovaNatalChart | null>(null);
@@ -91,27 +97,88 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
   const compatibilityRequestIdRef = useRef(0);
   const detailedReportRequestIdRef = useRef(0);
 
-  // Fetch profiles on mount
+  // Fetch profiles on mount, geocode if needed, then set the selected profile.
+  // The Kundli calculation effect only fires AFTER this resolves so there is
+  // no race between geocoding and the Kundli fetch.
   useEffect(() => {
+    if (isLoadingProfile || hasInitializedDefault) return;
+
     const init = async () => {
       try {
         const userProfiles = await repositories.kundliProfile.getAllProfiles();
         setProfiles(userProfiles);
-        
-        if (userProfiles.length > 0) {
-          const defaultProfile = userProfiles.find(p => p.is_default) || userProfiles[0];
-          setSelectedProfileId(defaultProfile.id);
-        } else {
+
+        if (!defaultKundliProfile) {
           setLoadingKundli(false);
           setErrorState({ code: 'NO_PROFILES', message: 'No Kundli profiles found. Please create one first.' });
+          return;
         }
+
+        let chosenProfile = userProfiles.find(p => p.id === defaultKundliProfile.id) || defaultKundliProfile;
+        const raw = chosenProfile as any;
+
+        // ── Geocode gate ──────────────────────────────────────────────────────
+        // sync-self creates profiles without coordinates. If lat/lng/tz are
+        // missing but city/state are present, await the geocode PATCH before
+        // proceeding — this eliminates the race condition.
+        if (raw.latitude == null || raw.longitude == null || !raw.timezone) {
+          // Verify birth text fields actually exist before attempting geocode
+          if (!raw.birth_city || !raw.birth_state) {
+            setLoadingKundli(false);
+            setErrorState({
+              code: 'INCOMPLETE_BIRTH_DETAILS',
+              message: 'Birth city and state are required. Please update your profile.'
+            });
+            return;
+          }
+
+          try {
+            setErrorState(null);
+            // Await the geocode PATCH — backend runs ApiNinjasLocationResolver
+            // and stores lat/lng/tz in Supabase before we proceed
+            const geocodePatch: any = {
+              birth_city: raw.birth_city,
+              birth_district: raw.birth_district || raw.birth_city,
+              birth_state: raw.birth_state,
+            };
+            await repositories.kundliProfile.updateProfile(chosenProfile.id, geocodePatch);
+            // Reload the profile to get the now-populated coordinates
+            const refreshed = await repositories.kundliProfile.getProfileById(chosenProfile.id);
+            if (!refreshed) {
+              throw new Error('Profile not found after geocode update');
+            }
+            chosenProfile = refreshed;
+            const refreshedRaw = refreshed as any;
+            // Final guard: confirm coordinates are now present
+            if (refreshedRaw.latitude == null || refreshedRaw.longitude == null || !refreshedRaw.timezone) {
+              setLoadingKundli(false);
+              setErrorState({
+                code: 'GEOCODE_FAILED',
+                message: 'Could not resolve birth location coordinates. Please check your city and state, then try again.'
+              });
+              return;
+            }
+          } catch (geocodeErr: any) {
+            setLoadingKundli(false);
+            // Surface a clear actionable message instead of the generic INCOMPLETE_BIRTH_DETAILS
+            const msg = geocodeErr?.message || 'Location resolution failed. Please verify your birth city and state.';
+            setErrorState({ code: 'GEOCODE_FAILED', message: msg });
+            return;
+          }
+        }
+        // ── End geocode gate ──────────────────────────────────────────────────
+
+        // Only set selectedProfileId once coordinates are confirmed.
+        // This triggers the separate Kundli fetch effect, which will now succeed.
+        setSelectedProfileId(chosenProfile.id);
+        setHasInitializedDefault(true);
       } catch (err) {
         setLoadingKundli(false);
         setErrorState({ code: 'PROFILE_ERROR', message: 'Failed to load profiles.' });
       }
     };
     init();
-  }, [repositories.kundliProfile]);
+  }, [isLoadingProfile, hasInitializedDefault, defaultKundliProfile, repositories.kundliProfile]);
 
   // Fetch Kundli when profile changes
   useEffect(() => {
@@ -148,7 +215,7 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
   }, [selectedProfileId]);
 
   type TabKey = 'charts' | 'planets' | 'dasha' | 'dosha' | 'yoga' | 'compatibility' | 'detailed-report' | 'insights' | 'basic';
-  const [activeTab, setActiveTab] = useState<TabKey>('charts');
+  const [activeTab, setActiveTab] = useState<TabKey>((routeParams?.initialTab as TabKey) || 'charts');
 
   // Clear states when profile A switches
   useEffect(() => {
@@ -167,8 +234,28 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
     setDetailedReportData(null);
     setDetailedReportError(null);
     setDetailedReportLoading(false);
-    setSelectedProfileBId(null);
-  }, [selectedProfileId]);
+    
+    // Only clear selectedProfileBId if we aren't actively injecting one from routeParams
+    if (!routeParams?.createdProfileId) {
+      setSelectedProfileBId(null);
+    }
+  }, [selectedProfileId, routeParams?.createdProfileId]);
+
+  // Handle created partner profile returning from form
+  useEffect(() => {
+    if (routeParams?.createdProfileId) {
+      const pid = routeParams.createdProfileId;
+      repositories.kundliProfile.getAllProfiles().then(userProfiles => {
+        setProfiles(userProfiles);
+        setSelectedProfileBId(pid);
+        setActiveTab('compatibility');
+        
+        // Clear previous compatibility data to force a re-fetch with the new profile
+        setApiCompatibilityData(null);
+        setCompatibilityErrorState(null);
+      });
+    }
+  }, [routeParams?.createdProfileId, repositories.kundliProfile]);
 
   // Lazy fetch Dasha when tab is active
   useEffect(() => {
@@ -382,7 +469,7 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
           {errorState.message}
         </p>
         <button 
-          onClick={() => isNoProfiles ? onNavigate('kundli-profile-form', { fromScreen: 'nova-kundli' }) : onNavigate(fromScreen)}
+          onClick={() => isNoProfiles ? onNavigate('kundli-profile-form', { returnTo: 'nova-kundli' }) : onNavigate(returnToScreen)}
           className="px-6 py-2.5 bg-[#FF8A00] text-white rounded-full text-[13px] font-[800] active:scale-[0.98] transition-all"
         >
           {isNoProfiles ? 'Add Profile' : 'Go Back'}
@@ -405,11 +492,13 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
     state: selectedProfile?.birth_state || 'Unknown',
   };
 
+  const moon = apiChartData.planets.find(p => p.name.toLowerCase() === 'moon');
+  
   const astrologySummary = {
     lagna: apiChartData.ascendant.sign,
-    sunSign: apiChartData.sunSign || 'Unknown',
-    moonSign: apiChartData.moonSign || 'Unknown',
-    nakshatra: apiChartData.nakshatra || 'Unknown',
+    sunSign: apiChartData.planets.find(p => p.name.toLowerCase() === 'sun')?.sign || 'Unknown',
+    moonSign: moon?.sign || 'Unknown',
+    nakshatra: moon?.nakshatra || 'Unknown',
     moolank: 1, // Fallback for demo
     bhagyank: 1, // Fallback for demo
   };
@@ -417,6 +506,40 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
   const planetaryPositions = apiChartData.planets;
   
   const handleDownloadPdf = async () => {
+    if (activeTab === 'compatibility') {
+      if (!apiCompatibilityData || !selectedProfileBId) return;
+      const profileB = profiles.find(p => p.id === selectedProfileBId);
+      if (!profileB) return;
+      
+      setPdfModalState('generating');
+      try {
+        const payload: import('../services/kundliPdfService').KundliMatchingPdfPayload = {
+          profileA: birthDetails,
+          profileB: {
+            name: profileB.name,
+            dob: profileB.dob,
+            tob: profileB.tob,
+            city: profileB.birth_city || '',
+            state: profileB.birth_state || '',
+          },
+          compatibility: apiCompatibilityData.compatibility,
+          manglik: apiCompatibilityData.manglik,
+          generatedAt: new Date().toLocaleDateString()
+        };
+        const result = await generateKundliMatchingPdf(payload);
+        setPdfUrls({
+          blobUrl: result.pdfBlobUrl,
+          base64: result.pdfBase64
+        });
+        setPdfModalState('ready');
+        result.download();
+      } catch (e) {
+        console.error(e);
+        setPdfModalState('idle');
+      }
+      return;
+    }
+
     setPdfModalState('generating');
     try {
       const mockKundliData: import('../services/kundliPdfService').KundliPdfPayload = {
@@ -484,7 +607,7 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
         };
       } else if (section === 'planets') {
         sectionData = {
-          planetaryPositions: planetaryPositions.map(p => ({ name: p.name, zodiac: p.zodiac, degree: p.degree }))
+          planetaryPositions: planetaryPositions.map(p => ({ name: p.name, sign: p.sign, degree: p.degreeInSign, house: p.house }))
         };
       } else if (section === 'dasha') {
         sectionData = {
@@ -580,20 +703,20 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
       <div className="bg-[#FFFFFF]/95 backdrop-blur-md px-[16px] sm:px-[20px] pt-[max(12px,env(safe-area-inset-top))] pb-[14px] shadow-[0_2px_12px_rgba(0,0,0,0.02)] sticky top-0 z-20 flex items-center justify-between border-b border-[#F1EFE9]">
         <div className="flex items-center space-x-[8px]">
           <button 
-            onClick={() => onNavigate(fromScreen)}
+            onClick={() => onNavigate(returnToScreen)}
             className="p-[8px] -ml-[8px] rounded-full hover:bg-neutral-50 active:bg-neutral-100 transition-colors text-[#111827] focus:outline-none"
           >
             <ArrowLeft size={22} strokeWidth={2.5} />
           </button>
           <div>
             <h1 className="text-[16px] font-[850] text-[#111827] tracking-tight leading-tight">Janam Kundli</h1>
-            <p className="text-[10.5px] font-bold text-[#FF8A00] tracking-wide uppercase mt-0.5">Demo Kundli Preview</p>
+            <p className="text-[10.5px] font-bold text-[#FF8A00] tracking-wide uppercase mt-0.5">Personal Kundli Report</p>
           </div>
         </div>
 
         <button 
           onClick={handleDownloadPdf}
-          disabled={!apiChartData || pdfModalState === 'generating'}
+          disabled={(activeTab === 'compatibility' ? !apiCompatibilityData : !apiChartData) || pdfModalState === 'generating'}
           className="h-9 px-3 bg-[#FFF3E0] text-[#FF8A00] border border-[#FFE0B2] hover:bg-[#FFE0B2] active:scale-[0.97] rounded-full text-[12px] font-[800] flex items-center space-x-1.5 transition-all focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {pdfModalState === 'generating' ? (
@@ -605,12 +728,6 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
         </button>
       </div>
 
-      {/* Demo notice banner */}
-      <div className="mx-4 mt-3 mb-0 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-2">
-        <span className="text-amber-600 text-[11px] font-bold leading-tight">
-          ⚠️ Demo preview — Calculated Kundli report not available yet. Displayed data is illustrative only.
-        </span>
-      </div>
 
       {/* Sleek Horizontal Profile Summary (Saves space, matches Astrotalk app) */}
       <div className="px-4 pt-4">
@@ -806,27 +923,56 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
                 </span>
               </div>
 
-              <div className="divide-y divide-[#F5F2EB]">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3">
                 {planetaryPositions.map((planet, index) => {
-                  const isRetrograde = planet.name.includes('Rahu') || planet.name.includes('Ketu');
+                  const isRetrograde = planet.isRetrograde;
+                  const nameParts = planet.name.split(' ');
+                  const primaryName = nameParts[0];
+                  
                   return (
                     <div 
                       key={index} 
-                      className="px-4 py-3 flex items-center justify-between hover:bg-neutral-50/50 transition-colors"
+                      className="bg-[#FFFDF9] border border-[#F5E6D3] hover:border-[#FF8A00]/30 hover:shadow-[0_4px_12px_rgba(255,138,0,0.04)] rounded-2xl p-4 transition-all"
                     >
-                      <div className="flex flex-col">
-                        <span className="text-[13px] font-[850] text-[#111827] flex items-center space-x-1.5">
-                          <span>{planet.name.split(' ')[0]}</span>
-                          {isRetrograde && (
-                            <span className="text-[8.5px] font-extrabold text-red-500 bg-red-50 px-1 py-0.2 rounded uppercase">Rx</span>
-                          )}
-                        </span>
-                        <span className="text-[10.5px] font-bold text-neutral-400 uppercase tracking-wider mt-0.5">
-                          {planet.zodiac} • House {planet.house}
-                        </span>
+                      <div className="flex items-center justify-between border-b border-[#F5F2EB] pb-3 mb-3">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-[#FF8A00] to-[#FFB74D] text-white flex items-center justify-center font-[800] text-[15px] shadow-[0_2px_8px_rgba(255,138,0,0.2)]">
+                            {primaryName.charAt(0)}
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-[14.5px] font-[850] text-[#111827] flex items-center space-x-1.5 leading-tight">
+                              <span>{primaryName}</span>
+                              {isRetrograde && (
+                                <span className="text-[8px] font-[900] text-red-500 bg-red-50 px-1.5 py-0.5 rounded shadow-sm uppercase tracking-wider">Rx</span>
+                              )}
+                            </span>
+                            <span className="text-[10px] font-[800] text-neutral-400 uppercase tracking-widest mt-0.5">
+                              House {planet.house}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[15.5px] font-[900] text-[#FF8A00] font-mono tracking-tighter block">
+                            {planet.degreeInSign !== undefined ? planet.degreeInSign.toFixed(2) : planet.degree?.toFixed(2)}°
+                          </span>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <span className="text-[12.5px] font-bold text-neutral-600 font-mono">{planet.degree}</span>
+                      
+                      <div className="grid grid-cols-2 gap-2 text-[11.5px]">
+                        <div className="bg-[#FCFBF8] rounded-xl p-2.5 border border-[#EBE8E0]/60">
+                          <span className="text-[8.5px] font-[800] text-neutral-400 uppercase tracking-widest block mb-0.5">Zodiac Sign</span>
+                          <span className="font-[800] text-[#111827] capitalize">{planet.sign}</span>
+                        </div>
+                        <div className="bg-[#FCFBF8] rounded-xl p-2.5 border border-[#EBE8E0]/60">
+                          <span className="text-[8.5px] font-[800] text-neutral-400 uppercase tracking-widest block mb-0.5">Nakshatra</span>
+                          <span className="font-[800] text-[#111827] capitalize">{planet.nakshatra} <span className="text-neutral-400 font-bold ml-1">P{planet.pada}</span></span>
+                        </div>
+                        {planet.signLord && (
+                          <div className="col-span-2 bg-[#FCFBF8] rounded-xl p-2.5 border border-[#EBE8E0]/60 mt-0.5 flex items-center justify-between">
+                            <span className="text-[8.5px] font-[800] text-neutral-400 uppercase tracking-widest">Sign Lord</span>
+                            <span className="font-[800] text-[#111827] capitalize">{planet.signLord}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -1133,6 +1279,9 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
               setApiCompatibilityData(null);
               setCompatibilityErrorState(null);
             }}
+            onAddPartner={() => {
+              onNavigate('kundli-profile-form', { returnTo: 'nova-kundli', action: 'create' });
+            }}
             onRetry={() => {
               if (!selectedProfileBId) return;
               const reqId = ++compatibilityRequestIdRef.current;
@@ -1241,7 +1390,8 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
         <div className="pt-6 pb-2">
           <button 
             onClick={handleDownloadPdf}
-            className="w-full h-13.5 bg-[#FF8A00] hover:bg-[#E97700] text-white rounded-2xl text-[14.5px] font-[800] flex items-center justify-center space-x-2 shadow-[0_4px_16px_rgba(255,138,0,0.25)] active:scale-[0.98] transition-all focus:outline-none"
+            disabled={(activeTab === 'compatibility' ? !apiCompatibilityData : !apiChartData) || pdfModalState === 'generating'}
+            className="w-full h-13.5 bg-[#FF8A00] hover:bg-[#E97700] text-white rounded-2xl text-[14.5px] font-[800] flex items-center justify-center space-x-2 shadow-[0_4px_16px_rgba(255,138,0,0.25)] active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 disabled:cursor-not-allowed transition-all focus:outline-none"
           >
             <Download size={16} strokeWidth={3} />
             <span>Download PDF Report</span>

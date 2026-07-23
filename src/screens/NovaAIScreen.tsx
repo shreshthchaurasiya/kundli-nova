@@ -23,6 +23,7 @@ import {
 import { Screen } from '../types';
 import { useProfile } from '../contexts/ProfileContext';
 import { useWallet } from '../contexts/WalletContext';
+import { useRepositories } from '../repositories/repositoryProvider';
 
 interface NovaAIScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
@@ -37,14 +38,16 @@ interface SavedConversation {
 }
 
 export default function NovaAIScreen({ onNavigate, onOpenDrawer }: NovaAIScreenProps) {
-  const { profile } = useProfile();
+  const { profile, defaultKundliProfile, isLoadingProfile } = useProfile();
   const { wallet } = useWallet();
+  const repositories = useRepositories();
   const walletBalance = wallet.balance;
   const [userName, setUserName] = useState<string>('');
   const [inputVal, setInputVal] = useState<string>('');
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   const [history, setHistory] = useState<SavedConversation[]>([]);
-  const [showToast, setShowToast] = useState<string | null>(null);
+  
+  const profileId = defaultKundliProfile?.id;
 
   // Load wallet balance & user profile
   useEffect(() => {
@@ -69,6 +72,8 @@ export default function NovaAIScreen({ onNavigate, onOpenDrawer }: NovaAIScreenP
     loadHistory();
 
   }, [profile]);
+
+
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -116,6 +121,7 @@ export default function NovaAIScreen({ onNavigate, onOpenDrawer }: NovaAIScreenP
   };
 
   const handleComposeSend = () => {
+    if (isLoadingProfile || !profileId) return;
     if (!inputVal.trim()) return;
 
     // Save this interaction to history
@@ -130,16 +136,18 @@ export default function NovaAIScreen({ onNavigate, onOpenDrawer }: NovaAIScreenP
     setHistory(updatedHistory);
     localStorage.setItem('kundli_nova_ai_history', JSON.stringify(updatedHistory));
 
-    // Navigate to Chat with initialQuery context
-    onNavigate('nova-ai-chat', { initialQuery: inputVal.trim() });
+    // Navigate to Chat with initialQuery context + canonical profileId
+    onNavigate('nova-ai-chat', { initialQuery: inputVal.trim(), profileId });
   };
 
   const handleStartConversation = () => {
-    onNavigate('nova-ai-chat');
+    if (isLoadingProfile || !profileId) return;
+    onNavigate('nova-ai-chat', { profileId });
   };
 
   const handleServiceSelect = (serviceTitle: string) => {
-    onNavigate('nova-ai-chat', { serviceContext: serviceTitle });
+    if (isLoadingProfile || !profileId) return;
+    onNavigate('nova-ai-chat', { serviceContext: serviceTitle, profileId });
   };
 
   const getCategoryIcon = (categoryName: string) => {
@@ -182,7 +190,8 @@ export default function NovaAIScreen({ onNavigate, onOpenDrawer }: NovaAIScreenP
   };
 
   const handleReadMoreGuidance = () => {
-    onNavigate('nova-ai-chat', { serviceContext: 'Daily Guidance' });
+    if (isLoadingProfile || !profileId) return;
+    onNavigate('nova-ai-chat', { serviceContext: 'Daily Guidance', profileId });
   };
 
   function StarRating({ count }: { count: number }) {
@@ -237,8 +246,24 @@ export default function NovaAIScreen({ onNavigate, onOpenDrawer }: NovaAIScreenP
         </div>
       </div>
 
-      {/* Scrollable Container */}
-      <div className="flex-1 overflow-y-auto no-scrollbar pb-[100px]">
+      {/* Profile Required State */}
+      {!isLoadingProfile && !profileId ? (
+        <div className="flex-1 flex flex-col items-center justify-center p-6 bg-[#FAFAFA] text-center">
+          <div className="w-16 h-16 rounded-full bg-[#FFF9E6] flex items-center justify-center mb-4 text-[#FF8A00] border border-[#FF8A00]/10">
+            <Shield size={32} strokeWidth={2.2} />
+          </div>
+          <h2 className="text-xl font-bold text-neutral-800 mb-2">Profile Required</h2>
+          <p className="text-sm text-neutral-500 mb-6 max-w-[280px]">No Kundli profile selected. Please create or select a profile to use Nova AI.</p>
+          <button 
+            onClick={() => onNavigate('kundli-profile-form')}
+            className="bg-[#FF8A00] text-white text-[13px] font-[800] px-6 py-3 rounded-xl shadow-[0_4px_12px_rgba(255,138,0,0.18)] hover:bg-[#E07A00] transition-all active:scale-95 focus:outline-none"
+          >
+            Create Profile
+          </button>
+        </div>
+      ) : (
+        /* Scrollable Container */
+        <div className="flex-1 overflow-y-auto no-scrollbar pb-[100px]">
         
         {/* Hero Area */}
         <div className="relative overflow-hidden bg-[#FDFCF7] border-b border-[#F5F2EB] px-[20px] py-[30px] flex items-center justify-between">
@@ -559,7 +584,7 @@ export default function NovaAIScreen({ onNavigate, onOpenDrawer }: NovaAIScreenP
                     </div>
                   </div>
                   <button 
-                    onClick={() => onNavigate('nova-ai-chat', { conversationId: conv.id })}
+                    onClick={() => !isLoadingProfile && profileId && onNavigate('nova-ai-chat', { conversationId: conv.id, profileId })}
                     className="px-3 py-1.5 bg-[#FFF9E6] hover:bg-[#FFF2CC] text-[#FF8A00] rounded-lg text-[11px] font-[700] transition-colors shrink-0 flex items-center space-x-0.5 focus:outline-none"
                   >
                     <span>Continue</span>
@@ -631,7 +656,7 @@ export default function NovaAIScreen({ onNavigate, onOpenDrawer }: NovaAIScreenP
               </p>
 
               <button 
-                onClick={() => onNavigate('nova-ai-chat', { serviceContext: "Today's Focus" })}
+                onClick={() => !isLoadingProfile && profileId && onNavigate('nova-ai-chat', { serviceContext: "Today's Focus", profileId })}
                 className="bg-white border border-neutral-200 text-neutral-800 text-[11px] font-[700] px-3.5 py-1.5 rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.02)] hover:bg-neutral-50 transition-colors focus:outline-none"
               >
                 View Full Guidance
@@ -641,6 +666,7 @@ export default function NovaAIScreen({ onNavigate, onOpenDrawer }: NovaAIScreenP
         </div>
 
       </div>
+      )}
     </div>
   );
 }

@@ -45,4 +45,8 @@ export interface KundliProfile {
   createdAt: string;
   updatedAt: string;
   isDefault: boolean;
+  rashi?: string | null;
+  nakshatra?: string | null;
+  lagna?: string | null;
+  mahadasha?: string | null;
 }

@@ -25,7 +25,7 @@ export function createAiRouter(config: AiRouterConfig) {
     : null;
 
   // AI Services
-  const provider = new NavamshaProvider();
+  const provider = new NavamshaProvider({ timeoutMs: 15000 });
   const kundliService = new KundliCalculationService(provider);
   const contextService = new NovaAIContextService(kundliService);
   const promptBuilder = new NovaAIPromptBuilder();
