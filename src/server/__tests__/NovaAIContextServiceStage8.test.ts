@@ -47,6 +47,11 @@ describe('Stage 8.2 - NovaAIContextService Identity & Caching Verification', () 
     vi.clearAllMocks();
     mockSupabase = supabaseAdmin;
     mockKundliService = new KundliCalculationService(null as any);
+    mockKundliService.getKundli.mockResolvedValue({});
+    mockKundliService.getVimshottariDasha.mockResolvedValue({});
+    mockKundliService.getDoshaAnalysis.mockResolvedValue({});
+    mockKundliService.getYogaAnalysis.mockResolvedValue({});
+    mockKundliService.getDetailedKundliReport.mockResolvedValue({});
     contextService = new NovaAIContextService(mockKundliService);
   });
 
@@ -85,14 +90,14 @@ describe('Stage 8.2 - NovaAIContextService Identity & Caching Verification', () 
         profile_id: 'prof-cache',
         report_json: {
           fingerprint: 'mock-hash',
-          data: { natalChart: { lagna: 'Aries' } }
+          data: { natalChart: { ascendant: { sign: 'Aries' } } }
         }
       }
     });
 
     const context = await contextService.loadContext('user-1', 'prof-cache', mockMemory);
     
-    expect(context.astrology.natalChart.lagna).toBe('Aries');
+    expect(context.astrology.natalChart.ascendant.sign).toBe('Aries');
     expect(mockKundliService.getKundli).not.toHaveBeenCalled();
   });
 
@@ -106,7 +111,7 @@ describe('Stage 8.2 - NovaAIContextService Identity & Caching Verification', () 
     mockSupabase.delete.mockResolvedValueOnce({ error: null });
     mockSupabase.insert.mockResolvedValueOnce({ error: null });
 
-    mockKundliService.getKundli.mockResolvedValueOnce({ lagna: 'Taurus' });
+    mockKundliService.getKundli.mockResolvedValueOnce({ ascendant: { sign: 'Taurus' } });
     mockKundliService.getVimshottariDasha.mockResolvedValueOnce({});
     mockKundliService.getDoshaAnalysis.mockResolvedValueOnce({});
     mockKundliService.getYogaAnalysis.mockResolvedValueOnce({});
@@ -116,7 +121,7 @@ describe('Stage 8.2 - NovaAIContextService Identity & Caching Verification', () 
     
     // Note: getKundli receives (profileId, userId)
     expect(mockKundliService.getKundli).toHaveBeenCalledWith('prof-miss', 'user-1');
-    expect(context.astrology.natalChart.lagna).toBe('Taurus');
+    expect(context.astrology.natalChart.ascendant.sign).toBe('Taurus');
   });
 
   it('never trusts a frontend-provided name and uses validated DB name', async () => {

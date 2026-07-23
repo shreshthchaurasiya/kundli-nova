@@ -35,7 +35,14 @@ vi.mock('../services/ai/NovaAIContextService', () => {
         user: { id: 'user-1' },
         selectedProfile: { name: 'Test User' },
         astrology: {
-          natalChart: { lagna: 'Aries' }
+          natalChart: { 
+            ascendant: { sign: 'Aries', degree: 15 },
+            moonSign: 'Taurus',
+            sunSign: 'Leo',
+            nakshatra: 'Krittika',
+            pada: 1,
+            planets: []
+          }
         }
       });
     }

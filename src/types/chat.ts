@@ -29,4 +29,5 @@ export interface AiChatThread {
   lastMessage: string;
   timestamp: string;
   messages: Message[];
+  profileId?: string;
 }

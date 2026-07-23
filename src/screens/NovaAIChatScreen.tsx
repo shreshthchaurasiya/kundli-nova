@@ -22,6 +22,7 @@ import KundliPreviewMessage from '../components/KundliPreviewMessage';
 import { postAiRequest } from '../services/aiClient';
 import CelestialChatBackground from '../components/chat/CelestialChatBackground';
 import { chatStorage } from '../services/storage/chatStorage';
+import { Message, AiChatThread } from '../types/chat';
 
 interface NovaAIChatScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
@@ -31,25 +32,6 @@ interface NovaAIChatScreenProps {
     serviceContext?: string;
     profileId?: string;
   };
-}
-
-interface Message {
-  id: string;
-  text?: string;
-  sender: 'nova' | 'user';
-  time: string;
-  type?: 'text' | 'kundli-loading' | 'kundli-card';
-  kundliLoadingStep?: number; // 1, 2, 3
-  kundliData?: KundliPdfPayload;
-}
-
-interface SavedConversation {
-  id: string;
-  kind?: 'nova';
-  topic: string;
-  lastMessage: string;
-  timestamp: string;
-  messages: Message[];
 }
 
 export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChatScreenProps) {
@@ -133,19 +115,28 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
       const profileName = profile.name.trim();
 
       // 2. Determine if loading existing conversation or creating new
-    const historyList = chatStorage.getAiHistory() as SavedConversation[];
+    const historyList = chatStorage.getAiHistory();
 
     const getFormattedTime = () => {
       return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     };
 
     if (conversationId) {
-      // Load existing conversation
-      const existing = historyList.find(c => c.id === conversationId);
+      // Load existing conversation, ensuring it belongs to the active profile
+      const existing = historyList.find(c => c.id === conversationId && c.profileId === profile.id);
       if (existing) {
         setMessages(existing.messages || []);
         setCurrentConvId(existing.id);
         setCurrentTopic(existing.topic);
+        return;
+      }
+    } else {
+      // Find if this profile already has an active Nova session
+      const existingForProfile = historyList.find(c => c.profileId === profile.id && c.kind === 'nova');
+      if (existingForProfile) {
+        setMessages(existingForProfile.messages || []);
+        setCurrentConvId(existingForProfile.id);
+        setCurrentTopic(existingForProfile.topic);
         return;
       }
     }
@@ -165,7 +156,8 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
           id: `user-first-${Date.now()}`,
           text: initialQuery,
           sender: 'user',
-          time: getFormattedTime()
+          time: getFormattedTime(),
+          type: 'text'
         };
         initialMsgs = [userMsg];
         setMessages(initialMsgs);
@@ -179,6 +171,7 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
             text,
             sender: 'nova',
             time: getFormattedTime(),
+            type: 'text'
           }));
           const finalMsgs = [...initialMsgs, ...aiMessages];
           setMessages(finalMsgs);
@@ -187,8 +180,9 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
           const errorMessage: Message = {
             id: `nova-error-${Date.now()}`,
             text: error instanceof Error ? error.message : 'Nova AI se connection nahi ho paaya.',
-            sender: 'nova',
+            sender: 'system',
             time: getFormattedTime(),
+            type: 'system'
           };
           setMessages([...initialMsgs, errorMessage]);
         } finally {
@@ -238,15 +232,15 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
           ]);
 
           // Step 1: Reading birth details…
-          await new Promise(resolve => setTimeout(resolve, 800));
+          await new Promise(resolve => setTimeout(resolve, 300));
           setMessages(prev => prev.map(m => m.id === loadingMsgId ? { ...m, kundliLoadingStep: 2 } : m));
 
-          // Step 2: Calculating planetary positions…
-          await new Promise(resolve => setTimeout(resolve, 800));
-          setMessages(prev => prev.map(m => m.id === loadingMsgId ? { ...m, kundliLoadingStep: 3 } : m));
-
-          // Wait for API calls to complete
+          // Wait for API calls to complete to simulate step 2
           const [chart, dasha, dosha, yoga, detailedReport] = await fetchPromise;
+
+          // Step 2 -> 3 Transition: Preparing your Kundli chart…
+          setMessages(prev => prev.map(m => m.id === loadingMsgId ? { ...m, kundliLoadingStep: 3 } : m));
+          await new Promise(resolve => setTimeout(resolve, 300));
 
           const freshKundli: KundliPdfPayload = {
             birthDetails: {
@@ -265,8 +259,8 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
             generatedAt: new Date().toLocaleDateString()
           };
 
-          // Step 3: Preparing your Kundli chart…
-          await new Promise(resolve => setTimeout(resolve, 800));
+          // UI transition delay
+          await new Promise(resolve => setTimeout(resolve, 200));
 
           // Replace loading message with rich card attachment
           setMessages(prev => {
@@ -288,10 +282,10 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
               const listWithoutLoading = prev.filter(m => m.id !== loadingMsgId);
               return [...listWithoutLoading, {
                 id: `error-${Date.now()}`,
-                text: "Kshama karein, aapki kundli banate samay kuch dikkat aayi.",
-                sender: 'nova',
+                text: "Kshama karein, aapki kundli banate samay kuch dikkat aayi. Kripya thodi der baad prayas karein.",
+                sender: 'system',
                 time: getFormattedTime(),
-                type: 'text'
+                type: 'system'
               }];
            });
         }
@@ -311,11 +305,11 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
 
   // Scroll to bottom whenever messages list updates
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView?.({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
   const saveToHistory = (id: string, topic: string, currentMsgs: Message[]) => {
-    let historyList = chatStorage.getAiHistory() as SavedConversation[];
+    let historyList = chatStorage.getAiHistory();
 
     const shortTimestamp = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
     const lastMsg = currentMsgs[currentMsgs.length - 1];
@@ -327,21 +321,23 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
         ...historyList[existingIndex],
         lastMessage: lastMsgText,
         timestamp: shortTimestamp,
-        messages: currentMsgs
+        messages: currentMsgs,
+        profileId: profileData?.id
       };
     } else {
-      const newConv: SavedConversation = {
+      const newConv: AiChatThread = {
         id,
         kind: 'nova',
         topic,
         lastMessage: lastMsgText,
         timestamp: shortTimestamp,
-        messages: currentMsgs
+        messages: currentMsgs,
+        profileId: profileData?.id
       };
       historyList = [newConv, ...historyList];
     }
 
-    chatStorage.saveAiHistory(historyList as import('../types/chat').AiChatThread[]);
+    chatStorage.saveAiHistory(historyList);
   };
 
   const getFormattedTime = () => {
@@ -370,7 +366,8 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
       id: `msg-${Date.now()}`,
       text: chipText,
       sender: 'user',
-      time: getFormattedTime()
+      time: getFormattedTime(),
+      type: 'text'
     };
 
     const newMsgsList = [...messages, userMsg];
@@ -386,6 +383,7 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
         text,
         sender: 'nova',
         time: getFormattedTime(),
+        type: 'text'
       }));
       const finalMsgs = [...newMsgsList, ...aiMessages];
       setMessages(finalMsgs);
@@ -394,12 +392,14 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
       const errorMessage: Message = {
         id: `ai-error-${Date.now()}`,
         text: error instanceof Error ? error.message : 'Nova AI se connection nahi ho paaya.',
-        sender: 'nova',
+        sender: 'system',
         time: getFormattedTime(),
+        type: 'system'
       };
+      // For system errors, append them but don't persist them to backend history so users can naturally retry
       const finalMsgs = [...newMsgsList, errorMessage];
       setMessages(finalMsgs);
-      saveToHistory(currentConvId, currentTopic, finalMsgs);
+      // We explicitly DO NOT call saveToHistory for error messages so that the retry context remains clean
     } finally {
       setIsTyping(false);
     }
@@ -416,7 +416,8 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
       id: `msg-${Date.now()}`,
       text: userText,
       sender: 'user',
-      time: getFormattedTime()
+      time: getFormattedTime(),
+      type: 'text'
     };
 
     const newMsgsList = [...messages, userMsg];
@@ -432,6 +433,7 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
         text,
         sender: 'nova',
         time: getFormattedTime(),
+        type: 'text'
       }));
       const finalMsgs = [...newMsgsList, ...aiMessages];
       setMessages(finalMsgs);
@@ -440,12 +442,14 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
       const errorMessage: Message = {
         id: `ai-error-${Date.now()}`,
         text: error instanceof Error ? error.message : 'Nova AI se connection nahi ho paaya.',
-        sender: 'nova',
+        sender: 'system',
         time: getFormattedTime(),
+        type: 'system'
       };
+      // For system errors, append them but don't persist them to backend history so users can naturally retry
       const finalMsgs = [...newMsgsList, errorMessage];
       setMessages(finalMsgs);
-      saveToHistory(currentConvId, currentTopic, finalMsgs);
+      // We explicitly DO NOT call saveToHistory for error messages so that the retry context remains clean
     } finally {
       setIsTyping(false);
     }
@@ -619,7 +623,9 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
                     className={`max-w-[85%] sm:max-w-[75%] rounded-[20px] px-[16px] py-[12px] shadow-[0_1px_4px_rgba(0,0,0,0.015)] flex flex-col ${
                       msg.sender === 'user' 
                         ? 'bg-[#FF8A00] text-[#FFFFFF] rounded-tr-[4px]' 
-                        : 'bg-[#FFFFFF] border border-[#F1EFE9] text-[#111827] rounded-tl-[4px]'
+                        : msg.sender === 'system'
+                          ? 'bg-[#FEF2F2] border border-[#FCA5A5] text-[#991B1B] rounded-tl-[4px]'
+                          : 'bg-[#FFFFFF] border border-[#F1EFE9] text-[#111827] rounded-tl-[4px]'
                     }`}
                   >
                     <div className="text-[13.5px] sm:text-[14px] leading-[1.6] whitespace-pre-wrap font-medium">
