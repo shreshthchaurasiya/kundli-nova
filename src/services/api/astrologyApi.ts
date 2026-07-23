@@ -44,12 +44,12 @@ export class AstrologyApi {
   }
 
   /**
-   * Fetches the compatibility (Ashtakoota) analysis between two profile IDs.
+   * Fetches the unified compatibility analysis (Ashtakoota + Manglik) between two profile IDs.
    * @param profileAId The ID of the first saved Kundli profile
    * @param profileBId The ID of the second saved Kundli profile
    */
-  static async getCompatibility(profileAId: string, profileBId: string): Promise<KundliNovaCompatibilityAnalysis> {
-    return ApiClient.get<KundliNovaCompatibilityAnalysis>(ENDPOINTS.ASTROLOGY.GET_COMPATIBILITY(profileAId, profileBId));
+  static async getCompatibility(profileAId: string, profileBId: string): Promise<{ compatibility: KundliNovaCompatibilityAnalysis; manglik: import('../../server/types/astrologyProvider').KundliNovaManglikAnalysis }> {
+    return ApiClient.get<{ compatibility: KundliNovaCompatibilityAnalysis; manglik: import('../../server/types/astrologyProvider').KundliNovaManglikAnalysis }>(ENDPOINTS.ASTROLOGY.GET_COMPATIBILITY(profileAId, profileBId));
   }
 
   static async getDetailedKundliReport(profileId: string): Promise<import('../../server/types/astrologyProvider').KundliNovaDetailedReport> {

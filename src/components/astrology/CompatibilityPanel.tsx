@@ -4,7 +4,7 @@ import { KundliNovaCompatibilityAnalysis, AshtakootaFactor } from '../../server/
 import { KundliProfile } from '../../types';
 
 interface CompatibilityPanelProps {
-  apiCompatibilityData: KundliNovaCompatibilityAnalysis | null;
+  apiCompatibilityData: { compatibility: KundliNovaCompatibilityAnalysis; manglik: import('../../server/types/astrologyProvider').KundliNovaManglikAnalysis } | null;
   loadingCompatibility: boolean;
   compatibilityErrorState: { code: string; message: string } | null;
   selectedProfileId: string;
@@ -13,6 +13,15 @@ interface CompatibilityPanelProps {
   onSelectProfileB: (profileId: string) => void;
   onRetry: () => void;
 }
+
+const formatManglikValue = (val: string) => {
+  if (!val) return 'Unknown';
+  if (val === 'both_manglik') return 'Both profiles are Manglik';
+  if (val === 'neither_manglik') return 'Neither profile is Manglik';
+  if (val === 'manglik_non_manglik') return 'Manglik status differs';
+  if (val === 'not_evaluated') return 'Not evaluated';
+  return val.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+};
 
 export const CompatibilityPanel: React.FC<CompatibilityPanelProps> = ({
   apiCompatibilityData,
@@ -108,24 +117,24 @@ export const CompatibilityPanel: React.FC<CompatibilityPanelProps> = ({
             
             <p className="text-[11px] font-[850] text-neutral-500 uppercase tracking-widest mb-1 relative z-10">Total Match Score</p>
             <div className="flex items-baseline justify-center space-x-1 relative z-10 mb-2">
-              <span className="text-[32px] font-[900] text-[#FF8A00] tracking-tighter leading-none">{apiCompatibilityData.totalScore.toFixed(1)}</span>
-              <span className="text-[16px] font-[800] text-neutral-400">/ {apiCompatibilityData.maximumScore}</span>
+              <span className="text-[32px] font-[900] text-[#FF8A00] tracking-tighter leading-none">{apiCompatibilityData.compatibility.totalScore.toFixed(1)}</span>
+              <span className="text-[16px] font-[800] text-neutral-400">/ {apiCompatibilityData.compatibility.maximumScore}</span>
             </div>
             
             <div className="w-full bg-[#F5E6D3] rounded-full h-2 mb-2 overflow-hidden">
               <div 
                 className="bg-gradient-to-r from-[#FFB74D] to-[#FF8A00] h-2 rounded-full" 
-                style={{ width: `${Math.min(100, Math.max(0, apiCompatibilityData.compatibilityPercentage))}%` }}
+                style={{ width: `${Math.min(100, Math.max(0, apiCompatibilityData.compatibility.compatibilityPercentage))}%` }}
               />
             </div>
             <p className="text-[12px] font-[800] text-[#111827]">
-              {apiCompatibilityData.compatibilityPercentage.toFixed(0)}% Compatibility
+              {apiCompatibilityData.compatibility.compatibilityPercentage.toFixed(0)}% Compatibility
             </p>
           </div>
 
           {/* Factor Cards */}
           <div className="space-y-3">
-            {apiCompatibilityData.factors.map(factor => (
+            {apiCompatibilityData.compatibility.factors.map(factor => (
               <CompatibilityFactorCard key={factor.code} factor={factor} />
             ))}
           </div>
@@ -135,6 +144,56 @@ export const CompatibilityPanel: React.FC<CompatibilityPanelProps> = ({
             <p className="text-[10.5px] text-neutral-400 font-semibold leading-relaxed text-center">
               Ashtakoota milan is a traditional mathematical calculation. This score alone does not guarantee or deny marriage success, which depends on personal understanding.
             </p>
+          </div>
+
+          {/* Manglik Section */}
+          <div className="mt-6">
+            <div className="text-center max-w-xs mx-auto mb-3">
+              <span className="text-red-500 text-[10.5px] font-[850] uppercase tracking-wider block">Dosha Analysis</span>
+              <h3 className="text-[16px] font-[850] text-[#111827] tracking-tight mt-0.5">Manglik Match</h3>
+            </div>
+            <div className="bg-white border border-[#EBE8E0] rounded-2xl p-5 shadow-[0_2px_8px_rgba(0,0,0,0.01)] space-y-4">
+              
+              <div className="flex justify-between items-center border-b border-[#EBE8E0] pb-3">
+                <span className="text-[13px] font-[800] text-[#111827]">Match Status</span>
+                <span className="text-[12px] font-[850] text-neutral-500 bg-neutral-50 px-3 py-1 rounded-full border border-neutral-200">
+                  {formatManglikValue(apiCompatibilityData.manglik.compatibility)}
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex justify-between items-center bg-[#FCFBF8] p-3 rounded-xl border border-[#F5E6D3]">
+                  <div>
+                    <p className="text-[10.5px] font-[850] text-neutral-400 uppercase tracking-wider mb-0.5">Profile A</p>
+                    <p className="text-[13px] font-[800] text-[#111827]">
+                      {apiCompatibilityData.manglik.profileAManglik ? 'Manglik' : 'Non-Manglik'}
+                    </p>
+                  </div>
+                  {apiCompatibilityData.manglik.profileACancellation && apiCompatibilityData.manglik.profileACancellation !== 'not_evaluated' && (
+                    <div className="text-right">
+                      <p className="text-[9px] font-bold text-neutral-400 uppercase">Cancellation</p>
+                      <p className="text-[11.5px] font-semibold text-neutral-500">{formatManglikValue(apiCompatibilityData.manglik.profileACancellation)}</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-between items-center bg-[#FCFBF8] p-3 rounded-xl border border-[#F5E6D3]">
+                  <div>
+                    <p className="text-[10.5px] font-[850] text-neutral-400 uppercase tracking-wider mb-0.5">Profile B</p>
+                    <p className="text-[13px] font-[800] text-[#111827]">
+                      {apiCompatibilityData.manglik.profileBManglik ? 'Manglik' : 'Non-Manglik'}
+                    </p>
+                  </div>
+                  {apiCompatibilityData.manglik.profileBCancellation && apiCompatibilityData.manglik.profileBCancellation !== 'not_evaluated' && (
+                    <div className="text-right">
+                      <p className="text-[9px] font-bold text-neutral-400 uppercase">Cancellation</p>
+                      <p className="text-[11.5px] font-semibold text-neutral-500">{formatManglikValue(apiCompatibilityData.manglik.profileBCancellation)}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+            </div>
           </div>
         </>
       )}

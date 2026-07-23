@@ -62,8 +62,7 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
   const [apiDashaData, setApiDashaData] = useState<import('../server/types/astrologyProvider').KundliNovaVimshottariDasha | null>(null);
   const [apiDoshaData, setApiDoshaData] = useState<KundliNovaDoshaAnalysis | null>(null);
   const [apiYogaData, setApiYogaData] = useState<KundliNovaYogaAnalysis | null>(null);
-  const [apiCompatibilityData, setApiCompatibilityData] = useState<KundliNovaCompatibilityAnalysis | null>(null);
-  
+  const [apiCompatibilityData, setApiCompatibilityData] = useState<{ compatibility: KundliNovaCompatibilityAnalysis; manglik: import('../server/types/astrologyProvider').KundliNovaManglikAnalysis } | null>(null);
   // States
   const [loadingKundli, setLoadingKundli] = useState(true);
   const [errorState, setErrorState] = useState<{code: string, message: string} | null>(null);

@@ -22,19 +22,28 @@ const mockProfiles = [
 ];
 
 const mockCompatibilityResponse = {
-  totalScore: 28.5,
-  maximumScore: 36,
-  compatibilityPercentage: 79,
-  factors: [
-    { code: 'VARNA', name: 'Varna', score: 1, maximumScore: 1, summary: 'Good', calculationStatus: 'calculated' },
-    { code: 'VASHYA', name: 'Vashya', score: 2, maximumScore: 2, summary: 'Good', calculationStatus: 'calculated' },
-    { code: 'TARA', name: 'Tara', score: 3, maximumScore: 3, summary: 'Good', calculationStatus: 'calculated' },
-    { code: 'YONI', name: 'Yoni', score: 4, maximumScore: 4, summary: 'Good', calculationStatus: 'calculated' },
-    { code: 'GRAHA_MAITRI', name: 'Graha Maitri', score: 5, maximumScore: 5, summary: 'Good', calculationStatus: 'calculated' },
-    { code: 'GANA', name: 'Gana', score: 6, maximumScore: 6, summary: 'Good', calculationStatus: 'calculated' },
-    { code: 'BHAKOOT', name: 'Bhakoot', score: 7, maximumScore: 7, summary: 'Good', calculationStatus: 'calculated' },
-    { code: 'NADI', name: 'Nadi', score: 0.5, maximumScore: 8, summary: 'Low', calculationStatus: 'calculated' },
-  ]
+  compatibility: {
+    totalScore: 28.5,
+    maximumScore: 36,
+    compatibilityPercentage: 79,
+    factors: [
+      { code: 'VARNA', name: 'Varna', score: 1, maximumScore: 1, summary: 'Good', calculationStatus: 'calculated' },
+      { code: 'VASHYA', name: 'Vashya', score: 2, maximumScore: 2, summary: 'Good', calculationStatus: 'calculated' },
+      { code: 'TARA', name: 'Tara', score: 3, maximumScore: 3, summary: 'Good', calculationStatus: 'calculated' },
+      { code: 'YONI', name: 'Yoni', score: 4, maximumScore: 4, summary: 'Good', calculationStatus: 'calculated' },
+      { code: 'GRAHA_MAITRI', name: 'Graha Maitri', score: 5, maximumScore: 5, summary: 'Good', calculationStatus: 'calculated' },
+      { code: 'GANA', name: 'Gana', score: 6, maximumScore: 6, summary: 'Good', calculationStatus: 'calculated' },
+      { code: 'BHAKOOT', name: 'Bhakoot', score: 7, maximumScore: 7, summary: 'Good', calculationStatus: 'calculated' },
+      { code: 'NADI', name: 'Nadi', score: 0.5, maximumScore: 8, summary: 'Low', calculationStatus: 'calculated' },
+    ]
+  },
+  manglik: {
+    profileAManglik: true,
+    profileBManglik: false,
+    profileACancellation: 'not_evaluated',
+    profileBCancellation: 'fully_cancelled',
+    compatibility: 'manglik_non_manglik'
+  }
 };
 
 describe('Stage 5E: NovaKundliScreen Compatibility', () => {
@@ -93,5 +102,13 @@ describe('Stage 5E: NovaKundliScreen Compatibility', () => {
     // Check that all 8 factors are rendered
     expect(screen.getByText('Varna')).toBeInTheDocument();
     expect(screen.getByText('Nadi')).toBeInTheDocument();
+    
+    // Check Manglik values
+    expect(screen.getByText('Manglik Match')).toBeInTheDocument();
+    expect(screen.getByText('Manglik status differs')).toBeInTheDocument(); // compatibility status
+    expect(screen.getByText('Manglik')).toBeInTheDocument(); // Profile A
+    expect(screen.getByText('Non-Manglik')).toBeInTheDocument(); // Profile B
+    expect(screen.getByText('Fully Cancelled')).toBeInTheDocument(); // cancellation for B
+    expect(screen.queryByText('Not evaluated')).not.toBeInTheDocument(); // should be hidden
   });
 });
