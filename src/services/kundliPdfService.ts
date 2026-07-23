@@ -239,9 +239,9 @@ export const generateKundliPdf = async (data: KundliPdfPayload): Promise<Generat
   chart.planets.forEach((p, idx) => {
     const rowY = tableY + 14 + idx * 5.1;
     doc.text(p.name, tableX + 3, rowY);
-    doc.text(p.zodiac, tableX + 38, rowY);
+    doc.text(p.sign, tableX + 38, rowY);
     doc.text(String(p.house), tableX + 68, rowY);
-    doc.text(p.degree || String(p.normDegree) || '-', tableX + 85, rowY);
+    doc.text(p.degree ? String(p.degree) : (p.degreeInSign ? String(p.degreeInSign) : '-'), tableX + 85, rowY);
     doc.line(tableX, rowY + 1.5, tableX + 112, rowY + 1.5);
   });
 
@@ -362,25 +362,34 @@ export const generateKundliPdf = async (data: KundliPdfPayload): Promise<Generat
     doc.text('Detailed Kundli Report', 20, yOffset);
     yOffset += 6;
 
-    detailedReport.sections.forEach(sec => {
+    const writeSection = (heading: string, summary: string | null | undefined) => {
+      if (!summary) return;
       if (yOffset > 260) { doc.addPage(); yOffset = 20; }
       doc.setFont('Helvetica', 'bold');
       doc.setFontSize(10);
       doc.setTextColor(17, 24, 39);
-      doc.text(sec.heading, 20, yOffset);
+      doc.text(heading, 20, yOffset);
       yOffset += 5;
 
       doc.setFont('Helvetica', 'normal');
       doc.setFontSize(8.5);
       doc.setTextColor(75, 85, 99);
-      sec.paragraphs.forEach(p => {
+      const lines = doc.splitTextToSize(summary, 170);
+      lines.forEach((line: string) => {
         if (yOffset > 270) { doc.addPage(); yOffset = 20; }
-        const lines = doc.splitTextToSize(p, 170);
-        doc.text(lines, 20, yOffset);
-        yOffset += (lines.length * 4) + 2;
+        doc.text(line, 20, yOffset);
+        yOffset += 4;
       });
       yOffset += 3;
-    });
+    };
+
+    writeSection('Ascendant Summary', detailedReport.ascendant?.summary);
+    if (detailedReport.houseAnalysis?.houses) {
+      detailedReport.houseAnalysis.houses.forEach(h => {
+        writeSection(`House ${h.houseNumber} Analysis`, h.summary);
+      });
+    }
+    writeSection('Nakshatra Analysis', detailedReport.nakshatraAnalysis?.summary);
   }
 
   // Footer Branding on final page
