@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { requireAuth } from '../../middleware/auth';
-import { getDailyHoroscope, getKundli, getDasha, getDosha, getYoga, getCompatibility, getDetailedKundliReport } from '../../controllers/astrology';
+import { getDailyHoroscope, getKundli, getDasha, getDosha, getYoga, getCompatibility, getDetailedKundliReport, getDailyAstrologyData, getDailyInsights } from '../../controllers/astrology';
 
 const router = Router();
 
@@ -14,5 +14,7 @@ router.get('/dosha/:profileId', getDosha);
 router.get('/yoga/:profileId', getYoga);
 router.get('/kundli/:profileId/detailed-report', getDetailedKundliReport);
 router.get('/compatibility', getCompatibility);
+router.get('/daily-data', getDailyAstrologyData);
+router.get('/daily-insights', getDailyInsights);
 
 export default router;

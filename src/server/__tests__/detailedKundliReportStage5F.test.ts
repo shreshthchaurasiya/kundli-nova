@@ -90,7 +90,8 @@ describe('Detailed Kundli Report Validation (Stage 5F)', () => {
         getMatching: vi.fn(),
         getCompatibilityAnalysis: vi.fn(),
         getManglikCompatibility: vi.fn(),
-        getDetailedKundliReport: vi.fn().mockResolvedValue(mockDetailedReportResult)
+        getDetailedKundliReport: vi.fn().mockResolvedValue(mockDetailedReportResult),
+        getCurrentDasha: vi.fn()
       };
       
       service = new KundliCalculationService(mockProvider);

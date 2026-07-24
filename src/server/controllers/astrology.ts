@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { dailyHoroscopeService } from '../services/dailyHoroscopeService';
+import { dailyAstrologyService } from '../services/dailyAstrologyService';
+import { dailyInsightsService } from '../services/dailyInsightsService';
 import { ZodiacSign, ZODIAC_SIGNS } from '../types/astrologyProvider';
 import { ProviderError } from '../errors/ProviderError';
 import { ApiError } from '../errors/ApiError';
@@ -208,5 +210,45 @@ export const getDetailedKundliReport = async (req: AuthenticatedRequest, res: Re
     });
   } catch (error: any) {
     handleAstrologyError(error, res, next, 'DETAILED_REPORT');
+  }
+};
+
+export const getDailyAstrologyData = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.id;
+    const { profileId } = req.query;
+
+    const data = await dailyAstrologyService.getDailyData(userId, profileId as string | undefined);
+    
+    return res.status(200).json({
+      status: 'success',
+      data
+    });
+  } catch (error: any) {
+    const message = error.message;
+    if (['SELF_PROFILE_NOT_FOUND', 'INCOMPLETE_BIRTH_DATA', 'LOCATION_COORDINATES_MISSING', 'TIMEZONE_MISSING', 'PROVIDER_UNAVAILABLE'].includes(message)) {
+      return res.status(400).json({ status: 'error', message, code: message });
+    }
+    next(error);
+  }
+};
+
+export const getDailyInsights = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.id;
+    const { profileId } = req.query;
+
+    const data = await dailyInsightsService.getDailyInsights(userId, profileId as string | undefined);
+    
+    return res.status(200).json({
+      status: 'success',
+      data
+    });
+  } catch (error: any) {
+    const message = error.message;
+    if (['SELF_PROFILE_NOT_FOUND', 'INCOMPLETE_BIRTH_DATA', 'LOCATION_COORDINATES_MISSING', 'TIMEZONE_MISSING', 'DAILY_ASTROLOGY_UNAVAILABLE', 'NATAL_CHART_UNAVAILABLE', 'PROVIDER_UNAVAILABLE'].includes(message)) {
+      return res.status(400).json({ status: 'error', message, code: message });
+    }
+    next(error);
   }
 };

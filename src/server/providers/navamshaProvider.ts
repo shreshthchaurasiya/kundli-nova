@@ -8,6 +8,7 @@ import {
   KundliNovaDoshaResult,
   KundliNovaYogaResult,
   KundliNovaPanchang,
+  KundliNovaCurrentDasha,
   KundliNovaMatchResult,
 } from '../types/astrologyProvider';
 import { ProviderError } from '../errors/ProviderError';
@@ -516,8 +517,200 @@ export class NavamshaProvider implements AstrologyCalculationProvider {
 
 
 
-  public async getPanchang(_input: KundliNovaCalcInput): Promise<KundliNovaPanchang> {
-    throw new Error('Method getPanchang not implemented in Stage 2.');
+  public async getPanchang(input: KundliNovaCalcInput, targetDateStr?: string): Promise<KundliNovaPanchang> {
+    const { apiKey, baseUrl } = this.getProviderConfig();
+    const parsedInput = kundliNovaCalcInputSchema.parse(input);
+    
+    let targetYear, targetMonth, targetDate, targetHours = 12, targetMinutes = 0, targetSeconds = 0;
+    if (targetDateStr) {
+      const dt = new Date(targetDateStr);
+      if (!isNaN(dt.getTime())) {
+         targetYear = dt.getFullYear();
+         targetMonth = dt.getMonth() + 1;
+         targetDate = dt.getDate();
+         targetHours = dt.getHours();
+         targetMinutes = dt.getMinutes();
+         targetSeconds = dt.getSeconds();
+      } else {
+         const parts = targetDateStr.split('-');
+         if (parts.length >= 3) {
+            targetYear = parseInt(parts[0], 10);
+            targetMonth = parseInt(parts[1], 10);
+            targetDate = parseInt(parts[2], 10);
+         }
+      }
+    } else {
+      const now = new Date();
+      targetYear = now.getFullYear();
+      targetMonth = now.getMonth() + 1;
+      targetDate = now.getDate();
+      targetHours = now.getHours();
+      targetMinutes = now.getMinutes();
+    }
+
+    const payload = {
+      year: targetYear,
+      month: targetMonth,
+      date: targetDate,
+      hours: targetHours,
+      minutes: targetMinutes,
+      seconds: targetSeconds,
+      latitude: parsedInput.latitude,
+      longitude: parsedInput.longitude,
+      timezone: typeof parsedInput.timezone === 'number' ? parsedInput.timezone : 5.5
+    };
+
+    const headers = {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    };
+
+    const fetchPanchang = async (endpoint: string) => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
+      try {
+        const res = await fetch(`${baseUrl}${endpoint}`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        });
+        if (!res.ok) return null;
+        return await res.json();
+      } catch {
+        return null;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    };
+
+    const [full, inauspicious, abhijit, choghadiya, hora, dishaShool] = await Promise.all([
+      fetchPanchang('/api/v1/panchang/full'),
+      fetchPanchang('/api/v1/panchang/inauspicious-periods'),
+      fetchPanchang('/api/v1/panchang/abhijit-muhurat'),
+      fetchPanchang('/api/v1/panchang/choghadiya'),
+      fetchPanchang('/api/v1/panchang/hora'),
+      fetchPanchang('/api/v1/panchang/disha-shool')
+    ]);
+
+    if (!full || !full.output) {
+       throw new ProviderError('navamsha', 'PROVIDER_UNAVAILABLE', 'Primary Panchang data unavailable', 503);
+    }
+
+    return {
+      schemaVersion: '1.0',
+      provider: 'navamsha',
+      date: targetDateStr || new Date().toISOString(),
+      timezone: String(payload.timezone),
+      latitude: payload.latitude,
+      longitude: payload.longitude,
+      tithi: {
+        name: full.output.tithi?.name || null,
+        paksha: full.output.tithi?.paksha || null,
+        startTime: null,
+        endTime: null
+      },
+      nakshatra: {
+        name: full.output.nakshatra?.name || null,
+        pada: full.output.nakshatra?.pada || null,
+        startTime: null,
+        endTime: null
+      },
+      yoga: {
+        name: full.output.yoga?.name || null,
+        startTime: null,
+        endTime: null
+      },
+      karana: {
+        name: full.output.karana?.name || null,
+        startTime: null,
+        endTime: null
+      },
+      vara: full.output.weekday?.name || null,
+      sunrise: inauspicious?.output?.sunrise?.local_datetime || null,
+      sunset: inauspicious?.output?.sunset?.local_datetime || null,
+      moonrise: null,
+      moonset: null,
+      rahuKaal: inauspicious?.output?.rahu_kaal ? {
+        startTime: inauspicious.output.rahu_kaal.start,
+        endTime: inauspicious.output.rahu_kaal.end
+      } : null,
+      abhijitMuhurat: abhijit?.output?.interval?.period?.[0] ? {
+        startTime: abhijit.output.interval.period[0].start,
+        endTime: abhijit.output.interval.period[0].end
+      } : null,
+      choghadiya: choghadiya?.output?.day ? choghadiya.output.day.map((c: any) => ({
+        name: c.name,
+        nature: null,
+        startTime: c.start,
+        endTime: c.end
+      })) : [],
+      hora: hora?.output?.day ? hora.output.day.map((h: any) => ({
+        planet: h.lord,
+        startTime: h.start,
+        endTime: h.end
+      })) : [],
+      dishaShool: dishaShool?.output?.inauspicious_direction ? {
+        direction: dishaShool.output.inauspicious_direction,
+        remedy: null
+      } : null,
+      source: 'navamsha',
+      calculatedAt: new Date().toISOString()
+    };
+  }
+
+  public async getCurrentDasha(input: KundliNovaCalcInput, _targetDate?: string): Promise<KundliNovaCurrentDasha> {
+    const { apiKey, baseUrl } = this.getProviderConfig();
+    const payload = this.buildStandardBirthRequest(input);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
+
+    let response: Response;
+    try {
+      response = await fetch(`${baseUrl}/api/v1/dasha/current`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({ ...payload, target: null }),
+        signal: controller.signal,
+      });
+    } catch (err: any) {
+      if (err.name === 'AbortError' || err.message?.includes('aborted')) {
+        throw new ProviderError('navamsha', 'PROVIDER_TIMEOUT', `Request timed out`, 504);
+      }
+      throw new ProviderError('navamsha', 'PROVIDER_UNAVAILABLE', `Network error: ${err.message}`, 503);
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    if (!response.ok) {
+      throw new ProviderError('navamsha', 'PROVIDER_UNAVAILABLE', `Navamsha error: ${response.status}`, 503);
+    }
+
+    const data = await response.json();
+    return {
+      mahadasha: data.output.mahadasha ? {
+        planet: data.output.mahadasha.lord,
+        startDate: data.output.mahadasha.start,
+        endDate: data.output.mahadasha.end
+      } : null,
+      antardasha: data.output.antardasha ? {
+        planet: data.output.antardasha.lord,
+        startDate: data.output.antardasha.start,
+        endDate: data.output.antardasha.end
+      } : null,
+      pratyantardasha: data.output.pratyantardasha ? {
+        planet: data.output.pratyantardasha.lord,
+        startDate: data.output.pratyantardasha.start,
+        endDate: data.output.pratyantardasha.end
+      } : null,
+      asOf: new Date().toISOString(),
+      source: 'navamsha'
+    };
   }
 
   public async getMatching(_b: KundliNovaCalcInput, _g: KundliNovaCalcInput): Promise<KundliNovaMatchResult> {

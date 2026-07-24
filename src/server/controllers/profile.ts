@@ -1,8 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { supabaseAdmin } from '../config/supabase';
 import type { AuthenticatedRequest } from '../types';
-import { ApiError } from '../errors/ApiError';
-
+import { ApiError } from '../errors/ApiError'; 
 /**
  * Maps frontend field names to DB column names for the profiles table.
  * Frontend sends: state, district, city
@@ -26,7 +25,7 @@ function toDbFields(body: Record<string, any>): Record<string, any> {
  * Frontend expects: state, district, city
  */
 function fromDbFields(profile: Record<string, any>): Record<string, any> {
-  const mapped: Record<string, any> = { ...profile };
+  const mapped: Record<string, any> = { ...profile }; 
   if ('birth_state' in profile) {
     mapped['state'] = profile['birth_state'];
     delete mapped['birth_state'];

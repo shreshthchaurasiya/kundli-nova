@@ -198,14 +198,96 @@ export interface KundliNovaPanchang {
   schemaVersion: '1.0';
   provider: string;
   date: string;
-  tithi: { name: string; number: number; endTime?: string };
-  nakshatra: { name: string; number: number; endTime?: string };
-  yoga: { name: string; number: number };
-  karana: { name: string; number: number };
-  vara: string;
-  sunrise: string;
-  sunset: string;
-  choghadiya?: Array<{ name: string; type: 'good' | 'bad' | 'neutral'; startTime: string; endTime: string }>;
+  timezone: string;
+  latitude: number;
+  longitude: number;
+  
+  tithi: {
+    name: string | null;
+    paksha: string | null;
+    startTime: string | null;
+    endTime: string | null;
+  };
+  
+  nakshatra: {
+    name: string | null;
+    pada: number | null;
+    startTime: string | null;
+    endTime: string | null;
+  };
+  
+  yoga: {
+    name: string | null;
+    startTime: string | null;
+    endTime: string | null;
+  };
+  
+  karana: {
+    name: string | null;
+    startTime: string | null;
+    endTime: string | null;
+  };
+  
+  vara: string | null;
+  
+  sunrise: string | null;
+  sunset: string | null;
+  moonrise: string | null;
+  moonset: string | null;
+  
+  rahuKaal: {
+    startTime: string | null;
+    endTime: string | null;
+  } | null;
+  
+  abhijitMuhurat: {
+    startTime: string | null;
+    endTime: string | null;
+  } | null;
+  
+  choghadiya: Array<{
+    name: string;
+    nature: string | null;
+    startTime: string;
+    endTime: string;
+  }>;
+  
+  hora: Array<{
+    planet: string;
+    startTime: string;
+    endTime: string;
+  }>;
+  
+  dishaShool: {
+    direction: string | null;
+    remedy: string | null;
+  } | null;
+  
+  source: string;
+  calculatedAt: string;
+}
+
+export interface KundliNovaCurrentDasha {
+  mahadasha: {
+    planet: string;
+    startDate: string | null;
+    endDate: string | null;
+  } | null;
+  
+  antardasha: {
+    planet: string;
+    startDate: string | null;
+    endDate: string | null;
+  } | null;
+  
+  pratyantardasha: {
+    planet: string;
+    startDate: string | null;
+    endDate: string | null;
+  } | null;
+  
+  asOf: string;
+  source: string;
 }
 
 export interface KundliNovaMatchResult {
@@ -289,7 +371,8 @@ export interface AstrologyCalculationProvider {
   getDoshaAnalysis(input: KundliNovaCalcInput): Promise<KundliNovaDoshaAnalysis>;
   getYogas(input: KundliNovaCalcInput): Promise<LegacyKundliNovaYogaResult>;
   getYogaAnalysis(input: KundliNovaCalcInput): Promise<KundliNovaYogaAnalysis>;
-  getPanchang(input: KundliNovaCalcInput, date?: string): Promise<KundliNovaPanchang>;
+  getPanchang(input: KundliNovaCalcInput, targetDate?: string): Promise<KundliNovaPanchang>;
+  getCurrentDasha(input: KundliNovaCalcInput, targetDate?: string): Promise<KundliNovaCurrentDasha>;
   getMatching(bride: KundliNovaCalcInput, groom: KundliNovaCalcInput): Promise<KundliNovaMatchResult>;
   getCompatibilityAnalysis(inputA: KundliNovaCalcInput, inputB: KundliNovaCalcInput): Promise<KundliNovaCompatibilityAnalysis>;
   getManglikCompatibility(inputA: KundliNovaCalcInput, inputB: KundliNovaCalcInput): Promise<KundliNovaManglikAnalysis>;

@@ -20,7 +20,7 @@ export class ApiError extends Error {
 
   static fromResponse(statusCode: number, responseBody: ApiResponse) {
     const message = responseBody.message || 'An unexpected error occurred';
-    const code = responseBody.status || 'ERROR';
+    const code = responseBody.code || responseBody.status || 'ERROR';
     return new ApiError(statusCode, message, code, responseBody.errors);
   }
 }
