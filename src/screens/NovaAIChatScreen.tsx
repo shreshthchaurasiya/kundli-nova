@@ -12,8 +12,15 @@ import {
   ExternalLink,
   Share2,
   Shield,
-  Heart
+Heart,
+  ChevronDown,
+  Plus,
+  X,
+  Trash2,
+  Paperclip
 } from 'lucide-react';
+import { useProfile } from '../contexts/ProfileContext';
+import { KundliProfile } from '../types/kundli';
 import { Screen } from '../types';
 import { useRepositories } from '../repositories/repositoryProvider';
 import { UserProfile } from '../types/profile';
@@ -42,6 +49,12 @@ interface NovaAIChatScreenProps {
 
 export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChatScreenProps) {
   const repositories = useRepositories();
+  const { defaultKundliProfile } = useProfile();
+  
+  const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
+  const [profiles, setProfiles] = useState<KundliProfile[]>([]);
+  const [isProfileSwitcherOpen, setIsProfileSwitcherOpen] = useState(false);
+  
   const [profileData, setProfileData] = useState<UserProfile | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
@@ -63,13 +76,13 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
     
     setPdfModalState('generating');
     try {
-      const [chart, dasha, dosha, yoga, detailedReport] = await Promise.all([
+      const [chart, dasha] = await Promise.all([
         AstrologyApi.getKundli(profile.id),
-        AstrologyApi.getDasha(profile.id).catch(() => null),
-        AstrologyApi.getDoshaAnalysis(profile.id).catch(() => null),
-        AstrologyApi.getYogaAnalysis(profile.id).catch(() => null),
-        AstrologyApi.getDetailedKundliReport(profile.id).catch(() => null)
+        AstrologyApi.getDasha(profile.id).catch(() => null)
       ]);
+      const dosha = null;
+      const yoga = null;
+      const detailedReport = null;
 
       const activeKundli: KundliPdfPayload = {
         birthDetails: {
@@ -102,23 +115,51 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
     }
   };
 
-  // Load profile data and initialize chat
+  // Fetch profiles for switcher
   useEffect(() => {
+    repositories.kundliProfile.getAllProfiles()
+      .then(setProfiles)
+      .catch(console.error);
+  }, [repositories.kundliProfile]);
+
+  // Set active profile ID once on mount
+  useEffect(() => {
+    if (!activeProfileId) {
+      const initialId = routeParams?.profileId || defaultKundliProfile?.id;
+      if (initialId) setActiveProfileId(initialId);
+    }
+  }, [routeParams?.profileId, defaultKundliProfile?.id, activeProfileId]);
+
+  const isChatInitialized = useRef(false);
+
+  // 1. Fetch Profile Data when activeProfileId changes
+  useEffect(() => {
+    if (!activeProfileId) return;
+    repositories.kundliProfile.getProfileById(activeProfileId)
+      .then(profile => {
+        if (profile && profile.name) {
+          setProfileData(profile as any);
+        } else if (!isChatInitialized.current) {
+          setLoadingError('The selected profile is unavailable, incomplete, or unauthorized.');
+        }
+      })
+      .catch(() => {
+        if (!isChatInitialized.current) setLoadingError('Failed to load profile.');
+      });
+  }, [activeProfileId, repositories.kundliProfile]);
+
+  // 2. Initialize chat (only once per mount)
+  useEffect(() => {
+    if (!activeProfileId) return;
+    if (isChatInitialized.current) return;
+
     const loadAndInit = async () => {
-      const { conversationId, initialQuery, serviceContext, profileId, profileBId, initialIntent } = routeParams || {};
+      isChatInitialized.current = true;
+      const { conversationId, initialQuery, serviceContext, profileBId, initialIntent } = routeParams || {};
 
-      if (!profileId) {
-        setLoadingError('No Kundli profile selected. Please select a profile first.');
-        return;
-      }
+      const profile = await repositories.kundliProfile.getProfileById(activeProfileId).catch(() => null);
+      if (!profile || !profile.name) return;
 
-      const profile = await repositories.kundliProfile.getProfileById(profileId).catch(() => null);
-      if (!profile || !profile.name) {
-        setLoadingError('The selected profile is unavailable, incomplete, or unauthorized.');
-        return;
-      }
-
-      setProfileData(profile as any);
       const profileName = profile.name.trim();
 
       // Determine topic early to fix TDZ bug
@@ -276,10 +317,7 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
           // Start fetching from real backend API
           const fetchPromise = Promise.all([
             AstrologyApi.getKundli(profile.id),
-            AstrologyApi.getDasha(profile.id).catch(() => null),
-            AstrologyApi.getDoshaAnalysis(profile.id).catch(() => null),
-            AstrologyApi.getYogaAnalysis(profile.id).catch(() => null),
-            AstrologyApi.getDetailedKundliReport(profile.id).catch(() => null)
+            AstrologyApi.getDasha(profile.id).catch(() => null)
           ]);
 
           // Step 1: Reading birth details…
@@ -287,7 +325,10 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
           setMessages(prev => prev.map(m => m.id === loadingMsgId ? { ...m, kundliLoadingStep: 2 } : m));
 
           // Wait for API calls to complete to simulate step 2
-          const [chart, dasha, dosha, yoga, detailedReport] = await fetchPromise;
+          const [chart, dasha] = await fetchPromise;
+          const dosha = null;
+          const yoga = null;
+          const detailedReport = null;
 
           // Step 2 -> 3 Transition: Preparing your Kundli chart…
           setMessages(prev => prev.map(m => m.id === loadingMsgId ? { ...m, kundliLoadingStep: 3 } : m));
@@ -348,11 +389,9 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
     initializeNewChat();
     };
 
-    setMessages([]);
-    setProfileData(null);
     setLoadingError(null);
     loadAndInit();
-  }, [routeParams, repositories.kundliProfile]);
+  }, [activeProfileId, routeParams?.conversationId, routeParams?.initialQuery, routeParams?.serviceContext, routeParams?.initialIntent, repositories.kundliProfile]);
 
   // Scroll to bottom whenever messages list updates
   useEffect(() => {
@@ -559,21 +598,26 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
                 <h2 className="text-[15.5px] font-[850] text-[#111827] leading-[1.2] tracking-tight">Nova AI</h2>
                 <Sparkles size={11.5} className="text-[#FF8A00] fill-[#FF8A00]" />
               </div>
-              <div className="text-[11.5px] text-[#6B7280] font-semibold leading-[1.3] mt-[1.5px]">Personal AI Astrologer</div>
+              <div 
+                className="flex items-center space-x-1 mt-[1.5px] cursor-pointer"
+                onClick={() => setIsProfileSwitcherOpen(true)}
+              >
+                <div className="text-[11.5px] text-[#6B7280] font-semibold leading-[1.3] truncate max-w-[120px]">
+                  {profileData?.name ? `Kundli: ${profileData.name}` : 'Personal AI Astrologer'}
+                </div>
+                <ChevronDown size={11} className="text-[#6B7280]" />
+              </div>
             </div>
           </div>
         </div>
 
         {/* Right Header Controls (Compact) */}
-        <div className="flex items-center space-x-[12px] text-neutral-400">
+        <div className="flex items-center space-x-[8px] text-neutral-400">
           <button 
             onClick={() => onNavigate('chat-history')}
             className="p-2 rounded-full hover:bg-neutral-50 active:bg-neutral-100 transition-colors focus:outline-none"
           >
             <History size={19} strokeWidth={2.2} />
-          </button>
-          <button className="p-2 rounded-full hover:bg-neutral-50 active:bg-neutral-100 transition-colors focus:outline-none opacity-80">
-            <MoreVertical size={19} strokeWidth={2.2} />
           </button>
         </div>
       </div>
@@ -854,6 +898,111 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
             </motion.div>
           </motion.div>
         )}
+
+      {/* Profile Switcher Sheet */}
+      <AnimatePresence>
+        {isProfileSwitcherOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-[#000000]/20 backdrop-blur-sm z-[200]"
+              onClick={() => setIsProfileSwitcherOpen(false)}
+            />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 220 }}
+              className="absolute bottom-0 left-0 right-0 bg-white rounded-t-[28px] pt-6 pb-8 px-5 z-[210] shadow-[0_-10px_40px_rgba(0,0,0,0.1)] flex flex-col max-h-[85vh]"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h3 className="text-xl font-[850] text-neutral-900 tracking-tight">Select Profile</h3>
+                  <p className="text-xs font-semibold text-neutral-500 mt-0.5">Switch Kundli context for AI Chat</p>
+                </div>
+                <button
+                  onClick={() => setIsProfileSwitcherOpen(false)}
+                  className="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-600 hover:bg-neutral-200 transition-colors focus:outline-none"
+                >
+                  <X size={18} strokeWidth={2.5} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto no-scrollbar space-y-3 pb-4">
+                {profiles.map((p) => {
+                  const isSelected = activeProfileId === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        if (activeProfileId !== p.id) {
+                          setActiveProfileId(p.id);
+                          const sysMsg = {
+                            id: `sys-switch-${Date.now()}`,
+                            text: `Switched context to ${p.name}'s Kundli. Nova AI will now answer questions based on this profile.`,
+                            sender: 'system',
+                            time: getFormattedTime(),
+                            type: 'system'
+                          };
+                          setMessages(prev => [...prev, sysMsg as any]);
+                        }
+                        setIsProfileSwitcherOpen(false);
+                      }}
+                      className={`w-full flex items-center p-4 rounded-2xl border transition-all ${
+                        isSelected 
+                          ? 'border-[#FF8A00] bg-[#FFF9E6] shadow-[0_2px_12px_rgba(255,138,0,0.1)]' 
+                          : 'border-neutral-200 bg-white hover:border-[#FF8A00]/40'
+                      } focus:outline-none text-left`}
+                    >
+                      <div className={`w-12 h-12 rounded-full flex items-center justify-center font-[850] text-lg mr-4 shrink-0 ${
+                        isSelected ? 'bg-[#FF8A00] text-white' : 'bg-neutral-100 text-neutral-500'
+                      }`}>
+                        {p.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center space-x-2">
+                          <h4 className={`text-base font-[800] truncate tracking-tight ${isSelected ? 'text-[#FF8A00]' : 'text-neutral-900'}`}>
+                            {p.name}
+                          </h4>
+                          {p.relation === 'self' && (
+                            <span className="px-2 py-0.5 rounded-md bg-[#10B981]/10 text-[#10B981] text-[10px] font-bold uppercase tracking-wider">
+                              Primary
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs font-semibold text-neutral-500 mt-1 truncate">
+                          {p.birthDetails?.dob || 'Unknown DOB'} • {p.birthDetails?.city || 'Unknown City'}
+                        </p>
+                      </div>
+                      {isSelected && (
+                        <div className="shrink-0 ml-3">
+                          <CheckCircle2 size={20} className="text-[#FF8A00] fill-[#FF8A00]/20" strokeWidth={2.5} />
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="pt-4 mt-2 border-t border-neutral-100">
+                <button
+                  onClick={() => {
+                    setIsProfileSwitcherOpen(false);
+                    onNavigate('kundli-profile-form', { mode: 'create', fromScreen: 'nova-ai-chat' });
+                  }}
+                  className="w-full flex items-center justify-center p-4 rounded-2xl border-2 border-dashed border-neutral-300 bg-neutral-50 hover:bg-neutral-100 transition-colors focus:outline-none text-neutral-600"
+                >
+                  <Plus size={20} strokeWidth={2.5} className="mr-2" />
+                  <span className="font-[800] text-sm">Add New Profile</span>
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
       </AnimatePresence>
     </div>
   );

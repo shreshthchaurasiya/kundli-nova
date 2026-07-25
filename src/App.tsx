@@ -10,6 +10,7 @@ import WelcomeGiftScreen from './screens/WelcomeGiftScreen';
 import HomeScreen from './screens/HomeScreen';
 import WalletScreen from './screens/WalletScreen';
 import ChatScreen from './screens/ChatScreen';
+import ChatListScreen from './screens/ChatListScreen';
 import AstrologersScreen from './screens/AstrologersScreen';
 import CategoryScreen from './screens/CategoryScreen';
 import ProfileScreen from './screens/ProfileScreen';
@@ -17,7 +18,6 @@ import EditProfileScreen from './screens/EditProfileScreen';
 import ViewKundliScreen from './screens/ViewKundliScreen';
 import ConsultationChatScreen from './screens/ConsultationChatScreen';
 import ChatHistoryScreen from './screens/ChatHistoryScreen';
-import ChatListScreen from './screens/ChatListScreen';
 import CategoryDetailScreen from './screens/CategoryDetailScreen';
 import NovaAIScreen from './screens/NovaAIScreen';
 import NovaAIChatScreen from './screens/NovaAIChatScreen';
@@ -51,7 +51,7 @@ const NAV_SCREENS: Screen[] = ['home', 'chat-list', 'chat-history', 'nova-ai', '
 
 export default function App() {
   const { isAuthenticated, isLoading, user, signOut } = useAuth();
-  const { profile, isLoadingProfile } = useProfile();
+  const { profile, isLoadingProfile, profileError, refreshProfile } = useProfile();
   const { wallet } = useWallet();
   const { profile: astrologerWorkspace, isLoading: isLoadingAstrologerDashboard } = useAstrologerDashboard();
 
@@ -78,7 +78,10 @@ export default function App() {
     if (isLoading || isLoadingProfile || isLoadingAstrologerDashboard) return;
 
     if (isAuthenticated) {
-      if (!isProfileComplete) {
+      if (profileError) {
+        // If profile fetch failed due to API error (e.g. 429), don't force them to create a profile!
+        // We will render an error screen below.
+      } else if (!isProfileComplete) {
         // A provisional OAuth identity cannot enter any application screen.
         if (currentScreen !== 'create-profile') setCurrentScreen('create-profile');
       } else if (!hasStartedWelcomeChat) {
@@ -94,7 +97,7 @@ export default function App() {
         setCurrentScreen('login');
       }
     }
-  }, [astrologerWorkspace, currentScreen, hasStartedWelcomeChat, isAuthenticated, isLoading, isLoadingAstrologerDashboard, isLoadingProfile, isProfileComplete]);
+  }, [astrologerWorkspace, currentScreen, hasStartedWelcomeChat, isAuthenticated, isLoading, isLoadingAstrologerDashboard, isLoadingProfile, isProfileComplete, profileError]);
 
   useEffect(() => {
     if (toast) {

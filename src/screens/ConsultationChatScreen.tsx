@@ -155,7 +155,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
   useEffect(() => {
     async function loadInitialData() {
       if (!astrologerId && !readOnlySessionId) {
-        onNavigate('astrologers');
+        onNavigate('home');
         return;
       }
 
@@ -524,7 +524,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
   // Review submission
   const handleReviewSubmit = () => {
     // Demo submission of review
-    onNavigate('astrologers');
+    onNavigate('home');
   };
 
   // -----------------------------------------------------------------
@@ -550,7 +550,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
           setSelectedKundliProfileId(profileId);
           void runWalletVerification();
         }}
-        onCancel={() => onNavigate('astrologers')}
+        onCancel={() => onNavigate('home')}
         onNavigate={onNavigate}
       />
     );
@@ -570,7 +570,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
               <p className="text-neutral-500 text-xs font-semibold leading-relaxed">{verificationError}</p>
             </div>
             <div className="flex gap-3 justify-center">
-              <button onClick={() => onNavigate('astrologers')} className="h-11 px-5 rounded-xl bg-neutral-100 text-neutral-700 text-xs font-bold border-none">Go Back</button>
+              <button onClick={() => onNavigate('home')} className="h-11 px-5 rounded-xl bg-neutral-100 text-neutral-700 text-xs font-bold border-none">Go Back</button>
               <button onClick={() => void runWalletVerification()} className="h-11 px-5 rounded-xl bg-[#FF8A00] text-white text-xs font-black border-none flex items-center gap-2">
                 <RefreshCw size={12} strokeWidth={3} className={isSubmittingSession ? "animate-spin" : ""} />
                 <span>Retry Request</span>
@@ -614,7 +614,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
     return (
       <div className="flex flex-col h-full w-full bg-neutral-50 font-sans select-none justify-between">
         <div className="px-6 py-4 sticky top-0 bg-white border-b border-neutral-100 flex items-center space-x-3">
-          <button onClick={() => onNavigate('astrologers')} className="p-1 -ml-1 text-neutral-800">
+          <button onClick={() => onNavigate('home')} className="p-1 -ml-1 text-neutral-800">
             <ArrowLeft size={22} strokeWidth={2.5} />
           </button>
           <h1 className="text-base font-extrabold text-neutral-900">Wallet Check</h1>
@@ -657,7 +657,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
 
         <div className="p-6 bg-white border-t border-neutral-100 flex space-x-3">
           <button
-            onClick={() => onNavigate('astrologers')}
+            onClick={() => onNavigate('home')}
             className="flex-1 h-12 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs font-bold transition-all border-none"
           >
             Cancel Request
@@ -852,7 +852,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
                       const result = await consultationRepository.cancelSession(activeSessionId);
                       hydrateBillingState(result.session, result.balance);
                       setShowCancelConfirm(false);
-                      onNavigate('astrologers');
+                      onNavigate('home');
                     }}
                     className="flex-1 h-11 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer border-none"
                   >
@@ -883,7 +883,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
             </p>
           </div>
           <button
-            onClick={() => onNavigate('astrologers')}
+            onClick={() => onNavigate('home')}
             className="h-11 px-6 rounded-xl bg-neutral-900 text-white text-xs font-bold"
           >
             Select Another Scholar
@@ -909,7 +909,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
           </div>
           <div className="flex space-x-3 justify-center">
             <button
-              onClick={() => onNavigate('astrologers')}
+              onClick={() => onNavigate('home')}
               className="h-11 px-4 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs font-bold transition-all border-none"
             >
               Go Back
@@ -928,7 +928,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
   }
 
   // ENDED STATE SUMMARY SCREEN
-  if (currentState === 'ENDED') {
+  if (currentState === 'ENDED' && !readOnlySessionId) {
     return (
       <div className="flex flex-col h-full w-full bg-neutral-50 font-sans select-none justify-between overflow-y-auto no-scrollbar pb-10">
         <div className="px-6 py-4 sticky top-0 bg-white border-b border-neutral-100 flex items-center justify-between">
@@ -1323,7 +1323,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
               } else if (currentState !== 'ENDED') {
                 setShowEndConfirm(true);
               } else {
-                onNavigate('astrologers');
+                onNavigate('home');
               }
             }}
             className="p-1.5 -ml-1 rounded-full hover:bg-neutral-50 active:bg-neutral-100 transition-colors text-neutral-800 cursor-pointer"
@@ -1605,7 +1605,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
                 <span>Back to History</span>
               </button>
               <button
-                onClick={() => onNavigate('astrologers')}
+                onClick={() => onNavigate('home')}
                 className="w-full sm:w-auto inline-flex items-center justify-center space-x-1.5 h-10 px-5 bg-[#FF8A00] hover:bg-[#E07A00] text-white font-extrabold text-[11px] rounded-xl transition-all cursor-pointer border-none shadow-sm shadow-[#FF8A00]/10"
               >
                 <span>Start New Consultation</span>

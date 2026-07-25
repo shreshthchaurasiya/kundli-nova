@@ -9,6 +9,7 @@ interface ProfileContextType {
   profile: UserProfile | null;
   defaultKundliProfile: KundliProfile | null;
   isLoadingProfile: boolean;
+  profileError: Error | null;
   refreshProfile: () => Promise<void>;
 }
 
@@ -16,6 +17,7 @@ const ProfileContext = createContext<ProfileContextType>({
   profile: null,
   defaultKundliProfile: null,
   isLoadingProfile: true,
+  profileError: null,
   refreshProfile: async () => {},
 });
 
@@ -25,9 +27,11 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [defaultKundliProfile, setDefaultKundliProfile] = useState<KundliProfile | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+  const [profileError, setProfileError] = useState<Error | null>(null);
 
   const refreshProfile = useCallback(async () => {
     setIsLoadingProfile(true);
+    setProfileError(null);
     try {
       if (isAuthenticated) {
         const [p, kpList] = await Promise.all([
@@ -53,12 +57,13 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setProfile(null);
         setDefaultKundliProfile(null);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to fetch profile', e);
+      setProfileError(e);
     } finally {
       setIsLoadingProfile(false);
     }
-  }, [isAuthenticated, repositories.profile]);
+  }, [isAuthenticated, repositories.profile, repositories.kundliProfile]);
 
   useEffect(() => {
     void refreshProfile();
@@ -81,7 +86,7 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [isAuthenticated, user, refreshProfile]);
 
   return (
-    <ProfileContext.Provider value={{ profile, defaultKundliProfile, isLoadingProfile, refreshProfile }}>
+    <ProfileContext.Provider value={{ profile, defaultKundliProfile, isLoadingProfile, profileError, refreshProfile }}>
       {children}
     </ProfileContext.Provider>
   );

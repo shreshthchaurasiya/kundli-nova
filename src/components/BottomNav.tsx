@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, MessageCircle, User, LayoutGrid } from 'lucide-react';
+import { Home, Users, User, LayoutGrid } from 'lucide-react';
 import { Tab } from '../types';
 
 interface BottomNavProps {
@@ -10,7 +10,7 @@ interface BottomNavProps {
 export default function BottomNav({ currentTab, onTabChange }: BottomNavProps) {
   const tabs: { id: Tab; label: string; icon: React.ReactNode; isFab?: boolean }[] = [
     { id: 'home', label: 'Home', icon: <Home size={24} strokeWidth={2} /> },
-    { id: 'chat-list', label: 'Chat', icon: <MessageCircle size={24} strokeWidth={2} /> },
+    { id: 'chat-list', label: 'Astrologers', icon: <Users size={24} strokeWidth={2} /> },
     { 
       id: 'nova-ai', 
       label: 'Nova AI', 

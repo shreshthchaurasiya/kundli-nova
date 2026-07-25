@@ -957,6 +957,16 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
                   </motion.div>
                 )}
               </AnimatePresence>
+
+              {/* Consultation and reading kundli deeply with Nova AI */}
+              <button
+                onClick={() => onNavigate('nova-ai-chat', { profileId: selectedProfileId })}
+                className="w-full h-[46px] mt-4 bg-gradient-to-r from-[#FF8A00] to-[#FF9D29] rounded-[18px] text-[13.5px] font-[850] text-white flex items-center justify-center space-x-2.5 shadow-[0_4px_16px_rgba(255,138,0,0.25)] transition-all active:scale-[0.98] focus:outline-none relative overflow-hidden group"
+              >
+                <div className="absolute inset-0 bg-white/20 translate-x-[-100%] skew-x-[-15deg] group-hover:animate-[shimmer_1.5s_infinite]" />
+                <Sparkles size={16} className="fill-white/80 text-white" />
+                <span>Consultation & Deep Reading with Nova AI</span>
+              </button>
             </div>
 
             {/* Subtle Divider Line */}
@@ -1910,7 +1920,11 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
                 <button
                   onClick={() => {
                     setIsProfileSwitcherOpen(false);
-                    onNavigate('kundli-profile-form', { returnTo: 'nova-kundli', mode });
+                    onNavigate('kundli-profile-form', { 
+                      returnTo: 'nova-kundli', 
+                      mode: activeTab === 'compatibility' ? 'matching' : 'kundli',
+                      profileId: selectedProfileId
+                    });
                   }}
                   className="w-full flex items-center justify-center space-x-2 h-12 rounded-2xl bg-neutral-100 text-[#111827] font-extrabold text-[13px] hover:bg-neutral-200 transition-colors"
                 >

@@ -22,7 +22,10 @@ vi.mock('../config/supabase', () => {
   return {
     supabaseAdmin: {
       from: vi.fn(() => chainable),
-      rpc: vi.fn()
+      rpc: vi.fn(),
+      auth: {
+        getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'test-user-id' } }, error: null })
+      }
     }
   };
 });
