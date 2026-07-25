@@ -5,13 +5,22 @@ import { ensureSelfKundliProfile } from '../controllers/kundli';
 const mockRpc = vi.fn();
 
 vi.mock('../config/supabase', () => {
+  const chainable = {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    order: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    single: vi.fn(),
+    maybeSingle: vi.fn(),
+    update: vi.fn().mockReturnThis(),
+    delete: vi.fn().mockReturnThis(),
+    insert: vi.fn().mockReturnThis()
+  };
   return {
     supabaseAdmin: {
-      auth: { getUser: vi.fn() },
-    },
-    createAuthClient: vi.fn(() => ({
-      rpc: mockRpc,
-    })),
+      from: vi.fn(() => chainable),
+      rpc: vi.fn()
+    }
   };
 });
 

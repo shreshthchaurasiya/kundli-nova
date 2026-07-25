@@ -5,14 +5,25 @@ import { getYoga } from '../controllers/astrology';
 import { NavamshaProvider } from '../providers/navamshaProvider';
 import { supabaseAdmin } from '../config/supabase';
 
-vi.mock('../config/supabase', () => ({
-  supabaseAdmin: {
-    from: vi.fn().mockReturnThis(),
+vi.mock('../config/supabase', () => {
+  const chainable = {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    order: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    single: vi.fn(),
     maybeSingle: vi.fn(),
-  },
-}));
+    update: vi.fn().mockReturnThis(),
+    delete: vi.fn().mockReturnThis(),
+    insert: vi.fn().mockReturnThis()
+  };
+  return {
+    supabaseAdmin: {
+      from: vi.fn(() => chainable),
+      rpc: vi.fn()
+    }
+  };
+});
 
 describe('Stage 5D Route: GET /api/v1/astrology/yoga/:profileId', () => {
   let app: express.Application;

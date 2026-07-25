@@ -1830,7 +1830,7 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-[#111827]/40 backdrop-blur-[2px] z-50"
+              className="fixed inset-0 max-w-md mx-auto bg-[#111827]/40 backdrop-blur-[2px] z-50"
               onClick={() => setIsProfileSwitcherOpen(false)}
             />
             <motion.div
@@ -1838,7 +1838,7 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl z-50 flex flex-col max-h-[85vh] overflow-hidden shadow-[0_-10px_40px_rgba(0,0,0,0.1)]"
+              className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white rounded-t-3xl z-50 flex flex-col max-h-[85vh] overflow-hidden shadow-[0_-10px_40px_rgba(0,0,0,0.1)]"
             >
               <div className="px-5 pt-5 pb-4 flex items-center justify-between border-b border-neutral-100 shrink-0">
                 <div>
@@ -1910,7 +1910,7 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
                 <button
                   onClick={() => {
                     setIsProfileSwitcherOpen(false);
-                    onNavigate('create-profile', { returnTo: 'nova-kundli', mode });
+                    onNavigate('kundli-profile-form', { returnTo: 'nova-kundli', mode });
                   }}
                   className="w-full flex items-center justify-center space-x-2 h-12 rounded-2xl bg-neutral-100 text-[#111827] font-extrabold text-[13px] hover:bg-neutral-200 transition-colors"
                 >

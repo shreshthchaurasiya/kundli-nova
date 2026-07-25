@@ -7,14 +7,25 @@ import { ProviderError } from '../errors/ProviderError';
 import { supabaseAdmin } from '../config/supabase';
 import { KundliNovaVimshottariDasha } from '../types/astrologyProvider';
 
-vi.mock('../config/supabase', () => ({
-  supabaseAdmin: {
-    from: vi.fn().mockReturnThis(),
+vi.mock('../config/supabase', () => {
+  const chainable = {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    order: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    single: vi.fn(),
     maybeSingle: vi.fn(),
-  },
-}));
+    update: vi.fn().mockReturnThis(),
+    delete: vi.fn().mockReturnThis(),
+    insert: vi.fn().mockReturnThis()
+  };
+  return {
+    supabaseAdmin: {
+      from: vi.fn(() => chainable),
+      rpc: vi.fn()
+    }
+  };
+});
 
 describe('Stage 5B Route: GET /api/v1/astrology/dasha/:profileId', () => {
   let app: express.Application;

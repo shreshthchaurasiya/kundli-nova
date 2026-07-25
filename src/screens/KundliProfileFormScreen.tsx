@@ -129,9 +129,10 @@ export default function KundliProfileFormScreen({ onNavigate, routeParams }: Kun
     s.toLowerCase().includes(stateSearch.toLowerCase()),
   );
 
-  // ── Back navigation preserves consultation context ───────────────────────────
+  // ── Back navigation preserves ALL navigation context ────────────────────────
   const handleBack = () => {
-    onNavigate(returnTo, { astrologerId, intent });
+    // Spread all incoming routeParams so mode, matchingStep, profileId etc. are preserved
+    onNavigate(returnTo, { ...routeParams });
   };
 
   // ── Submit ───────────────────────────────────────────────────────────────────
@@ -178,9 +179,8 @@ export default function KundliProfileFormScreen({ onNavigate, routeParams }: Kun
         savedProfile = await kundliProfileRepository.createProfile(payload);
       }
 
-      // Return to the originating screen (consultation-chat or profile)
-      // and carry the consultation context so astrologerId is not lost.
-      onNavigate(returnTo, { astrologerId, intent, createdProfileId: savedProfile.id, mode: routeParams?.mode });
+      // Return to the originating screen and carry ALL context so mode/tab is preserved.
+      onNavigate(returnTo, { ...routeParams, createdProfileId: savedProfile.id });
     } catch (err: any) {
       setError(err?.message || 'Failed to save. Please try again.');
     } finally {

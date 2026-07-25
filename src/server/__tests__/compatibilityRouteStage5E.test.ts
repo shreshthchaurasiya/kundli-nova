@@ -7,14 +7,25 @@ import { ProviderError } from '../errors/ProviderError';
 import { AstrologyCalculationProvider, KundliNovaCalcInput, KundliNovaCompatibilityAnalysis } from '../types/astrologyProvider';
 import { KundliProfile } from '../../types';
 
-vi.mock('../config/supabase', () => ({
-  supabaseAdmin: {
-    auth: {
-      getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'test-user-id' } }, error: null })
-    },
-    from: vi.fn()
-  }
-}));
+vi.mock('../config/supabase', () => {
+  const chainable = {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    order: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    single: vi.fn(),
+    maybeSingle: vi.fn(),
+    update: vi.fn().mockReturnThis(),
+    delete: vi.fn().mockReturnThis(),
+    insert: vi.fn().mockReturnThis()
+  };
+  return {
+    supabaseAdmin: {
+      from: vi.fn(() => chainable),
+      rpc: vi.fn()
+    }
+  };
+});
 
 const mockProfileA: any = {
   id: 'profileA',

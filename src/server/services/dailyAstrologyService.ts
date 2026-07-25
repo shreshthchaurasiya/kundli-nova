@@ -45,7 +45,8 @@ export class DailyAstrologyService {
     let query = supabaseAdmin
       .from('kundli_profiles')
       .select('*')
-      .eq('owner_id', ownerId);
+      .eq('owner_id', ownerId)
+      .eq('profile_scope', 'personal');
 
     if (profileId) {
       query = query.eq('id', profileId);

@@ -14,6 +14,7 @@ function toDbFields(body: Record<string, any>): Record<string, any> {
     else if (key === 'district') mapped['birth_district'] = value;
     else if (key === 'city') mapped['birth_city'] = value;
     else if (key === 'welcomeChatStartedAt') mapped['welcome_chat_started_at'] = value;
+    else if (key === 'onboardingCompletedAt') mapped['onboarding_completed_at'] = value;
     else mapped[key] = value;
   }
   return mapped;
@@ -41,6 +42,10 @@ function fromDbFields(profile: Record<string, any>): Record<string, any> {
   if ('welcome_chat_started_at' in profile) {
     mapped['welcomeChatStartedAt'] = profile['welcome_chat_started_at'];
     delete mapped['welcome_chat_started_at'];
+  }
+  if ('onboarding_completed_at' in profile) {
+    mapped['onboardingCompletedAt'] = profile['onboarding_completed_at'];
+    delete mapped['onboarding_completed_at'];
   }
   return mapped;
 }
@@ -80,10 +85,23 @@ export const updateProfile = async (
     const userId = req.user!.id;
     const rawUpdates = { ...req.body };
 
+    
     // Security: never allow client to set id
     delete rawUpdates.id;
 
+    // Check if onboarding is complete
+    const { data: existingProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('onboarding_completed_at')
+      .eq('id', userId)
+      .single();
+
+    if (!existingProfile?.onboarding_completed_at && rawUpdates.name && rawUpdates.gender && rawUpdates.dob && rawUpdates.tob && rawUpdates.city && rawUpdates.state && rawUpdates.district) {
+      rawUpdates.onboardingCompletedAt = new Date().toISOString();
+    }
+
     // Map frontend field names → DB column names
+
     const updates = toDbFields(rawUpdates);
 
     const { data: profile, error } = await supabaseAdmin

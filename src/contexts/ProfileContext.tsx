@@ -35,8 +35,20 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ child
           repositories.kundliProfile.getAllProfiles()
         ]);
         setProfile(p);
-        const kp = kpList.find(k => k.isDefault) || kpList.find(k => k.relation === 'self') || kpList[0] || null;
+        // Resolution order:
+        //  1. relation = 'self'  — the main account holder; always wins.
+        //  2. isDefault = true   — a user-chosen default for other features.
+        //  3. first row          — fallback when no self or default exists.
+        //
+        // This ensures a matching partner saved with isDefault=true can never
+        // override the authenticated user's own profile in Home, AI, or My Kundli.
+        const kp =
+          kpList.find(k => k.relation === 'self') ||
+          kpList.find(k => k.isDefault) ||
+          kpList[0] ||
+          null;
         setDefaultKundliProfile(kp);
+
       } else {
         setProfile(null);
         setDefaultKundliProfile(null);
