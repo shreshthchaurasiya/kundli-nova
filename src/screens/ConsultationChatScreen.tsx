@@ -317,17 +317,13 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
     setActiveSessionId(sessionId);
 
     // Start 60-second waiting timeout countdown
-    if (waitingTimerRef.current) clearInterval(waitingTimerRef.current);
+    if (waitingTimerRef.current) {
+      clearInterval(waitingTimerRef.current);
+      waitingTimerRef.current = null;
+    }
+    
     waitingTimerRef.current = setInterval(() => {
-      setWaitingTimeoutSeconds(prev => {
-        if (prev <= 1) {
-          clearInterval(waitingTimerRef.current!);
-          setCurrentState('EXPIRED');
-          consultationRepository.expireSession(sessionId).catch(() => undefined);
-          return 0;
-        }
-        return prev - 1;
-      });
+      setWaitingTimeoutSeconds(prev => (prev > 0 ? prev - 1 : 0));
     }, 1000);
   };
 
@@ -338,6 +334,30 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
     if (session.startedAt) setStartTimeString(new Date(session.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
   };
 
+  // Pure Expiration Trigger (avoids React Strict Mode double-fire bugs)
+  useEffect(() => {
+    if (currentState === 'WAITING_FOR_ASTROLOGER' && waitingTimeoutSeconds === 0 && activeSessionId) {
+      if (waitingTimerRef.current) {
+        clearInterval(waitingTimerRef.current);
+        waitingTimerRef.current = null;
+      }
+      
+      consultationRepository.expireSession(activeSessionId)
+        .then(result => {
+          if (result.session.status === 'EXPIRED') {
+            setCurrentState('EXPIRED');
+          } else {
+            hydrateBillingState(result.session, result.balance);
+          }
+        })
+        .catch(() => {
+          consultationRepository.getSession(activeSessionId)
+            .then(session => hydrateBillingState(session))
+            .catch(() => setCurrentState('EXPIRED'));
+        });
+    }
+  }, [waitingTimeoutSeconds, currentState, activeSessionId]);
+
   useEffect(() => {
     // If sessionStatus was updated via Realtime (from the hook), refresh session state
     if (sessionStatus && !['ENDED', 'REJECTED', 'EXPIRED', 'CANCELLED'].includes(currentState)) {
@@ -346,6 +366,23 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
       }
     }
   }, [sessionStatus, currentState]);
+
+  // Mandatory Timer Cleanup Guard
+  // Ensures ONLY ONE interval exists and is rigorously cleared on any state exit.
+  useEffect(() => {
+    if (currentState !== 'WAITING_FOR_ASTROLOGER' || !activeSessionId) {
+      if (waitingTimerRef.current) {
+        clearInterval(waitingTimerRef.current);
+        waitingTimerRef.current = null;
+      }
+    }
+    return () => {
+      if (waitingTimerRef.current) {
+        clearInterval(waitingTimerRef.current);
+        waitingTimerRef.current = null;
+      }
+    };
+  }, [currentState, activeSessionId]);
 
   // -----------------------------------------------------------------
   // 5. BILLING TIMER & RUNTIME ENG (ACTIVE / LOW_BALANCE / RECHARGING)
@@ -1408,22 +1445,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
         </div>
       )}
 
-      {/* Collapsible Developer Tools Panel (Only in development environment) */}
-      {(import.meta as any).env?.DEV === true && (
-        <details className="bg-neutral-50 border-b border-neutral-200/50 z-20">
-          <summary className="px-4 py-1.5 flex items-center justify-between text-[10px] text-neutral-500 font-bold uppercase tracking-wider cursor-pointer hover:bg-neutral-100 select-none">
-            <span>⚡ Developer Tools</span>
-            <span className="text-neutral-400 font-mono text-[9px] lowercase">click to toggle</span>
-          </summary>
-          <div className="px-4 pb-2 pt-1 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-[10px] text-neutral-500 font-semibold select-none border-t border-neutral-200/20">
-            <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
-              <span className="bg-neutral-200 text-neutral-600 font-extrabold px-1.5 py-0.5 rounded uppercase">Sandbox Mode</span>
-              <span className="bg-white border border-neutral-200 text-neutral-600 px-2 py-0.5 rounded font-extrabold">Server Billing</span>
-            </div>
-            <span className="text-neutral-400 font-medium truncate min-w-0">Full Session ID: <span className="font-mono text-[9.5px] select-all">{activeSessionId || '#RESTORED'}</span></span>
-          </div>
-        </details>
-      )}
+
 
       {/* Main Chat Scroll Frame */}
       <div className="flex-1 overflow-y-auto px-4 py-4 z-10 flex flex-col no-scrollbar bg-white/10">

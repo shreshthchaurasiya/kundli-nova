@@ -27,13 +27,15 @@ import HelpSupportScreen from './screens/HelpSupportScreen';
 import HoroscopeScreen from './screens/HoroscopeScreen';
 import {
   AstrologerApplicationScreen,
+  AstrologerPartnershipScreen,
+  PublicAstrologerProfileScreen,
+} from './features/astrologer';
+import {
   AstrologerDashboardScreen,
   AstrologerConsultationChatScreen,
-  AstrologerPartnershipScreen,
   AstrologerProfileEditorScreen,
-  PublicAstrologerProfileScreen,
   useAstrologerDashboard,
-} from './features/astrologer';
+} from './astrologer-workspace';
 import BottomNav from './components/BottomNav';
 import { Screen, Tab } from './types';
 import { AnimatePresence, motion } from 'motion/react';
@@ -89,7 +91,8 @@ export default function App() {
         // email confirmation cannot skip it.
         if (currentScreen !== 'welcome-gift') setCurrentScreen('welcome-gift');
       } else if (AUTH_SCREENS.includes(currentScreen)) {
-        setCurrentScreen(astrologerWorkspace ? 'astrologer-dashboard' : 'home');
+        const savedWorkspace = localStorage.getItem('kundli_nova_workspace');
+        setCurrentScreen(astrologerWorkspace && savedWorkspace === 'astrologer' ? 'astrologer-dashboard' : 'home');
       }
     } else {
       // Profile creation, welcome gift, and all application screens are protected.
@@ -142,7 +145,16 @@ export default function App() {
     ? user.phone.replace(/^\+91(\d{5})(\d{5})$/, '+91 $1 $2')
     : '';
 
-  const menuItems = [
+  const isAstrologerMode = ['astrologer-dashboard', 'manage-astrologer-profile', 'astrologer-consultation-chat'].includes(currentScreen);
+  
+  const menuItems = isAstrologerMode ? [
+    { id: 'profile', label: 'Public Profile', icon: <User size={20} strokeWidth={1.8} className="text-emerald-500" /> },
+    { id: 'wallet', label: 'Earnings & Payouts', icon: <Wallet size={20} strokeWidth={1.8} className="text-emerald-500" /> },
+    { id: 'notifications', label: 'Dashboard Alerts', icon: <Bell size={20} strokeWidth={1.8} className="text-emerald-500" /> },
+    { id: 'settings', label: 'Settings', icon: <Settings size={20} strokeWidth={1.8} className="text-emerald-500" /> },
+    { id: 'help', label: 'Partner Support', icon: <HelpCircle size={20} strokeWidth={1.8} className="text-emerald-500" /> },
+    { id: 'logout', label: 'Logout', icon: <LogOut size={20} strokeWidth={1.8} className="text-[#EF4444]/70" />, isLogout: true },
+  ] : [
     { id: 'profile', label: 'My Profile', icon: <User size={20} strokeWidth={1.8} className="text-neutral-500" /> },
     { id: 'wallet', label: 'Wallet', icon: <Wallet size={20} strokeWidth={1.8} className="text-neutral-500" /> },
     { id: 'notifications', label: 'Notifications', icon: <Bell size={20} strokeWidth={1.8} className="text-neutral-500" /> },
@@ -211,7 +223,7 @@ export default function App() {
       case 'astrologer-profile': return <PublicAstrologerProfileScreen astrologerId={routeParams?.astrologerId} onNavigate={navigate} />;
       case 'partner-with-us': return <AstrologerPartnershipScreen onNavigate={navigate} />;
       case 'astrologer-application': return <AstrologerApplicationScreen onNavigate={navigate} />;
-      case 'astrologer-dashboard': return <AstrologerDashboardScreen onNavigate={navigate} />;
+      case 'astrologer-dashboard': return <AstrologerDashboardScreen onNavigate={navigate} onOpenDrawer={() => setIsDrawerOpen(true)} />;
       case 'astrologer-consultation-chat': return (
         <AstrologerConsultationChatScreen
           sessionId={routeParams?.sessionId}
@@ -274,30 +286,44 @@ export default function App() {
                 className="absolute inset-y-0 left-0 w-[84%] max-w-[330px] bg-white z-[100] shadow-[12px_0_40px_rgba(0,0,0,0.04)] flex flex-col overflow-hidden"
               >
                 {/* Profile Header Section */}
-                <div className="pt-[max(48px,env(safe-area-inset-top))] pb-[20px] px-[24px] flex flex-col items-start bg-white">
-                  <p className="text-[11px] font-[700] text-neutral-400 uppercase tracking-widest leading-none mb-[16px]">
-                    {getGreeting()}
+                <div className={`pt-[max(48px,env(safe-area-inset-top))] pb-[20px] px-[24px] flex flex-col items-start ${isAstrologerMode ? 'bg-[#111827] text-white' : 'bg-white text-neutral-900'}`}>
+                  <p className={`text-[11px] font-[700] uppercase tracking-widest leading-none mb-[16px] ${isAstrologerMode ? 'text-emerald-400' : 'text-neutral-400'}`}>
+                    {isAstrologerMode ? 'Astrologer Mode' : getGreeting()}
                   </p>
 
                   <motion.div
                     whileTap={{ scale: 0.96 }}
                     onClick={() => {
                       setIsDrawerOpen(false);
-                      handleTabChange('profile');
+                      if (isAstrologerMode) {
+                         // astrologer profile edit would go here if needed, or do nothing as it's handled in dashboard
+                      } else {
+                         handleTabChange('profile');
+                      }
                     }}
                     className="relative mb-[16px] cursor-pointer group rounded-full overflow-hidden"
                   >
-                    <div className="w-[64px] h-[64px] rounded-full bg-gradient-to-tr from-[#FF8A00] to-[#FFA733] text-white flex items-center justify-center text-[24px] font-[800] shadow-[0_4px_16px_rgba(255,138,0,0.15)] ring-4 ring-neutral-50 shrink-0 relative overflow-hidden transition-all duration-300">
-                      {userName.charAt(0).toUpperCase()}
-                      <div className="absolute inset-0 bg-black/15 opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity flex items-center justify-center duration-200">
-                        <Pencil size={14} className="text-white fill-none stroke-[2.5]" />
-                      </div>
+                    <div className={`w-[64px] h-[64px] rounded-full flex items-center justify-center text-[24px] font-[800] shrink-0 relative overflow-hidden transition-all duration-300 ${
+                      isAstrologerMode ? 'bg-gradient-to-tr from-emerald-500 to-emerald-400 text-white shadow-[0_4px_16px_rgba(16,185,129,0.3)] ring-4 ring-[#111827]' : 'bg-gradient-to-tr from-[#FF8A00] to-[#FFA733] text-white shadow-[0_4px_16px_rgba(255,138,0,0.15)] ring-4 ring-neutral-50'
+                    }`}>
+                      {(isAstrologerMode && astrologerWorkspace?.image) ? (
+                        <img src={astrologerWorkspace.image} alt={astrologerWorkspace.name} className="w-full h-full object-cover" />
+                      ) : (
+                        isAstrologerMode ? (astrologerWorkspace?.name?.charAt(0).toUpperCase() || 'A') : userName.charAt(0).toUpperCase()
+                      )}
+                      {!isAstrologerMode && (
+                        <div className="absolute inset-0 bg-black/15 opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity flex items-center justify-center duration-200">
+                          <Pencil size={14} className="text-white fill-none stroke-[2.5]" />
+                        </div>
+                      )}
                     </div>
                   </motion.div>
 
-                  <h2 className="text-[19px] font-[800] text-neutral-900 tracking-tight leading-tight">{userName}</h2>
-                  <p className="text-[11.5px] text-neutral-400 font-semibold leading-none mt-[6px]">Manage your Kundli Nova account</p>
-                  {userPhone && (
+                  <h2 className="text-[19px] font-[800] tracking-tight leading-tight">{isAstrologerMode ? astrologerWorkspace?.name : userName}</h2>
+                  <p className={`text-[11.5px] font-semibold leading-none mt-[6px] ${isAstrologerMode ? 'text-neutral-400' : 'text-neutral-400'}`}>
+                    {isAstrologerMode ? 'Manage your Workspace' : 'Manage your Kundli Nova account'}
+                  </p>
+                  {!isAstrologerMode && userPhone && (
                     <p className="text-[12.5px] text-neutral-500 font-medium leading-none mt-[10px]">{userPhone}</p>
                   )}
                 </div>
@@ -327,7 +353,7 @@ export default function App() {
                         </div>
 
                         <div className="flex items-center space-x-[10px]">
-                          {item.id === 'wallet' && (
+                          {item.id === 'wallet' && !isAstrologerMode && (
                             <span className="text-[11.5px] font-[700] text-neutral-600 bg-neutral-100/60 px-2.5 py-0.5 rounded-full border border-neutral-100/50 tracking-tight">
                               ₹{walletBalance.toLocaleString('en-IN')}
                             </span>

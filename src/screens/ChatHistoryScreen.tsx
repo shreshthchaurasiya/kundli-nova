@@ -24,6 +24,7 @@ interface HistoryItem {
   astrologerId?: string;
   image?: string;
   active?: boolean;
+  profileId?: string;
 }
 
 const consultationRepository = new ApiConsultationRepository();
@@ -132,6 +133,7 @@ export default function ChatHistoryScreen({ onNavigate }: ChatHistoryScreenProps
             title: thread.kind === 'free' ? 'Free Astrology Chat' : thread.topic || 'Nova AI',
             preview: thread.lastMessage || 'Open conversation',
             timestamp: thread.timestamp,
+            profileId: thread.profileId,
           }));
 
         if (active) {
@@ -160,7 +162,7 @@ export default function ChatHistoryScreen({ onNavigate }: ChatHistoryScreenProps
 
   const openChat = (item: HistoryItem) => {
     if (item.kind === 'nova') {
-      onNavigate('nova-ai-chat', { conversationId: item.id });
+      onNavigate('nova-ai-chat', { conversationId: item.id, profileId: item.profileId });
       return;
     }
     if (item.kind === 'free') {

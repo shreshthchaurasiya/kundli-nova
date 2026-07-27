@@ -220,6 +220,28 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
             </div>
           </div>
 
+          {/* Switch to Astrologer Workspace (if approved) */}
+          {astrologerProfile && (
+            <button
+              onClick={() => {
+                localStorage.setItem('kundli_nova_workspace', 'astrologer');
+                onNavigate('astrologer-dashboard');
+              }}
+              className="mt-4 mb-2 flex w-full items-center justify-between rounded-[20px] bg-gradient-to-r from-neutral-900 to-neutral-800 p-4 shadow-[0_8px_20px_rgba(0,0,0,0.15)] active:scale-[0.98] transition-transform"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-emerald-400 border border-white/10 shadow-inner">
+                  <BadgeCheck size={24} />
+                </div>
+                <div className="text-left">
+                  <span className="block text-sm font-black text-white">Astrologer Workspace</span>
+                  <span className="mt-0.5 block text-[11px] font-bold text-neutral-400">Switch to answer customer requests</span>
+                </div>
+              </div>
+              <ChevronRight size={20} className="text-neutral-500" />
+            </button>
+          )}
+
           {/* Personal Information Card */}
           <div className="bg-neutral-50/50 border border-neutral-100/60 rounded-[18px] p-5 shadow-[0_2px_8px_rgba(0,0,0,0.01)] space-y-4">
             <div className="flex items-center space-x-2 border-b border-neutral-100 pb-3 mb-2">

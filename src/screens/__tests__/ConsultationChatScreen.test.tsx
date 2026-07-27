@@ -135,4 +135,118 @@ describe('ConsultationChatScreen', () => {
       // Ensure we don't have the profile icon in the header (hard to assert easily since it's just a button with a User icon, but finding the aria-label is enough)
     });
   });
+
+  describe('Race Condition & Timer Cleanup Tests', () => {
+    it('Waiting timer reaches zero and backend returns EXPIRED', async () => {
+      vi.useFakeTimers();
+      (ApiConsultationRepository.prototype.createSession as any).mockResolvedValue(MOCK_SESSION_RESULT);
+      
+      let resolveExpire: any;
+      const expirePromise = new Promise(r => resolveExpire = r);
+      (ApiConsultationRepository.prototype.expireSession as any).mockReturnValue(expirePromise);
+
+      render(<ConsultationChatScreen astrologerId="a1" onNavigate={onNavigate} />);
+      
+      // Wait for it to enter WAITING state
+      await waitFor(() => {
+        expect(screen.getByText(/Request expires in/i)).toBeInTheDocument();
+      });
+
+      // Fast forward 60 seconds
+      act(() => {
+        vi.advanceTimersByTime(60000);
+      });
+
+      // UI should not immediately show Request Expired until backend resolves
+      resolveExpire({ session: { status: 'EXPIRED' } });
+      
+      await waitFor(() => {
+        expect(screen.getByText(/Request Expired/i)).toBeInTheDocument();
+      });
+      vi.useRealTimers();
+    });
+
+    it('Astrologer accepts just before timer reaches zero (API resolves to ACTIVE)', async () => {
+      vi.useFakeTimers();
+      (ApiConsultationRepository.prototype.createSession as any).mockResolvedValue(MOCK_SESSION_RESULT);
+      
+      (ApiConsultationRepository.prototype.expireSession as any).mockResolvedValue({
+        session: { status: 'ACTIVE', elapsedSeconds: 0, totalCharged: 0 },
+        balance: 1000
+      });
+
+      render(<ConsultationChatScreen astrologerId="a1" onNavigate={onNavigate} />);
+      
+      await waitFor(() => {
+        expect(screen.getByText(/Request expires in/i)).toBeInTheDocument();
+      });
+
+      act(() => {
+        vi.advanceTimersByTime(60000);
+      });
+
+      // UI should NOT show expired, it should show ACTIVE (Wait for astrologer connection or chat elements)
+      await waitFor(() => {
+        expect(screen.queryByText(/Request Expired/i)).not.toBeInTheDocument();
+      });
+      vi.useRealTimers();
+    });
+
+    it('Expiration API/network failure -> fetches latest authoritative state', async () => {
+      vi.useFakeTimers();
+      (ApiConsultationRepository.prototype.createSession as any).mockResolvedValue(MOCK_SESSION_RESULT);
+      
+      // Mock failure of expireSession
+      (ApiConsultationRepository.prototype.expireSession as any).mockRejectedValue(new Error('Network failure'));
+      // Mock recovery via getSession
+      (ApiConsultationRepository.prototype.getSession as any).mockResolvedValue({
+        id: 's1', status: 'ACTIVE', elapsedSeconds: 0, totalCharged: 0
+      });
+
+      render(<ConsultationChatScreen astrologerId="a1" onNavigate={onNavigate} />);
+      await waitFor(() => {
+        expect(screen.getByText(/Request expires in/i)).toBeInTheDocument();
+      });
+
+      act(() => {
+        vi.advanceTimersByTime(60000);
+      });
+
+      // UI should NOT show expired, it should fetch getSession and turn ACTIVE
+      await waitFor(() => {
+        expect(screen.queryByText(/Request Expired/i)).not.toBeInTheDocument();
+        expect(ApiConsultationRepository.prototype.getSession).toHaveBeenCalledWith('s1');
+      });
+      vi.useRealTimers();
+    });
+
+    it('Realtime changes WAITING to ACTIVE clears interval immediately', async () => {
+      vi.useFakeTimers();
+      (ApiConsultationRepository.prototype.createSession as any).mockResolvedValue(MOCK_SESSION_RESULT);
+      
+      const { rerender } = render(<ConsultationChatScreen astrologerId="a1" onNavigate={onNavigate} />);
+      await waitFor(() => {
+        expect(screen.getByText(/Request expires in/i)).toBeInTheDocument();
+      });
+
+      // Simulate Realtime status update
+      (useRealtimeConsultationChat as any).mockReturnValue({
+        messages: [], sessionStatus: 'ACTIVE', send: vi.fn(), error: null
+      });
+      
+      // Mock getSession called by the effect
+      (ApiConsultationRepository.prototype.getSession as any).mockResolvedValue({
+        id: 's1', status: 'ACTIVE', elapsedSeconds: 0, totalCharged: 0
+      });
+
+      rerender(<ConsultationChatScreen astrologerId="a1" onNavigate={onNavigate} />);
+
+      await waitFor(() => {
+        expect(screen.queryByText(/Request expires in/i)).not.toBeInTheDocument();
+      });
+      
+      expect(window.clearInterval).toHaveBeenCalled();
+      vi.useRealTimers();
+    });
+  });
 });

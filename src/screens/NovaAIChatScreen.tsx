@@ -32,6 +32,7 @@ import CelestialChatBackground from '../components/chat/CelestialChatBackground'
 import { chatStorage } from '../services/storage/chatStorage';
 import { Message, AiChatThread } from '../types/chat';
 import { NormalizedCompatibilityContext } from '../types/matchingAiContext';
+import { supabase } from '../lib/supabase';
 
 interface NovaAIChatScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
@@ -63,6 +64,33 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
   const [currentTopic, setCurrentTopic] = useState<string>('General Guidance');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const autoAnalysisTriggeredRef = useRef(false);
+
+  // Image attachment state
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5242880) {
+        alert('File size exceeds the 5MB limit.');
+        return;
+      }
+      setSelectedImage(file);
+      setImagePreviewUrl(URL.createObjectURL(file));
+    }
+    if (e.target) e.target.value = '';
+  };
+
+  const clearImageSelection = () => {
+    setSelectedImage(null);
+    if (imagePreviewUrl) {
+      URL.revokeObjectURL(imagePreviewUrl);
+      setImagePreviewUrl(null);
+    }
+  };
 
   // PDF modal state for progress
   const [pdfModalState, setPdfModalState] = useState<'idle' | 'generating' | 'ready'>('idle');
@@ -437,9 +465,8 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
   const requestNovaResponse = async (conversation: Message[], profileId: string, profileBId?: string, compatibilityContext?: NormalizedCompatibilityContext) => {
     const result = await postAiRequest<{ texts: string[] }>('/api/chat', {
       messages: conversation
-        .filter(message => message.type === 'text' || !message.type)
-        .filter(message => Boolean(message.text))
-        .map(message => ({ sender: message.sender, text: message.text })),
+        .filter(message => message.text || message.attachmentUrl)
+        .map(message => ({ sender: message.sender, text: message.text || '', attachmentUrl: message.attachmentUrl })),
       profileId: profileId,
       profileBId: profileBId || routeParams?.profileBId,
       sessionId: currentConvId,
@@ -499,17 +526,70 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputText.trim() || isTyping) return;
+    if ((!inputText.trim() && !selectedImage) || isTyping || isUploading) return;
+
+    let attachmentUrl: string | undefined = undefined;
+
+    if (selectedImage) {
+      setIsUploading(true);
+      try {
+        const compressImage = (file: File): Promise<string> => {
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = (event) => {
+              const img = new Image();
+              img.src = event.target?.result as string;
+              img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const MAX_WIDTH = 1024;
+                const MAX_HEIGHT = 1024;
+                let width = img.width;
+                let height = img.height;
+
+                if (width > height) {
+                  if (width > MAX_WIDTH) {
+                    height *= MAX_WIDTH / width;
+                    width = MAX_WIDTH;
+                  }
+                } else {
+                  if (height > MAX_HEIGHT) {
+                    width *= MAX_HEIGHT / height;
+                    height = MAX_HEIGHT;
+                  }
+                }
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx?.drawImage(img, 0, 0, width, height);
+                resolve(canvas.toDataURL('image/jpeg', 0.8));
+              };
+              img.onerror = (e) => reject(e);
+            };
+            reader.onerror = (e) => reject(e);
+          });
+        };
+        attachmentUrl = await compressImage(selectedImage);
+      } catch (err) {
+        console.error('Image compression failed', err);
+        alert('Image processing failed. Please try a different image.');
+        setIsUploading(false);
+        return;
+      }
+      setIsUploading(false);
+    }
 
     const userText = inputText.trim();
     setInputText('');
+    clearImageSelection();
 
     const userMsg: Message = {
       id: `msg-${Date.now()}`,
       text: userText,
       sender: 'user',
       time: getFormattedTime(),
-      type: 'text'
+      type: attachmentUrl ? 'image' : 'text',
+      attachmentUrl
     };
 
     const newMsgsList = [...messages, userMsg];
@@ -756,9 +836,16 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
                           : 'bg-[#FFFFFF] border border-[#F1EFE9] text-[#111827] rounded-tl-[4px]'
                     }`}
                   >
-                    <div className="text-[13.5px] sm:text-[14px] leading-[1.6] whitespace-pre-wrap font-medium">
-                      {msg.text}
-                    </div>
+                    {msg.attachmentUrl && (
+                      <div className="mb-2 rounded-xl overflow-hidden border border-[#F3F4F6]/20 bg-black/5">
+                        <img src={msg.attachmentUrl} alt="Attachment" className="max-w-full h-auto object-cover max-h-[300px]" />
+                      </div>
+                    )}
+                    {msg.text && (
+                      <div className="text-[13.5px] sm:text-[14px] leading-[1.6] whitespace-pre-wrap font-medium">
+                        {msg.text}
+                      </div>
+                    )}
                     <span className={`text-[9.5px] font-bold mt-[6px] self-end tracking-wide ${
                       msg.sender === 'user' ? 'text-[#FFFFFF]/75' : 'text-[#9CA3AF]'
                     }`}>
@@ -814,31 +901,65 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
       )}
 
       {/* Message Input Bar (Fixed bottom layout) */}
-      <div className="bg-[#FFFFFF] px-[20px] py-[12px] pb-[max(20px,env(safe-area-inset-bottom))] border-t border-[#F3F4F6] z-20 flex items-center space-x-[12px] shadow-[0_-4px_20px_rgba(0,0,0,0.01)] shrink-0">
-        <form onSubmit={handleSendMessage} className="flex-1 flex items-center bg-[#F9FAFB] border border-[#F3F4F6] rounded-[24px] pr-[6px] pl-[16px]">
-          <div className="text-neutral-400 mr-2.5 shrink-0">
-            <Sparkle size={16} strokeWidth={2.2} className="text-[#FF8A00]/80" />
+      <div className="relative bg-[#FFFFFF] px-[16px] py-[12px] pb-[max(20px,env(safe-area-inset-bottom))] border-t border-[#F3F4F6] z-20 flex flex-col shadow-[0_-4px_20px_rgba(0,0,0,0.01)] shrink-0">
+        <input 
+          type="file" 
+          ref={fileInputRef} 
+          onChange={handleImageSelect} 
+          accept="image/jpeg, image/png, image/webp" 
+          className="hidden" 
+        />
+        
+        {imagePreviewUrl && (
+          <div className="mb-3 flex items-start gap-3 rounded-xl border border-neutral-100 bg-neutral-50 p-2">
+            <div className="relative h-16 w-16 shrink-0 rounded-lg overflow-hidden border border-neutral-200">
+              <img src={imagePreviewUrl} alt="Preview" className="h-full w-full object-cover" />
+              <button
+                type="button"
+                onClick={clearImageSelection}
+                className="absolute -right-1 -top-1 bg-white rounded-full p-0.5 shadow-sm border border-neutral-200 text-neutral-500 hover:text-red-500 cursor-pointer"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="flex flex-1 flex-col justify-center h-16 text-xs text-neutral-500">
+              <span className="font-semibold text-neutral-700 truncate max-w-[200px]">{selectedImage?.name}</span>
+              <span>{(selectedImage?.size ? (selectedImage.size / 1024 / 1024).toFixed(2) : '0')} MB</span>
+            </div>
           </div>
-          <input 
-            type="text" 
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            placeholder="Ask Nova AI..." 
-            className="flex-1 bg-transparent border-none focus:outline-none text-[13.5px] sm:text-[14px] font-medium text-[#111827] placeholder:text-[#9CA3AF] h-[48px]"
-          />
-          
-          <button 
-            type="submit"
-            disabled={!inputText.trim() || isTyping}
-            className={`w-[36px] h-[36px] rounded-full flex items-center justify-center shrink-0 transition-all ${
-              inputText.trim() && !isTyping
-                ? 'bg-[#FF8A00] text-[#FFFFFF] shadow-[0_2px_8px_rgba(255,138,0,0.3)] active:scale-[0.96]' 
-                : 'bg-[#F3F4F6] text-[#9CA3AF]'
-            }`}
-          >
-            <Send size={15} strokeWidth={2.5} className="ml-[2.5px]" />
-          </button>
-        </form>
+        )}
+
+        <div className="flex items-center space-x-[12px] w-full">
+          <form onSubmit={handleSendMessage} className="flex-1 flex items-center bg-[#F9FAFB] border border-[#F3F4F6] rounded-[24px] pr-[6px] pl-[12px]">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isTyping || isUploading}
+              className="text-neutral-400 mr-2 p-1.5 hover:text-[#FF8A00] hover:bg-[#FF8A00]/10 rounded-full transition-colors disabled:opacity-50"
+            >
+              <Paperclip size={18} strokeWidth={2} />
+            </button>
+            <input 
+              type="text" 
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              placeholder="Ask Nova AI..." 
+              className="flex-1 bg-transparent border-none focus:outline-none text-[13.5px] sm:text-[14px] font-medium text-[#111827] placeholder:text-[#9CA3AF] h-[48px]"
+            />
+            
+            <button 
+              type="submit"
+              disabled={(!inputText.trim() && !selectedImage) || isTyping || isUploading}
+              className={`w-[36px] h-[36px] rounded-full flex items-center justify-center shrink-0 transition-all ${
+                (inputText.trim() || selectedImage) && !isTyping && !isUploading
+                  ? 'bg-[#FF8A00] text-[#FFFFFF] shadow-[0_2px_8px_rgba(255,138,0,0.3)] active:scale-[0.96]' 
+                  : 'bg-[#F3F4F6] text-[#9CA3AF]'
+              }`}
+            >
+              <Send size={15} strokeWidth={2.5} className="ml-[2.5px]" />
+            </button>
+          </form>
+        </div>
       </div>
 
       {/* PDF Generation Overlay Sheet */}

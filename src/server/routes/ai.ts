@@ -32,7 +32,7 @@ export function createAiRouter(config: AiRouterConfig) {
 
   const protectedAiPaths = ['/api/ai', '/api/chat', '/api/explain'];
 
-  router.use(protectedAiPaths, express.json({ limit: '256kb' }));
+  router.use(protectedAiPaths, express.json({ limit: '5mb' }));
   router.use(protectedAiPaths, rateLimit({
     windowMs: 60 * 1000,
     max: 20,
@@ -75,9 +75,13 @@ export function createAiRouter(config: AiRouterConfig) {
     const userId = res.locals.user.id;
     
     const safeMessages = messages
-      .filter((message: any) => typeof message?.text === 'string' && ['user', 'nova'].includes(message?.sender))
-      .map((message: any) => ({ sender: message.sender, text: message.text.trim().slice(0, 2000) }))
-      .filter((message: any) => message.text)
+      .filter((message: any) => ['user', 'nova'].includes(message?.sender) && (typeof message?.text === 'string' || message?.attachmentUrl))
+      .map((message: any) => ({
+        sender: message.sender,
+        text: (message.text || '').trim().slice(0, 2000),
+        attachmentUrl: message.attachmentUrl || null
+      }))
+      .filter((message: any) => message.text || message.attachmentUrl)
       .slice(-20);
       
     const firstUserMessage = safeMessages.findIndex((message: any) => message.sender === 'user');
@@ -112,9 +116,30 @@ export function createAiRouter(config: AiRouterConfig) {
       systemInstruction = `${NovaAIPromptBuilder.SYSTEM_INSTRUCTION}\n\nAstrology Context: UNAVAILABLE`;
     }
 
-    const conversation = safeMessages.slice(firstUserMessage).map((message: any) => ({
-      role: message.sender === 'user' ? 'user' : 'model',
-      parts: [{ text: message.text }],
+    const conversation = await Promise.all(safeMessages.slice(firstUserMessage).map(async (message: any) => {
+      const parts: any[] = [];
+      if (message.attachmentUrl) {
+        try {
+          const imgRes = await fetch(message.attachmentUrl);
+          if (imgRes.ok) {
+            const arrayBuffer = await imgRes.arrayBuffer();
+            const base64 = Buffer.from(arrayBuffer).toString('base64');
+            const mimeType = imgRes.headers.get('content-type') || 'image/jpeg';
+            parts.push({
+              inlineData: { data: base64, mimeType }
+            });
+          }
+        } catch (e) {
+          console.error('[Nova AI] Failed to fetch attachment:', e);
+        }
+      }
+      
+      parts.push({ text: message.text || "Please analyze this image." });
+
+      return {
+        role: message.sender === 'user' ? 'user' : 'model',
+        parts,
+      };
     }));
 
     try {
