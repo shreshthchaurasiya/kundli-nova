@@ -10,6 +10,8 @@ import { useAuth } from '../auth';
 import { useProfile } from '../contexts/ProfileContext';
 import { useWallet } from '../contexts/WalletContext';
 import { APPLICATION_STATUS_CONTENT, useAstrologerPartner } from '../features/astrologer';
+import { AstrologyApi } from '../services/api/astrologyApi';
+import { KundliNovaNatalChart } from '../server/types/astrologyProvider';
 
 interface ProfileScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
@@ -33,6 +35,8 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
   const walletBalance = wallet.balance;
   const [isKundliOpen, setIsKundliOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [apiChartData, setApiChartData] = useState<KundliNovaNatalChart | null>(null);
+  const [isChartLoading, setIsChartLoading] = useState(false);
 
   // Helper to show premium feedback toasts
   const showToast = (msg: string) => {
@@ -135,6 +139,65 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
   };
 
   const astroInfo = calculateAstrology(dob);
+
+  React.useEffect(() => {
+    if (isKundliOpen && defaultKundliProfile?.id && !apiChartData) {
+      const fetchChart = async () => {
+        setIsChartLoading(true);
+        try {
+          const data = await AstrologyApi.getKundli(defaultKundliProfile.id);
+          setApiChartData(data);
+        } catch (e) {
+          console.error('Failed to load chart data:', e);
+        } finally {
+          setIsChartLoading(false);
+        }
+      };
+      fetchChart();
+    }
+  }, [isKundliOpen, defaultKundliProfile?.id, apiChartData]);
+
+  const getLagnaZodiacNumber = (): number => {
+    const lagnaLower = (apiChartData?.ascendant?.sign || astroInfo?.lagna || 'Aries').toLowerCase();
+    if (lagnaLower.includes('mesh') || lagnaLower.includes('aries')) return 1;
+    if (lagnaLower.includes('vrishabha') || lagnaLower.includes('taurus')) return 2;
+    if (lagnaLower.includes('mithuna') || lagnaLower.includes('gemini')) return 3;
+    if (lagnaLower.includes('karka') || lagnaLower.includes('cancer')) return 4;
+    if (lagnaLower.includes('simha') || lagnaLower.includes('leo')) return 5;
+    if (lagnaLower.includes('kanya') || lagnaLower.includes('virgo')) return 6;
+    if (lagnaLower.includes('tula') || lagnaLower.includes('libra')) return 7;
+    if (lagnaLower.includes('vrishchika') || lagnaLower.includes('scorpio')) return 8;
+    if (lagnaLower.includes('dhanu') || lagnaLower.includes('sagittarius')) return 9;
+    if (lagnaLower.includes('makara') || lagnaLower.includes('capricorn')) return 10;
+    if (lagnaLower.includes('kumbha') || lagnaLower.includes('aquarius')) return 11;
+    if (lagnaLower.includes('meena') || lagnaLower.includes('pisces')) return 12;
+    return 1;
+  };
+
+  const getZodiacNumberForHouse = (houseNum: number): number => {
+    const base = getLagnaZodiacNumber();
+    const result = (base + houseNum - 1) % 12;
+    return result === 0 ? 12 : result;
+  };
+
+  const getPlanetsInHouse = (houseNum: number): string => {
+    if (!apiChartData?.planets) return '';
+    const abbreviations: { [key: string]: string } = {
+      'Sun (Surya)': 'Su', 'Sun': 'Su',
+      'Moon (Chandra)': 'Mo', 'Moon': 'Mo',
+      'Mars (Mangal)': 'Ma', 'Mars': 'Ma',
+      'Mercury (Budh)': 'Me', 'Mercury': 'Me',
+      'Jupiter (Guru)': 'Ju', 'Jupiter': 'Ju',
+      'Venus (Shukra)': 'Ve', 'Venus': 'Ve',
+      'Saturn (Shani)': 'Sa', 'Saturn': 'Sa',
+      'Rahu': 'Ra', 'Ketu': 'Ke'
+    };
+    const found = apiChartData.planets
+      .filter(p => p.house === houseNum)
+      .map(p => abbreviations[p.name] || p.name.substring(0, 2));
+    if (houseNum === 1) found.unshift('Lg');
+    return found.length > 0 ? found.join(', ') : '';
+  };
 
   const handleShareKundli = () => {
     if (navigator.share) {
@@ -411,7 +474,7 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.92, y: 15 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-3xl p-6 shadow-2xl w-full max-w-[380px] text-center border border-neutral-100 flex flex-col items-center"
+              className="bg-white rounded-3xl p-6 shadow-2xl w-full max-w-[420px] text-center border border-neutral-100 flex flex-col items-center"
             >
               {/* Header */}
               <div className="w-full flex items-center justify-between mb-4">
@@ -419,7 +482,7 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
                   <Sparkles size={11} />
                   <span>D1 Chart</span>
                 </div>
-                <h3 className="text-base font-bold text-neutral-900 leading-none">Your Lagna Kundli</h3>
+                <h3 className="text-lg font-bold text-neutral-900 leading-none">Your Lagna Kundli</h3>
                 <button 
                   onClick={() => setIsKundliOpen(false)}
                   className="p-1.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-500 rounded-full transition-colors cursor-pointer"
@@ -429,52 +492,59 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
               </div>
 
               {/* Vedic Astrology geometric Lagna Chart SVG */}
-              <div className="w-full aspect-square max-w-[280px] bg-[#FAF8F5] rounded-2xl border border-neutral-200/80 p-3 relative flex items-center justify-center">
-                <svg viewBox="0 0 200 200" className="w-full h-full text-neutral-800 stroke-current fill-none">
-                  <g strokeWidth="0.8">
-                    {/* Outer border */}
-                    <rect x="5" y="5" width="190" height="190" />
+              <div className="w-full aspect-square max-w-[360px] bg-[#FAF8F5] rounded-2xl border border-neutral-200/80 p-3 relative flex items-center justify-center">
+                {isChartLoading ? (
+                  <div className="flex flex-col items-center justify-center text-neutral-400 space-y-2">
+                    <Sparkles className="animate-spin text-[#FF8A00]" size={24} />
+                    <span className="text-xs font-bold uppercase tracking-wider">Calculating Stars...</span>
+                  </div>
+                ) : (
+                  <svg viewBox="0 0 200 200" className="w-full h-full text-[#B45309] stroke-current fill-none">
+                    <g strokeWidth="1.2">
+                      <rect x="5" y="5" width="190" height="190" />
+                      <line x1="5" y1="5" x2="195" y2="195" />
+                      <line x1="195" y1="5" x2="5" y2="195" />
+                      <polygon points="100,5 195,100 100,195 5,100" />
+                    </g>
                     
-                    {/* Main Diagonal cross lines */}
-                    <line x1="5" y1="5" x2="195" y2="195" />
-                    <line x1="195" y1="5" x2="5" y2="195" />
-                    
-                    {/* Diamond inner square */}
-                    <polygon points="100,5 195,100 100,195 5,100" />
-                  </g>
+                    {/* Dynamic placement of Zodiac sign numbers & Planets for all 12 houses */}
+                    <text x="100" y="53" textAnchor="middle" className="text-[10px] font-[900] fill-[#D97706] stroke-none">{getZodiacNumberForHouse(1)}</text>
+                    <text x="100" y="33" textAnchor="middle" className="text-[8.5px] font-[850] fill-[#111827] stroke-none">{getPlanetsInHouse(1)}</text>
 
-                  {/* House Text and planetary placements (mocked authentically based on zodiac/DOB) */}
-                  <g fontStyle="normal" fontWeight="700" className="text-neutral-500 fill-current text-[8px]" textAnchor="middle">
-                    {/* House Numbers */}
-                    <text x="100" y="70" className="fill-[#FF8A00] font-[850] text-[9.5px]">1</text>
-                    <text x="50" y="45">2</text>
-                    <text x="45" y="90">3</text>
-                    <text x="100" y="130">4</text>
-                    <text x="45" y="150">5</text>
-                    <text x="50" y="180">6</text>
-                    <text x="100" y="155">7</text>
-                    <text x="150" y="180">8</text>
-                    <text x="155" y="130">9</text>
-                    <text x="100" y="92">10</text>
-                    <text x="155" y="90">11</text>
-                    <text x="150" y="45">12</text>
-                  </g>
+                    <text x="55" y="35" textAnchor="middle" className="text-[8px] font-extrabold fill-neutral-400 stroke-none">{getZodiacNumberForHouse(2)}</text>
+                    <text x="45" y="23" textAnchor="middle" className="text-[8.5px] font-[850] fill-[#111827] stroke-none">{getPlanetsInHouse(2)}</text>
 
-                  {/* Planetary Positions */}
-                  <g className="fill-neutral-900 font-bold text-[8.5px] tracking-tighter" textAnchor="middle">
-                    {/* Lagna / Ascendant (First House) */}
-                    <text x="100" y="50">Asc (Lg)</text>
-                    
-                    {/* Planetary placements around different houses */}
-                    <text x="45" y="32">Ju, Ve</text>
-                    <text x="32" y="75">Su, Me</text>
-                    <text x="100" y="112">Mo</text>
-                    <text x="35" y="135">Sa</text>
-                    <text x="165" y="75">Ra</text>
-                    <text x="168" y="150">Ke</text>
-                    <text x="100" y="172">Ma</text>
-                  </g>
-                </svg>
+                    <text x="30" y="60" textAnchor="middle" className="text-[8px] font-extrabold fill-neutral-400 stroke-none">{getZodiacNumberForHouse(3)}</text>
+                    <text x="18" y="50" textAnchor="middle" className="text-[8.5px] font-[850] fill-[#111827] stroke-none">{getPlanetsInHouse(3)}</text>
+
+                    <text x="52" y="113" textAnchor="middle" className="text-[10px] font-[900] fill-[#D97706] stroke-none">{getZodiacNumberForHouse(4)}</text>
+                    <text x="34" y="105" textAnchor="middle" className="text-[8.5px] font-[850] fill-[#111827] stroke-none">{getPlanetsInHouse(4)}</text>
+
+                    <text x="30" y="150" textAnchor="middle" className="text-[8px] font-extrabold fill-neutral-400 stroke-none">{getZodiacNumberForHouse(5)}</text>
+                    <text x="18" y="160" textAnchor="middle" className="text-[8.5px] font-[850] fill-[#111827] stroke-none">{getPlanetsInHouse(5)}</text>
+
+                    <text x="55" y="175" textAnchor="middle" className="text-[8px] font-extrabold fill-neutral-400 stroke-none">{getZodiacNumberForHouse(6)}</text>
+                    <text x="45" y="185" textAnchor="middle" className="text-[8.5px] font-[850] fill-[#111827] stroke-none">{getPlanetsInHouse(6)}</text>
+
+                    <text x="100" y="153" textAnchor="middle" className="text-[10px] font-[900] fill-[#D97706] stroke-none">{getZodiacNumberForHouse(7)}</text>
+                    <text x="100" y="173" textAnchor="middle" className="text-[8.5px] font-[850] fill-[#111827] stroke-none">{getPlanetsInHouse(7)}</text>
+
+                    <text x="145" y="175" textAnchor="middle" className="text-[8px] font-extrabold fill-neutral-400 stroke-none">{getZodiacNumberForHouse(8)}</text>
+                    <text x="155" y="185" textAnchor="middle" className="text-[8.5px] font-[850] fill-[#111827] stroke-none">{getPlanetsInHouse(8)}</text>
+
+                    <text x="170" y="150" textAnchor="middle" className="text-[8px] font-extrabold fill-neutral-400 stroke-none">{getZodiacNumberForHouse(9)}</text>
+                    <text x="182" y="160" textAnchor="middle" className="text-[8.5px] font-[850] fill-[#111827] stroke-none">{getPlanetsInHouse(9)}</text>
+
+                    <text x="148" y="113" textAnchor="middle" className="text-[10px] font-[900] fill-[#D97706] stroke-none">{getZodiacNumberForHouse(10)}</text>
+                    <text x="166" y="105" textAnchor="middle" className="text-[8.5px] font-[850] fill-[#111827] stroke-none">{getPlanetsInHouse(10)}</text>
+
+                    <text x="170" y="60" textAnchor="middle" className="text-[8px] font-extrabold fill-neutral-400 stroke-none">{getZodiacNumberForHouse(11)}</text>
+                    <text x="182" y="50" textAnchor="middle" className="text-[8.5px] font-[850] fill-[#111827] stroke-none">{getPlanetsInHouse(11)}</text>
+
+                    <text x="145" y="35" textAnchor="middle" className="text-[8px] font-extrabold fill-neutral-400 stroke-none">{getZodiacNumberForHouse(12)}</text>
+                    <text x="155" y="23" textAnchor="middle" className="text-[8.5px] font-[850] fill-[#111827] stroke-none">{getPlanetsInHouse(12)}</text>
+                  </svg>
+                )}
               </div>
 
               {/* Description */}

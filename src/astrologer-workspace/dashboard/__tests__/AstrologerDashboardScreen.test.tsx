@@ -82,7 +82,7 @@ describe('AstrologerDashboardScreen', () => {
 
     render(<AstrologerDashboardScreen onNavigate={vi.fn()} />);
     
-    expect(screen.getByText("Today's Gross Billing")).toBeInTheDocument();
+    expect(screen.getByText("Today's Net Earnings")).toBeInTheDocument();
     
     // Test for formatMoney(0) output. Assuming it is ₹0.00
     // Actually jsdom format might use a specific space, we just check for '0.00'

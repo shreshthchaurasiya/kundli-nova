@@ -453,6 +453,7 @@ export interface DetailedDashaSummarySection {
   currentAntardasha: string | null;
   mahadashaStartDate: string | null;
   mahadashaEndDate: string | null;
+  summary: string | null;
   calculationStatus: 'calculated' | 'unavailable';
 }
 
@@ -471,6 +472,7 @@ export interface DetailedDoshaSummaryItem {
 
 export interface DetailedDoshaSummarySection {
   doshas: DetailedDoshaSummaryItem[];
+  summary: string | null;
 }
 
 export interface DetailedYogaSummaryItem {
@@ -489,6 +491,7 @@ export interface DetailedYogaSummaryItem {
 
 export interface DetailedYogaSummarySection {
   yogas: DetailedYogaSummaryItem[];
+  summary: string | null;
 }
 
 export interface KundliNovaDetailedReport {
@@ -509,6 +512,20 @@ export interface KundliNovaDetailedReport {
   unavailableSections: DetailedReportSectionCode[];
 
   birthSummary: DetailedBirthSummarySection | null;
+  executiveSummary: string | null;
+  lifeDomains: {
+    career: string | null;
+    education: string | null;
+    loveAndMarriage: string | null;
+    health: string | null;
+    wealthAndProperty: string | null;
+    familyAndChildren: string | null;
+  } | null;
+  luckyItems: {
+    colors: string[];
+    days: string[];
+    numbers: number[];
+  } | null;
   ascendant: DetailedAscendantSection | null;
   planetaryPositions: DetailedPlanetaryPositionsSection | null;
   houseAnalysis: DetailedHouseAnalysisSection | null;
@@ -516,6 +533,11 @@ export interface KundliNovaDetailedReport {
   dashaSummary: DetailedDashaSummarySection | null;
   doshaSummary: DetailedDoshaSummarySection | null;
   yogaSummary: DetailedYogaSummarySection | null;
+  
+  // Bundled raw data to ensure PDF has everything it needs synchronously
+  bundledDasha?: import('./astrologyProvider').KundliNovaVimshottariDasha | null;
+  bundledDosha?: import('./astrologyProvider').KundliNovaDoshaAnalysis | null;
+  bundledYoga?: import('./astrologyProvider').KundliNovaYogaAnalysis | null;
 }
 
 export interface HoroscopeContentProvider {

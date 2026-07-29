@@ -15,4 +15,5 @@ export interface RequestOptions extends Omit<RequestInit, 'body'> {
   body?: any;
   params?: Record<string, string | number | boolean | undefined>;
   requiresAuth?: boolean;
+  timeout?: number;
 }

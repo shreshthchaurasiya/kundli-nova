@@ -45,9 +45,19 @@ const mockDetailedReportResult: KundliNovaDetailedReport = {
   planetaryPositions: { planets: [] },
   houseAnalysis: { houses: [{ houseNumber: 1, sign: 'Aries', lord: 'Mars', occupants: [], summary: 'Test', calculationStatus: 'calculated' }] },
   nakshatraAnalysis: { moonNakshatra: 'Ashwini', moonPada: 1, nakshatraLord: 'Ketu', deity: 'Ashvins', gana: 'Deva', symbol: 'Horse', summary: 'Test', calculationStatus: 'calculated' },
-  dashaSummary: { currentMahadasha: 'Ketu', currentAntardasha: 'Venus', mahadashaStartDate: '2020-01-01', mahadashaEndDate: '2027-01-01', calculationStatus: 'calculated' },
-  doshaSummary: { doshas: [] },
-  yogaSummary: { yogas: [] }
+  dashaSummary: {
+    currentMahadasha: 'Sun',
+    currentAntardasha: 'Moon',
+    mahadashaStartDate: '2020-01-01',
+    mahadashaEndDate: '2026-01-01',
+    calculationStatus: 'calculated',
+    summary: 'Dasha test summary'
+  },
+  doshaSummary: { doshas: [], summary: 'Dosha test summary' },
+  yogaSummary: { yogas: [], summary: 'Yoga test summary' },
+  executiveSummary: null,
+  lifeDomains: null,
+  luckyItems: null
 };
 
 describe('Detailed Kundli Report Validation (Stage 5F)', () => {

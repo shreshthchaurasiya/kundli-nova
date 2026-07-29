@@ -38,8 +38,9 @@ export class ApiClient {
       headers.set('Authorization', `Bearer ${token}`);
     }
 
+    const timeoutMs = (options as any).timeout || DEFAULT_TIMEOUT_MS;
     const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+    const id = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       const response = await fetch(finalUrl, {

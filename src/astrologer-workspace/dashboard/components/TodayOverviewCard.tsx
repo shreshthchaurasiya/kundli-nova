@@ -17,7 +17,7 @@ export default function TodayOverviewCard({ summary, isLoading, error, onRetry }
       <div className="absolute -left-8 -bottom-8 h-32 w-32 rounded-full bg-emerald-500/10 blur-2xl pointer-events-none" />
       
       <div className="relative p-6">
-        <p className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-neutral-400">Today's Gross Billing</p>
+        <p className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-neutral-400">Today's Net Earnings</p>
         
         {isLoading ? (
           <div className="mt-2 h-10 w-32 rounded-lg bg-neutral-800 animate-pulse" />

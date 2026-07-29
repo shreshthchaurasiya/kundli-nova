@@ -609,6 +609,7 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
           profileA: birthDetails,
           profileB: {
             name: profileB.name,
+            gender: profileB.gender || 'Female',
             dob: profileB.dob,
             tob: profileB.tob,
             city: profileB.birth_city || '',
@@ -634,13 +635,19 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
 
     setPdfModalState('generating');
     try {
+      let currentDetailedReport = detailedReportData;
+      if (!currentDetailedReport && selectedProfileId) {
+        currentDetailedReport = await AstrologyApi.getDetailedKundliReport(selectedProfileId);
+        setDetailedReportData(currentDetailedReport);
+      }
+
       const mockKundliData: import('../services/kundliPdfService').KundliPdfPayload = {
         birthDetails, 
         chart: apiChartData,
-        dasha: apiDashaData,
-        dosha: apiDoshaData,
-        yoga: apiYogaData,
-        detailedReport: detailedReportData,
+        dasha: currentDetailedReport?.bundledDasha || apiDashaData,
+        dosha: currentDetailedReport?.bundledDosha || apiDoshaData,
+        yoga: currentDetailedReport?.bundledYoga || apiYogaData,
+        detailedReport: currentDetailedReport,
         generatedAt: new Date().toLocaleDateString()
       };
       const result = await generateKundliPdf(mockKundliData);
@@ -651,9 +658,10 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
       setPdfModalState('ready');
       // Trigger native download
       result.download();
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
       setPdfModalState('idle');
+      alert(e.message || 'Failed to generate Kundli PDF. Please try again.');
     }
   };
 
@@ -1649,7 +1657,7 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
 
                   <h3 className="text-[17px] font-[850] text-[#111827] tracking-tight">Preparing your Kundli PDF...</h3>
                   <p className="text-[12.5px] font-semibold text-[#6B7280] leading-[1.5] mt-2 max-w-[280px]">
-                    Structuring zodiac charts, placing dynamic planetary details, and generating remedies report.
+                    AI is writing a deeply personalized 8-page report. Please wait up to 2-3 minutes without closing this screen.
                   </p>
                 </div>
               ) : (

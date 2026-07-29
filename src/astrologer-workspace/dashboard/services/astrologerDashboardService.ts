@@ -4,9 +4,10 @@ import {
   AstrologerDashboardSession,
   AstrologerDashboardSnapshot,
   AstrologerWorkspaceProfile,
+  AstrologerPayoutAccount,
 } from '../types';
 import { ASTROLOGER_DASHBOARD_SESSION_LIMIT } from '../dashboardConfig';
-import { AstrologerDashboardSummary } from '../types';
+import { AstrologerDashboardSummary, AstrologerEarningsPayoutSummary, AstrologerWithdrawalRequest, AstrologerPaymentStatement, AstrologerPaymentStatementType } from '../types';
 
 type WorkspaceProfileRow = {
   id: string;
@@ -159,5 +160,140 @@ export const astrologerDashboardService = {
 
     if (error) throw new Error(error.message);
     return mapProfile(data as unknown as WorkspaceProfileRow);
+  },
+
+  async getPayoutAccount(): Promise<AstrologerPayoutAccount | null> {
+    await requireUserId();
+    const { data, error } = await supabase.rpc('get_my_payout_account');
+    if (error) throw new Error(error.message);
+    if (!data) return null;
+    
+    return {
+      id: data.id,
+      accountHolderName: data.account_holder_name,
+      bankName: data.bank_name,
+      accountNumberLast4: data.account_number_last4,
+      ifscCode: data.ifsc_code,
+      status: data.status,
+      rejectionReason: data.rejection_reason,
+      submittedAt: data.submitted_at,
+      verifiedAt: data.verified_at,
+    };
+  },
+
+  async savePayoutAccount(details: { accountHolderName: string, bankName: string, accountNumber: string, ifscCode: string }): Promise<AstrologerPayoutAccount> {
+    await requireUserId();
+    const { data, error } = await supabase.rpc('submit_my_payout_account', {
+      p_account_holder_name: details.accountHolderName,
+      p_bank_name: details.bankName,
+      p_account_number: details.accountNumber,
+      p_ifsc_code: details.ifscCode
+    });
+    if (error) throw new Error(error.message);
+    if (!data) throw new Error('Failed to save payout account');
+
+    return {
+      id: data.id,
+      accountHolderName: data.account_holder_name,
+      bankName: data.bank_name,
+      accountNumberLast4: data.account_number_last4,
+      ifscCode: data.ifsc_code,
+      status: data.status,
+      rejectionReason: data.rejection_reason,
+      submittedAt: data.submitted_at,
+      verifiedAt: data.verified_at,
+    };
+  },
+  
+  async getEarningsPayoutSummary(timezone: string): Promise<AstrologerEarningsPayoutSummary> {
+    const userId = await requireUserId();
+    const { data, error } = await supabase.rpc('get_my_earnings_payout_summary', { p_timezone: timezone });
+    if (error) throw new Error(error.message);
+    if (!data) throw new Error('No earnings summary data returned');
+    
+    return {
+      grossBillingToday: Number(data.gross_billing_today ?? 0),
+      grossBillingYesterday: Number(data.gross_billing_yesterday ?? 0),
+      grossBillingWeek: Number(data.gross_billing_week ?? 0),
+      grossBillingMonth: Number(data.gross_billing_month ?? 0),
+      grossBillingLifetime: Number(data.gross_billing_lifetime ?? 0),
+
+      calculatedEarningsToday: Number(data.calculated_earnings_today ?? 0),
+      calculatedEarningsYesterday: Number(data.calculated_earnings_yesterday ?? 0),
+      calculatedEarningsWeek: Number(data.calculated_earnings_week ?? 0),
+      calculatedEarningsMonth: Number(data.calculated_earnings_month ?? 0),
+      calculatedEarningsLifetime: Number(data.calculated_earnings_lifetime ?? 0),
+
+      awaitingCommission: Number(data.awaiting_commission ?? 0),
+
+      withdrawableBalance: data.withdrawable_balance !== null ? Number(data.withdrawable_balance) : null,
+      pendingSettlement: data.pending_settlement !== null ? Number(data.pending_settlement) : null,
+      processingPayout: data.processing_payout !== null ? Number(data.processing_payout) : null,
+      lastSettlementAmount: data.last_settlement_amount !== null ? Number(data.last_settlement_amount) : null,
+      lastSettlementAt: data.last_settlement_at,
+
+      canRequestWithdrawal: Boolean(data.can_request_withdrawal),
+      withdrawalDisabledReason: data.withdrawal_disabled_reason,
+      minimumWithdrawalAmount: Number(data.minimum_withdrawal_amount ?? 200),
+      activeWithdrawalStatus: data.active_withdrawal_status,
+    };
+  },
+
+  async requestWithdrawal(amount: number): Promise<void> {
+    const userId = await requireUserId();
+    const { data, error } = await supabase.rpc('request_my_withdrawal', { p_amount: amount });
+    if (error) throw new Error(error.message);
+    if (data && data.status === 'error') {
+      throw new Error(data.message || 'Unable to request withdrawal at this time.');
+    }
+  },
+
+  async getWithdrawalRequests(): Promise<AstrologerWithdrawalRequest[]> {
+    const userId = await requireUserId();
+    const { data, error } = await supabase.rpc('get_my_withdrawal_requests');
+    if (error) throw new Error(error.message);
+    if (!data) return [];
+    
+    return data.map((row: any) => ({
+      id: row.id,
+      amount: Number(row.amount),
+      currency: row.currency,
+      status: row.status,
+      requestedAt: row.requested_at,
+      approvedAt: row.approved_at,
+      processingAt: row.processing_at,
+      paidAt: row.paid_at,
+      rejectedAt: row.rejected_at,
+      failedAt: row.failed_at,
+      payoutReference: row.payout_reference,
+      bankReference: row.bank_reference,
+      rejectionReason: row.rejection_reason,
+      failureReason: row.failure_reason,
+      payoutBankName: row.payout_bank_name,
+      payoutAccountLast4: row.payout_account_last4,
+    }));
+  },
+
+  async getPaymentStatements(): Promise<AstrologerPaymentStatement[]> {
+    const userId = await requireUserId();
+    const { data, error } = await supabase.rpc('get_my_payment_statements');
+    if (error) throw new Error(error.message);
+    if (!data) return [];
+    
+    return data.map((row: any) => ({
+      id: row.id,
+      entryType: row.entry_type as AstrologerPaymentStatementType,
+      title: row.title,
+      description: row.description,
+      grossAmount: Number(row.gross_amount),
+      astrologerAmount: row.astrologer_amount !== null ? Number(row.astrologer_amount) : null,
+      companyAmount: row.company_amount !== null ? Number(row.company_amount) : null,
+      status: row.status,
+      consultationId: row.consultation_id,
+      customerDisplayName: row.customer_display_name,
+      billedMinutes: row.billed_minutes !== null ? Number(row.billed_minutes) : null,
+      ratePerMinute: row.rate_per_minute !== null ? Number(row.rate_per_minute) : null,
+      occurredAt: row.occurred_at,
+    }));
   },
 };

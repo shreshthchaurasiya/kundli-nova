@@ -18,6 +18,14 @@ import QueuePreview from '../components/QueuePreview';
 import ProfileCompletionCard from '../components/ProfileCompletionCard';
 import RequestsTab from '../components/RequestsTab';
 import ConsultsTab from '../components/ConsultsTab';
+import { PayoutAccountForm } from '../components/PayoutAccountForm';
+import { astrologerDashboardService } from '../services/astrologerDashboardService';
+import { AstrologerPayoutAccount, AstrologerEarningsPayoutSummary } from '../types';
+
+import { EarningsSubNavigation, EarningsInternalTab } from '../components/earnings/EarningsSubNavigation';
+import { EarningsOverviewTab } from '../components/earnings/EarningsOverviewTab';
+import { WithdrawTab } from '../components/earnings/WithdrawTab';
+import { StatementsTab } from '../components/earnings/StatementsTab';
 
 const consultationRepository = new ApiConsultationRepository();
 
@@ -51,6 +59,14 @@ export default function AstrologerDashboardScreen({ onNavigate, onOpenDrawer, ro
   const [currentTab, setCurrentTab] = useState<AstrologerDashboardTab>((routeParams?.initialTab as AstrologerDashboardTab) || 'home');
   const [processingSessionId, setProcessingSessionId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [showPayoutForm, setShowPayoutForm] = useState(false);
+  const [payoutAccount, setPayoutAccount] = useState<AstrologerPayoutAccount | null>(null);
+  const [isPayoutLoading, setIsPayoutLoading] = useState(false);
+  
+  const [earningsTab, setEarningsTab] = useState<EarningsInternalTab>('overview');
+  const [earningsSummary, setEarningsSummary] = useState<AstrologerEarningsPayoutSummary | null>(null);
+  const [isEarningsSummaryLoading, setIsEarningsSummaryLoading] = useState(false);
+  const [earningsSummaryError, setEarningsSummaryError] = useState<string | null>(null);
 
   const waitingSessions = useMemo(
     () => sessions.filter(session => session.status === 'WAITING_FOR_ASTROLOGER'),
@@ -111,6 +127,33 @@ export default function AstrologerDashboardScreen({ onNavigate, onOpenDrawer, ro
     }
   };
 
+  const loadEarningsData = async () => {
+    setIsEarningsSummaryLoading(true);
+    setEarningsSummaryError(null);
+    try {
+      const data = await astrologerDashboardService.getEarningsPayoutSummary(Intl.DateTimeFormat().resolvedOptions().timeZone);
+      setEarningsSummary(data);
+    } catch (err) {
+      setEarningsSummaryError(err instanceof Error ? err.message : 'Failed to load earnings summary');
+    } finally {
+      setIsEarningsSummaryLoading(false);
+    }
+  };
+
+  const handleTabChange = (tab: AstrologerDashboardTab) => {
+    setCurrentTab(tab);
+    if (tab === 'earnings' && !earningsSummary && !isEarningsSummaryLoading) {
+      loadEarningsData();
+    }
+    if (tab === 'earnings' && !payoutAccount && !isPayoutLoading) {
+      setIsPayoutLoading(true);
+      astrologerDashboardService.getPayoutAccount()
+        .then(account => setPayoutAccount(account))
+        .catch(err => console.error('Failed to load payout account:', err))
+        .finally(() => setIsPayoutLoading(false));
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex h-full flex-col items-center justify-center bg-[#FAFAFA] px-8 text-center">
@@ -149,7 +192,7 @@ export default function AstrologerDashboardScreen({ onNavigate, onOpenDrawer, ro
         }}
       />
 
-      <main className="flex-1 overflow-y-auto px-5 pb-6 pt-5 no-scrollbar">
+      <main className="flex-1 overflow-y-auto px-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-5 no-scrollbar">
         {currentTab === 'home' && (
           <div className="space-y-5">
             <AvailabilityCard
@@ -215,68 +258,54 @@ export default function AstrologerDashboardScreen({ onNavigate, onOpenDrawer, ro
         )}
 
         {currentTab === 'earnings' && (
-          <section className="space-y-4">
-            <div className="rounded-[24px] bg-white p-6 shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-neutral-100">
-              <h2 className="text-sm font-black text-neutral-900 mb-4">Gross Billing Summary</h2>
-              {isSummaryLoading ? (
-                <div className="animate-pulse space-y-4">
-                  <div className="h-32 bg-neutral-100 rounded-2xl" />
-                  <div className="h-48 bg-neutral-100 rounded-2xl" />
-                </div>
-              ) : summaryError ? (
-                <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
-                  <AlertCircle size={32} className="text-red-400 mb-3" />
-                  <p className="text-sm font-bold text-neutral-800 mb-1">Unable to load billing summary</p>
-                  <p className="text-xs text-neutral-500 mb-4">{summaryError}</p>
-                  <button onClick={retrySummary} className="px-4 py-2 bg-neutral-900 text-white text-xs font-bold rounded-lg active:scale-95 transition-transform">
-                    Retry
-                  </button>
-                </div>
-              ) : summary ? (
-                <>
-                  <div className="grid grid-cols-2 gap-3 mb-6">
-                    <div className="rounded-2xl border border-neutral-100 bg-neutral-50/50 p-4 text-center">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Yesterday</p>
-                      <p className="mt-1 text-xl font-black text-neutral-900">{formatMoney(summary.yesterdayGrossBilling)}</p>
-                    </div>
-                    <div className="rounded-2xl border border-neutral-100 bg-neutral-50/50 p-4 text-center">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">This Week</p>
-                      <p className="mt-1 text-xl font-black text-neutral-900">{formatMoney(summary.weekGrossBilling)}</p>
-                    </div>
-                    <div className="rounded-2xl border border-neutral-100 bg-neutral-50/50 p-4 text-center">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">This Month</p>
-                      <p className="mt-1 text-xl font-black text-neutral-900">{formatMoney(summary.monthGrossBilling)}</p>
-                    </div>
-                    <div className="rounded-2xl border border-emerald-50 bg-emerald-50/30 p-4 text-center">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600/70">Lifetime</p>
-                      <p className="mt-1 text-xl font-black text-emerald-600">{formatMoney(summary.lifetimeGrossBilling)}</p>
-                    </div>
+          <section className="space-y-0 h-full flex flex-col">
+            <EarningsSubNavigation currentTab={earningsTab} onChange={setEarningsTab} />
+            
+            <div className="flex-1">
+              {earningsTab === 'overview' && (
+                isEarningsSummaryLoading ? (
+                  <div className="animate-pulse space-y-4">
+                    <div className="h-32 bg-neutral-100 rounded-2xl" />
+                    <div className="h-48 bg-neutral-100 rounded-2xl" />
                   </div>
-                  
-                  <h2 className="text-sm font-black text-neutral-900 mb-4 border-t border-neutral-100 pt-5">Settlement & Payouts</h2>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between p-3 rounded-xl bg-neutral-50 border border-neutral-100">
-                      <span className="text-[11px] font-bold text-neutral-500">Withdrawable Balance</span>
-                      <span className="text-[11px] font-black text-neutral-400">{summary.settlementSystemConfigured && summary.withdrawableBalance !== null ? formatMoney(summary.withdrawableBalance) : 'Available after payout setup'}</span>
-                    </div>
-                    <div className="flex items-center justify-between p-3 rounded-xl bg-neutral-50 border border-neutral-100">
-                      <span className="text-[11px] font-bold text-neutral-500">Pending Settlement</span>
-                      <span className="text-[11px] font-black text-neutral-400">{summary.settlementSystemConfigured && summary.pendingSettlement !== null ? formatMoney(summary.pendingSettlement) : 'Not configured'}</span>
-                    </div>
-                    <div className="flex items-center justify-between p-3 rounded-xl bg-neutral-50 border border-neutral-100">
-                      <span className="text-[11px] font-bold text-neutral-500">Processing Payout</span>
-                      <span className="text-[11px] font-black text-neutral-400">{summary.settlementSystemConfigured && summary.processingPayout !== null ? formatMoney(summary.processingPayout) : 'Not configured'}</span>
-                    </div>
-                    <div className="flex items-center justify-between p-3 rounded-xl bg-neutral-50 border border-neutral-100">
-                      <span className="text-[11px] font-bold text-neutral-500">Last Settlement</span>
-                      <span className="text-[11px] font-black text-neutral-400">{summary.lastSettlementAt ? new Date(summary.lastSettlementAt).toLocaleDateString() : 'No settlements yet'}</span>
-                    </div>
+                ) : earningsSummaryError ? (
+                  <div className="flex flex-col items-center justify-center py-8 px-4 text-center bg-white rounded-[24px]">
+                    <AlertCircle size={32} className="text-red-400 mb-3" />
+                    <p className="text-sm font-bold text-neutral-800 mb-1">Unable to load earnings summary</p>
+                    <p className="text-xs text-neutral-500 mb-4">{earningsSummaryError}</p>
+                    <button onClick={loadEarningsData} className="px-4 py-2 bg-neutral-900 text-white text-xs font-bold rounded-lg active:scale-95 transition-transform">
+                      Retry
+                    </button>
                   </div>
-                  <p className="mt-4 text-[10px] font-medium text-neutral-400 text-center px-4">
-                    Final earnings and withdrawable balance will appear after the commission and payout system is configured.
-                  </p>
-                </>
-              ) : null}
+                ) : earningsSummary ? (
+                  <EarningsOverviewTab 
+                    summary={earningsSummary}
+                    payoutAccount={payoutAccount}
+                    onNavigateWithdraw={() => setEarningsTab('withdraw')}
+                  />
+                ) : null
+              )}
+
+              {earningsTab === 'withdraw' && (
+                isEarningsSummaryLoading ? (
+                  <div className="animate-pulse h-48 bg-neutral-100 rounded-2xl" />
+                ) : earningsSummaryError ? (
+                  <div className="rounded-[24px] bg-white p-8 text-center text-red-500 font-bold">{earningsSummaryError}</div>
+                ) : earningsSummary ? (
+                  <WithdrawTab 
+                    summary={earningsSummary}
+                    payoutAccount={payoutAccount}
+                    onSuccess={() => {
+                      loadEarningsData();
+                      setEarningsTab('statements');
+                    }}
+                  />
+                ) : null
+              )}
+
+              {earningsTab === 'statements' && (
+                <StatementsTab />
+              )}
             </div>
           </section>
         )}
@@ -318,8 +347,8 @@ export default function AstrologerDashboardScreen({ onNavigate, onOpenDrawer, ro
 
       <AstrologerDashboardBottomNav
         currentTab={currentTab}
-        onTabChange={setCurrentTab}
-        waitingCount={(sessions.filter(s => s.status === 'WAITING_FOR_ASTROLOGER').length)}
+        onTabChange={handleTabChange}
+        waitingCount={waitingSessions.length}
       />
     </div>
   );

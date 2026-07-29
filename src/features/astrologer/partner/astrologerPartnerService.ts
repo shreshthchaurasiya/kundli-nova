@@ -28,6 +28,10 @@ type ApplicationRow = {
   pan_document_path: string | null;
   certificate_paths: string[] | null;
   rejection_reason: string | null;
+  bank_account_holder_name: string | null;
+  bank_name: string | null;
+  bank_account_number: string | null;
+  bank_ifsc_code: string | null;
   submitted_at: string | null;
   reviewed_at: string | null;
 };
@@ -51,7 +55,8 @@ const applicationSelect = [
   'pan_number', 'experience_years', 'languages', 'skills', 'qualification',
   'consultation_modes', 'about', 'requested_price_per_minute',
   'profile_photo_url', 'pan_document_path', 'certificate_paths',
-  'rejection_reason', 'submitted_at', 'reviewed_at',
+  'rejection_reason', 'bank_account_holder_name', 'bank_name', 'bank_account_number',
+  'bank_ifsc_code', 'submitted_at', 'reviewed_at',
 ].join(',');
 
 const astrologerSelect = [
@@ -82,6 +87,10 @@ function mapApplication(row: ApplicationRow): AstrologerApplication {
     panDocumentPath: row.pan_document_path ?? '',
     certificatePaths: row.certificate_paths ?? [],
     rejectionReason: row.rejection_reason ?? '',
+    bankAccountHolderName: row.bank_account_holder_name ?? '',
+    bankName: row.bank_name ?? '',
+    bankAccountNumber: row.bank_account_number ?? '',
+    bankIfscCode: row.bank_ifsc_code ?? '',
     submittedAt: row.submitted_at ?? undefined,
     reviewedAt: row.reviewed_at ?? undefined,
   };
@@ -120,6 +129,10 @@ function applicationPayload(draft: AstrologerApplicationDraft) {
     profile_photo_url: draft.profilePhotoUrl,
     pan_document_path: draft.panDocumentPath,
     certificate_paths: draft.certificatePaths,
+    bank_account_holder_name: draft.bankAccountHolderName?.trim() || null,
+    bank_name: draft.bankName?.trim() || null,
+    bank_account_number: draft.bankAccountNumber?.trim() || null,
+    bank_ifsc_code: draft.bankIfscCode?.trim().toUpperCase() || null,
   };
 }
 

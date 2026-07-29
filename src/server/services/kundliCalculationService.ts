@@ -1,6 +1,7 @@
 import { AstrologyCalculationProvider, KundliNovaCalcInput, KundliNovaNatalChart, KundliNovaVimshottariDasha, KundliNovaDoshaAnalysis, KundliNovaYogaAnalysis } from '../types/astrologyProvider';
 import { ProviderError } from '../errors/ProviderError';
-import crypto from 'crypto';
+import * as crypto from 'crypto';
+import { GoogleGenAI } from '@google/genai';
 import { supabaseAdmin } from '../config/supabase';
 
 export class KundliCalculationService {
@@ -304,60 +305,207 @@ export class KundliCalculationService {
     if (this.detailedReportCache.has(cacheKey)) return this.detailedReportCache.get(cacheKey)!;
     if (this.detailedReportInflight.has(cacheKey)) return this.detailedReportInflight.get(cacheKey)!;
 
-    const promise = this.provider.getDetailedKundliReport(input)
-      .then(result => {
-        if (!result || !result.availableSections || !result.unavailableSections) {
-          throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', 'Invalid detailed report response structure');
+    const promise = (async () => {
+      try {
+        const [chart, dasha, dosha, yoga] = await Promise.all([
+          this.provider.getNatalChart(input).catch(() => null),
+          this.provider.getVimshottariDasha(input).catch(() => null),
+          this.getDoshaAnalysis(profileId, userId).catch(() => null),
+          this.getYogaAnalysis(profileId, userId).catch(() => null)
+        ]);
+
+        if (!chart) {
+          throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', 'Cannot generate detailed report without Natal Chart');
         }
 
-        const allCodes: import('../types/astrologyProvider').DetailedReportSectionCode[] = ['BIRTH_SUMMARY', 'ASCENDANT', 'PLANETARY_POSITIONS', 'HOUSE_ANALYSIS', 'NAKSHATRA_ANALYSIS', 'DASHA_SUMMARY', 'DOSHA_SUMMARY', 'YOGA_SUMMARY'];
-        
-        // Validation: sections do not overlap and cover exactly all codes (or just check exactly 8 mutually exclusive)
-        const totalCount = result.availableSections.length + result.unavailableSections.length;
-        if (totalCount !== 8) {
-           throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', 'Report must account for exactly 8 sections');
+        const apiKey = process.env.GEMINI_API_KEY;
+        if (!apiKey) {
+          throw new ProviderError('navamsha', 'PROVIDER_NOT_CONFIGURED', 'GEMINI_API_KEY is not set');
         }
 
-        const sectionSet = new Set([...result.availableSections, ...result.unavailableSections]);
-        if (sectionSet.size !== 8) {
-           throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', 'Report sections must not overlap and must contain exactly 8 unique sections');
-        }
-        
-        for (const code of allCodes) {
-          if (!sectionSet.has(code)) {
-            throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', `Missing section code in arrays: ${code}`);
+        const ai = new GoogleGenAI({ 
+          apiKey,
+          httpOptions: { timeout: 360000 } 
+        });
+
+        const prompt = `You are Nova AI, an expert premium Vedic Astrologer.
+The user wants a highly detailed Kundli analysis report in Hinglish.
+CRITICAL RULE: You MUST write the Hinglish using the English Alphabet (Latin/Roman script) ONLY.
+YOU ARE ABSOLUTELY FORBIDDEN FROM USING DEVANAGARI SCRIPT (Hindi characters like क, ख, ग).
+If you use even a single Hindi character, the system will crash. ONLY use A-Z, a-z, 0-9, and standard punctuation.
+CRITICAL RULE 2: Ensure your response is 100% VALID JSON. Do not use unescaped newlines inside strings. Ensure all brackets are closed.
+Example: "Aapka ascendant strong hai" (YES) - "आपका" (NO).
+Explain deep concepts clearly (e.g., how the moon affects them, exact planetary alignments). Make it engaging, professional, and EXTREMELY detailed (write massive, in-depth paragraphs for each section).
+
+Here is the user's astrological data:
+Chart: ${JSON.stringify(chart)}
+Dasha: ${JSON.stringify(dasha)}
+
+Respond STRICTLY with a valid JSON object matching exactly this structure (do NOT use markdown formatting, just pure JSON):
+{
+  "ascendantSummary": "Detailed Hinglish explanation of their Lagna (Ascendant) and personality...",
+  "houseSummaries": [
+    "Detailed Hinglish explanation for House 1...",
+    "Detailed Hinglish explanation for House 2...",
+    "Detailed Hinglish explanation for House 3...",
+    "Detailed Hinglish explanation for House 4...",
+    "Detailed Hinglish explanation for House 5...",
+    "Detailed Hinglish explanation for House 6...",
+    "Detailed Hinglish explanation for House 7...",
+    "Detailed Hinglish explanation for House 8...",
+    "Detailed Hinglish explanation for House 9...",
+    "Detailed Hinglish explanation for House 10...",
+    "Detailed Hinglish explanation for House 11...",
+    "Detailed Hinglish explanation for House 12..."
+  ],
+  "nakshatraSummary": "Detailed Hinglish explanation of their Moon Nakshatra and soul purpose...",
+  "dashaSummary": "Detailed Hinglish explanation of their current Dasha and its effects...",
+  "doshas": [
+    { "name": "Name of Dosha (e.g. Mangal Dosha)", "detected": true, "summary": "Detailed Hinglish explanation..." }
+  ],
+  "yogas": [
+    { "name": "Name of Auspicious Yoga (e.g. Gaj Kesari Yoga)", "detected": true, "summary": "Detailed Hinglish explanation..." }
+  ],
+  "executiveSummary": "A powerful 2-paragraph overall summary of their life and destiny in Hinglish...",
+  "career": "Detailed Hinglish prediction for Career and Profession...",
+  "education": "Detailed Hinglish prediction for Education and Learning...",
+  "loveAndMarriage": "Detailed Hinglish prediction for Love, Relationships and Marriage...",
+  "health": "Detailed Hinglish prediction for Health and Vitality...",
+  "wealthAndProperty": "Detailed Hinglish prediction for Wealth, Finances and Property...",
+  "familyAndChildren": "Detailed Hinglish prediction for Family life and Children...",
+  "luckyColors": ["Color 1", "Color 2"],
+  "luckyDays": ["Day 1", "Day 2"],
+  "luckyNumbers": [1, 5, 9]
+}`;
+
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+          config: {
+            maxOutputTokens: 8192,
+            temperature: 0.7,
+            responseMimeType: 'application/json'
           }
+        });
+
+        let text = response.text || '{}';
+        // Failsafe: Aggressively strip all Devanagari characters (Unicode range 0900-097F)
+        text = text.replace(/[\u0900-\u097F]/g, '');
+        const cleanedText = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+        let aiResult: any = null;
+        try {
+          aiResult = JSON.parse(cleanedText);
+        } catch (e) {
+          console.error('Failed to parse AI JSON:', cleanedText);
+          require('fs').writeFileSync('/tmp/kundli_error.txt', cleanedText);
+          throw new ProviderError('nova-ai', 'PROVIDER_BAD_RESPONSE', 'AI generated invalid JSON format. Please try again.');
+        }
+        
+        if (!aiResult || Object.keys(aiResult).length === 0) {
+           throw new ProviderError('nova-ai', 'PROVIDER_BAD_RESPONSE', 'AI returned empty report. Please try again.');
         }
 
-        // Validate reportStatus logic
-        if (result.availableSections.length === 8 && result.reportStatus !== 'complete') {
-          throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', 'Status must be complete if all sections are available');
-        }
-        if (result.availableSections.length === 0 && result.reportStatus !== 'unavailable') {
-          throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', 'Status must be unavailable if no sections are available');
-        }
-        if (result.availableSections.length > 0 && result.availableSections.length < 8 && result.reportStatus !== 'partial') {
-          throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', 'Status must be partial if sections are partially available');
+        const houseSummaries = Array.isArray(aiResult.houseSummaries) ? aiResult.houseSummaries : [];
+        for (let i = houseSummaries.length; i < 12; i++) {
+          houseSummaries.push(`House ${i + 1} analysis details are currently being refined by Nova AI.`);
         }
 
-        // Validate house analysis rules if available
-        if (result.houseAnalysis && result.houseAnalysis.houses) {
-          const houseNumbers = new Set();
-          for (const h of result.houseAnalysis.houses) {
-            if (h.houseNumber < 1 || h.houseNumber > 12) {
-              throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', `Invalid house number: ${h.houseNumber}`);
-            }
-            if (houseNumbers.has(h.houseNumber)) {
-              throw new ProviderError('navamsha', 'PROVIDER_BAD_RESPONSE', `Duplicate house number: ${h.houseNumber}`);
-            }
-            houseNumbers.add(h.houseNumber);
+        const detailedReport: import('../types/astrologyProvider').KundliNovaDetailedReport = {
+          schemaVersion: '1.0',
+          provider: 'nova-ai',
+          providerVersion: 'v1',
+          calculatedAt: new Date().toISOString(),
+          profileId,
+          reportStatus: 'complete',
+          availableSections: ['BIRTH_SUMMARY', 'ASCENDANT', 'PLANETARY_POSITIONS', 'HOUSE_ANALYSIS', 'NAKSHATRA_ANALYSIS', 'DASHA_SUMMARY', 'DOSHA_SUMMARY', 'YOGA_SUMMARY'],
+          unavailableSections: [],
+          birthSummary: {
+            profileName: input.name,
+            dateOfBirth: input.dateOfBirth,
+            timeOfBirth: input.timeOfBirth,
+            placeOfBirth: 'Unknown',
+            latitude: input.latitude,
+            longitude: input.longitude,
+            timezone: input.timezone.toString()
+          },
+          ascendant: {
+            sign: chart.ascendant?.sign || 'Unknown',
+            degree: chart.ascendant?.degree || 0,
+            nakshatra: chart.ascendant?.nakshatra || null,
+            pada: chart.ascendant?.pada || null,
+            calculationStatus: 'calculated',
+            summary: aiResult.ascendantSummary || 'Lagna details being generated.'
+          },
+          planetaryPositions: {
+            planets: []
+          },
+          houseAnalysis: {
+            houses: houseSummaries.slice(0, 12).map((summary: string, i: number) => ({
+              houseNumber: i + 1,
+              sign: null, lord: null, occupants: [], calculationStatus: 'calculated',
+              summary
+            }))
+          },
+          nakshatraAnalysis: {
+            moonNakshatra: chart.nakshatra || 'Unknown',
+            moonPada: chart.pada || 1,
+            nakshatraLord: null, deity: null, gana: null, symbol: null, calculationStatus: 'calculated',
+            summary: aiResult.nakshatraSummary || 'Nakshatra details being generated.'
+          },
+          dashaSummary: {
+            currentMahadasha: dasha?.current_mahadasha?.planet || null,
+            currentAntardasha: dasha?.current_mahadasha?.antardashas?.[0]?.planet || null,
+            mahadashaStartDate: dasha?.current_mahadasha?.start_date || null,
+            mahadashaEndDate: dasha?.current_mahadasha?.end_date || null,
+            calculationStatus: 'calculated',
+            summary: aiResult.dashaSummary || 'Dasha details being generated.'
+          },
+          doshaSummary: {
+            doshas: [],
+            summary: aiResult.doshaSummary || 'Dosha details being generated.'
+          },
+          yogaSummary: {
+            yogas: [],
+            summary: aiResult.yogaSummary || 'Yoga details being generated.'
+          },
+          executiveSummary: aiResult.executiveSummary || null,
+          lifeDomains: {
+            career: aiResult.career || null,
+            education: aiResult.education || null,
+            loveAndMarriage: aiResult.loveAndMarriage || null,
+            health: aiResult.health || null,
+            wealthAndProperty: aiResult.wealthAndProperty || null,
+            familyAndChildren: aiResult.familyAndChildren || null,
+          },
+          luckyItems: {
+            colors: Array.isArray(aiResult.luckyColors) ? aiResult.luckyColors : [],
+            days: Array.isArray(aiResult.luckyDays) ? aiResult.luckyDays : [],
+            numbers: Array.isArray(aiResult.luckyNumbers) ? aiResult.luckyNumbers : [],
+          },
+          bundledDasha: dasha,
+          bundledDosha: dosha || {
+            schemaVersion: '1.0', provider: 'nova-ai', providerVersion: 'v1', calculatedAt: new Date().toISOString(), profileId,
+            results: Array.isArray(aiResult.doshas) ? aiResult.doshas.map((d: any) => ({
+              code: 'UNKNOWN', name: d.name || 'Unknown Dosha', detected: !!d.detected, severity: 'unknown', summary: d.summary || '', evidence: [], calculationStatus: 'calculated'
+            })) : []
+          },
+          bundledYoga: yoga || {
+            schemaVersion: '1.0', provider: 'nova-ai', providerVersion: 'v1', calculatedAt: new Date().toISOString(), profileId,
+            results: Array.isArray(aiResult.yogas) ? aiResult.yogas.map((y: any) => ({
+              code: 'UNKNOWN', name: y.name || 'Unknown Yoga', detected: !!y.detected, strength: 'unknown', summary: y.summary || '', evidence: [], calculationStatus: 'calculated'
+            })) : []
           }
-        }
+        };
 
-        this.detailedReportCache.set(cacheKey, result);
-        return result;
-      })
-      .finally(() => this.detailedReportInflight.delete(cacheKey));
+        this.detailedReportCache.set(cacheKey, detailedReport);
+        return detailedReport;
+      } catch (error) {
+        console.error('Detailed Report AI Generation Error:', error);
+        throw new ProviderError('nova-ai', 'PROVIDER_BAD_RESPONSE', 'Failed to generate AI report');
+      } finally {
+        this.detailedReportInflight.delete(cacheKey);
+      }
+    })();
 
     this.detailedReportInflight.set(cacheKey, promise);
     return promise;

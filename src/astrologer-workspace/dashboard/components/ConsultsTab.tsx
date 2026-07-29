@@ -176,8 +176,8 @@ function ConsultationHistoryCard({ session, onOpenChat }: ConsultationHistoryCar
           </div>
         </div>
         <div className="shrink-0 text-right">
-          <p className="text-[12px] font-black text-neutral-900">
-            {formatMoney(session.totalCharged)}
+          <p className="text-[12px] font-black text-[#1FA664]">
+            +{formatMoney(session.totalCharged * 0.60)}
           </p>
           <p className="mt-0.5 text-[10px] font-bold text-neutral-400">
             {formatDuration(session.billedMinutes)}

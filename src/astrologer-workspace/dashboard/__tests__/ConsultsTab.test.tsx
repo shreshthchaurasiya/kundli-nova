@@ -107,7 +107,7 @@ describe('ConsultsTab', () => {
     render(<ConsultsTab {...defaultProps({ sessions: [ended] })} />);
     expect(screen.getByText('Completed Consultations')).toBeInTheDocument();
     expect(screen.getByText('Completed')).toBeInTheDocument();
-    expect(screen.getByText('₹150.00')).toBeInTheDocument(); // formatMoney output
+    expect(screen.getByText('+₹90.00')).toBeInTheDocument(); // formatMoney output for net 60% share
   });
 
   // 8. Separates unsuccessful history

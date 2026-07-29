@@ -53,7 +53,11 @@ export class AstrologyApi {
   }
 
   static async getDetailedKundliReport(profileId: string): Promise<import('../../server/types/astrologyProvider').KundliNovaDetailedReport> {
-    return ApiClient.get<import('../../server/types/astrologyProvider').KundliNovaDetailedReport>(ENDPOINTS.ASTROLOGY.GET_DETAILED_KUNDLI_REPORT(profileId));
+    // Increase timeout to 300s for massive AI generation (8 pages)
+    return ApiClient.get<import('../../server/types/astrologyProvider').KundliNovaDetailedReport>(
+      ENDPOINTS.ASTROLOGY.GET_DETAILED_KUNDLI_REPORT(profileId),
+      { timeout: 360000 }
+    );
   }
 }
 
