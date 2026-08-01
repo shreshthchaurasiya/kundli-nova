@@ -81,7 +81,7 @@ export class DailyAstrologyService {
 
     const cacheKey = `${profile.id}_${localDateStr}_${profile.timezone}_${CACHE_VERSION}`;
     const cached = memoryCache.get(cacheKey);
-    if (cached && cached.expiresAt > Date.now()) {
+    if (cached && cached.expiresAt > Date.now() && cached.data.dataStatus === 'complete') {
       return cached.data;
     }
 

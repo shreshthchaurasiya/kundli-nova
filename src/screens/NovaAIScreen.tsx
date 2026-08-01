@@ -18,7 +18,8 @@ import {
   ArrowUp,
   MessageSquare,
   Sparkle,
-  Star
+  Star,
+  Crown
 } from 'lucide-react';
 import { Screen } from '../types';
 import { useProfile } from '../contexts/ProfileContext';
@@ -235,6 +236,13 @@ export default function NovaAIScreen({ onNavigate, onOpenDrawer }: NovaAIScreenP
             <div className="w-5 h-5 rounded-full bg-gray-800 text-white flex items-center justify-center">
               <Plus size={14} strokeWidth={3} />
             </div>
+          </button>
+          
+          <button 
+            onClick={() => onNavigate('subscription')}
+            className="text-orange-500 hover:text-orange-600 transition-colors p-1 rounded-full hover:bg-orange-50 focus:outline-none"
+          >
+            <Crown size={21} strokeWidth={2.2} />
           </button>
           
           <button 

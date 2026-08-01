@@ -86,6 +86,50 @@ export const navamshaManglikResponseSchema = z.object({
   })
 });
 
+function calculateSunTimesFallback(lat: number, lng: number, dateStr: string, tzOffset: number = 5.5): { sunrise: string; sunset: string } {
+  try {
+    const d = new Date(dateStr);
+    const year = isNaN(d.getTime()) ? new Date().getFullYear() : d.getFullYear();
+    const month = isNaN(d.getTime()) ? new Date().getMonth() + 1 : d.getMonth() + 1;
+    const day = isNaN(d.getTime()) ? new Date().getDate() : d.getDate();
+
+    const dayOfYear = Math.floor((new Date(year, month - 1, day).getTime() - new Date(year, 0, 0).getTime()) / 86400000);
+    const declination = 23.45 * Math.sin((360 / 365) * (dayOfYear - 81) * (Math.PI / 180));
+    
+    const latRad = lat * (Math.PI / 180);
+    const decRad = declination * (Math.PI / 180);
+    const cosH = (Math.sin(-0.833 * (Math.PI / 180)) - Math.sin(latRad) * Math.sin(decRad)) / (Math.cos(latRad) * Math.cos(decRad));
+    
+    let hourAngle = 90;
+    if (cosH >= -1 && cosH <= 1) {
+      hourAngle = Math.acos(cosH) * (180 / Math.PI);
+    }
+    
+    const solarNoonHours = 12 - (lng / 15) + tzOffset;
+    const sunriseHours = solarNoonHours - (hourAngle / 15);
+    const sunsetHours = solarNoonHours + (hourAngle / 15);
+
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const srH = Math.floor((sunriseHours + 24) % 24);
+    const srM = Math.floor((((sunriseHours + 24) % 24) % 1) * 60);
+    const ssH = Math.floor((sunsetHours + 24) % 24);
+    const ssM = Math.floor((((sunsetHours + 24) % 24) % 1) * 60);
+
+    const format12h = (h: number, m: number) => {
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const h12 = h % 12 || 12;
+      return `${pad(h12)}:${pad(m)} ${ampm}`;
+    };
+
+    return {
+      sunrise: format12h(srH, srM),
+      sunset: format12h(ssH, ssM)
+    };
+  } catch {
+    return { sunrise: '06:15 AM', sunset: '06:45 PM' };
+  }
+}
+
 export interface NavamshaProviderConfig {
   apiKey?: string;
   baseUrl?: string;
@@ -515,8 +559,6 @@ export class NavamshaProvider implements AstrologyCalculationProvider {
     );
   }
 
-
-
   public async getPanchang(input: KundliNovaCalcInput, targetDateStr?: string): Promise<KundliNovaPanchang> {
     const { apiKey, baseUrl } = this.getProviderConfig();
     const parsedInput = kundliNovaCalcInputSchema.parse(input);
@@ -598,6 +640,41 @@ export class NavamshaProvider implements AstrologyCalculationProvider {
        throw new ProviderError('navamsha', 'PROVIDER_UNAVAILABLE', 'Primary Panchang data unavailable', 503);
     }
 
+    const parseName = (item: any) => {
+      if (!item) return null;
+      if (typeof item === 'string') return item;
+      return item.name || item.title || item.value || item.details?.name || null;
+    };
+
+    const parsePaksha = (item: any) => {
+      if (!item) return null;
+      if (typeof item === 'string') return null;
+      return item.paksha || item.fortnight || null;
+    };
+
+    const parseTimeStr = (val: any): string | null => {
+      if (!val) return null;
+      if (typeof val === 'string') return val;
+      if (typeof val === 'object') {
+        return val.local_datetime || val.datetime || val.time || val.start || val.value || null;
+      }
+      return null;
+    };
+
+    const computedSun = calculateSunTimesFallback(payload.latitude, payload.longitude, targetDateStr || new Date().toISOString(), typeof payload.timezone === 'number' ? payload.timezone : 5.5);
+
+    const rawSunrise = parseTimeStr(inauspicious?.output?.sunrise) 
+      || parseTimeStr(full?.output?.sunrise) 
+      || parseTimeStr(full?.output?.sun_rise) 
+      || parseTimeStr(full?.output?.sun_rise_time) 
+      || computedSun.sunrise;
+
+    const rawSunset = parseTimeStr(inauspicious?.output?.sunset) 
+      || parseTimeStr(full?.output?.sunset) 
+      || parseTimeStr(full?.output?.sun_set) 
+      || parseTimeStr(full?.output?.sun_set_time) 
+      || computedSun.sunset;
+
     return {
       schemaVersion: '1.0',
       provider: 'navamsha',
@@ -606,30 +683,30 @@ export class NavamshaProvider implements AstrologyCalculationProvider {
       latitude: payload.latitude,
       longitude: payload.longitude,
       tithi: {
-        name: full.output.tithi?.name || null,
-        paksha: full.output.tithi?.paksha || null,
+        name: parseName(full.output.tithi),
+        paksha: parsePaksha(full.output.tithi),
         startTime: null,
         endTime: null
       },
       nakshatra: {
-        name: full.output.nakshatra?.name || null,
+        name: parseName(full.output.nakshatra),
         pada: full.output.nakshatra?.pada || null,
         startTime: null,
         endTime: null
       },
       yoga: {
-        name: full.output.yoga?.name || null,
+        name: parseName(full.output.yoga),
         startTime: null,
         endTime: null
       },
       karana: {
-        name: full.output.karana?.name || null,
+        name: parseName(full.output.karana),
         startTime: null,
         endTime: null
       },
-      vara: full.output.weekday?.name || null,
-      sunrise: inauspicious?.output?.sunrise?.local_datetime || null,
-      sunset: inauspicious?.output?.sunset?.local_datetime || null,
+      vara: parseName(full.output.weekday) || full.output.vara?.name || null,
+      sunrise: rawSunrise,
+      sunset: rawSunset,
       moonrise: null,
       moonset: null,
       rahuKaal: inauspicious?.output?.rahu_kaal ? {

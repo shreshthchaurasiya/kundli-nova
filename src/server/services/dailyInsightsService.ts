@@ -34,7 +34,7 @@ export class DailyInsightsService {
   public async getDailyInsightsFromData(ownerId: string, dailyData: DailyAstrologyData): Promise<DailyPersonalizedInsights> {
     const cacheKey = `${dailyData.profileId}_${dailyData.localDate}_${dailyData.timezone}_${CACHE_VERSION}`;
     const cached = memoryCache.get(cacheKey);
-    if (cached && cached.expiresAt > Date.now()) {
+    if (cached && cached.expiresAt > Date.now() && cached.data.dataStatus === 'complete') {
       return cached.data;
     }
 

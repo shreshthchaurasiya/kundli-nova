@@ -204,28 +204,28 @@ export function RevenueScreen() {
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard 
               title="Total Gross Billing" 
-              value={formatINR(summaryData?.consultation_gross_billing)}
+              value={formatINR(summaryData?.billing?.gross_billing)}
               subtext="Total amount charged to users"
               icon={IndianRupee}
               colorClass="bg-blue-50 text-blue-600"
             />
             <StatCard 
               title="Company Revenue" 
-              value={formatINR(summaryData?.company_commission_revenue)}
+              value={formatINR(summaryData?.billing?.company_revenue)}
               subtext="Platform's share of consultations"
               icon={Building2}
               colorClass="bg-orange-50 text-[#FF8A00]"
             />
             <StatCard 
               title="Astrologer Earnings" 
-              value={formatINR(summaryData?.astrologer_earnings)}
+              value={formatINR(summaryData?.billing?.astrologer_earnings)}
               subtext="Astrologers' share of consultations"
               icon={Briefcase}
               colorClass="bg-green-50 text-green-600"
             />
             <StatCard 
               title="Wallet Recharges" 
-              value={formatINR(summaryData?.wallet_recharge_volume)}
+              value={formatINR(summaryData?.reconciliation?.wallet_recharge_volume)}
               subtext="Total money added to user wallets"
               icon={Wallet}
               colorClass="bg-purple-50 text-purple-600"
@@ -323,7 +323,7 @@ export function RevenueScreen() {
                       <p className="text-xs text-neutral-500">Total processed by gateway</p>
                     </div>
                   </div>
-                  <span className="font-bold text-neutral-900">{formatINR(summaryData?.razorpay_payment_volume)}</span>
+                  <span className="font-bold text-neutral-900">{formatINR(summaryData?.reconciliation?.razorpay_payment_volume)}</span>
                 </div>
                 <div className="flex items-center justify-between pb-2">
                   <div className="flex items-center gap-3">
@@ -335,7 +335,7 @@ export function RevenueScreen() {
                       <p className="text-xs text-neutral-500">Count of successful txns</p>
                     </div>
                   </div>
-                  <span className="font-bold text-neutral-900">{summaryData?.successful_payment_count || 0}</span>
+                  <span className="font-bold text-neutral-900">{summaryData?.reconciliation?.successful_payment_count || 0}</span>
                 </div>
               </div>
             </div>
@@ -355,7 +355,7 @@ export function RevenueScreen() {
                       <p className="text-xs text-neutral-500">Uncalculated ledger entries</p>
                     </div>
                   </div>
-                  <span className="font-bold text-orange-600">{formatINR(summaryData?.awaiting_commission_amount)}</span>
+                  <span className="font-bold text-orange-600">{formatINR(summaryData?.billing?.awaiting_commission)}</span>
                 </div>
                 <div className="flex items-center justify-between pb-2">
                   <div className="flex items-center gap-3">
@@ -367,7 +367,7 @@ export function RevenueScreen() {
                       <p className="text-xs text-neutral-500">Amount paid to astrologers</p>
                     </div>
                   </div>
-                  <span className="font-bold text-green-600">{formatINR(summaryData?.paid_withdrawals_amount)}</span>
+                  <span className="font-bold text-green-600">{formatINR(summaryData?.payouts?.paid_withdrawals_amount)}</span>
                 </div>
               </div>
             </div>

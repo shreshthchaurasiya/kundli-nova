@@ -18,14 +18,18 @@ import {
   ShieldCheck,
   LogOut,
   Menu,
-  X
+  X,
+  Crown,
+  Calculator
 } from 'lucide-react';
 
 const NAV_ITEMS = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/' },
   { label: 'Revenue', icon: TrendingUp, path: '/revenue' },
+  { label: 'Fin. Ledger', icon: Calculator, path: '/ledger' },
   { label: 'Astrologers', icon: Star, path: '/astrologers' },
   { label: 'Users', icon: Users, path: '/users' },
+  { label: 'AI Subscriptions', icon: Crown, path: '/subscriptions' },
   { label: 'Consultations', icon: MessageSquare, path: '/consultations' },
   { label: 'Payments', icon: CreditCard, path: '/payments' },
   { label: 'Wallet', icon: Wallet, path: '/wallet' },

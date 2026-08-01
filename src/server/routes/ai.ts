@@ -8,6 +8,7 @@ import { KundliCalculationService } from '../services/kundliCalculationService';
 import { NovaAIContextService } from '../services/ai/NovaAIContextService';
 import { NovaAIPromptBuilder } from '../services/ai/NovaAIPromptBuilder';
 import { NovaAIConversationMemory } from '../types/novaAiContext';
+import { AIUsageService } from '../services/aiUsageService';
 
 export interface AiRouterConfig {
   geminiApiKey?: string;
@@ -73,6 +74,15 @@ export function createAiRouter(config: AiRouterConfig) {
     const profileId = req.body?.profileId || req.body?.userProfile?.id;
     const profileBId = req.body?.profileBId;
     const userId = res.locals.user.id;
+    
+    try {
+      await AIUsageService.checkAndIncrementUsage(userId);
+    } catch (err: any) {
+      if (err.statusCode === 403) {
+        return res.status(403).json({ code: 'USAGE_LIMIT_EXCEEDED', error: err.message });
+      }
+      return res.status(500).json({ code: 'INTERNAL_ERROR', error: 'Error checking AI usage limits.' });
+    }
     
     const safeMessages = messages
       .filter((message: any) => ['user', 'nova'].includes(message?.sender) && (typeof message?.text === 'string' || message?.attachmentUrl))
@@ -196,6 +206,16 @@ export function createAiRouter(config: AiRouterConfig) {
     const { section, data, userProfile } = req.body ?? {};
     if (!['charts', 'planets', 'dasha'].includes(section)) {
       return res.status(400).json({ code: 'INVALID_REQUEST', error: 'Unknown Kundli section.' });
+    }
+    
+    const userId = res.locals.user.id;
+    try {
+      await AIUsageService.checkAndIncrementUsage(userId);
+    } catch (err: any) {
+      if (err.statusCode === 403) {
+        return res.status(403).json({ code: 'USAGE_LIMIT_EXCEEDED', error: err.message });
+      }
+      return res.status(500).json({ code: 'INTERNAL_ERROR', error: 'Error checking AI usage limits.' });
     }
 
     let sectionDescription = '';

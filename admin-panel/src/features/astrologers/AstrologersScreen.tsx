@@ -171,8 +171,8 @@ export function AstrologersScreen() {
                           <span>{item.name}</span>
                         </td>
                         <td className="px-6 py-4">
-                          <span className={`rounded-full px-2 py-1 text-xs font-bold ${item.availability_status === 'ONLINE' ? 'bg-green-100 text-green-700' : 'bg-neutral-100 text-neutral-600'}`}>
-                            {item.availability_status}
+                          <span className={`rounded-full px-2 py-1 text-xs font-bold ${item.status === 'ONLINE' ? 'bg-green-100 text-green-700' : 'bg-neutral-100 text-neutral-600'}`}>
+                            {item.status}
                           </span>
                         </td>
                         <td className="px-6 py-4 font-semibold text-neutral-600">{item.completed_consultations}</td>

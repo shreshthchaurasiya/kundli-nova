@@ -29,7 +29,8 @@ export type Screen =
   | 'category-detail'
   | 'nova-ai'
   | 'kundli-profile-form'
-  | 'horoscope';
+  | 'horoscope'
+  | 'subscription';
 
 export type Tab = 'home' | 'chat-list' | 'chat-history' | 'nova-ai' | 'services' | 'profile';
 

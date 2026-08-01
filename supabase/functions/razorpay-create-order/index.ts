@@ -32,7 +32,12 @@ Deno.serve(async (req: Request) => {
 
     const body = await req.json()
     const packageId = body.packageId
-    const amountPaise = PACKAGES[packageId]
+    let amountPaise = PACKAGES[packageId]
+    if (!amountPaise && packageId?.startsWith('recharge_')) {
+      const parsed = parseInt(packageId.replace('recharge_', ''), 10)
+      if (!isNaN(parsed) && parsed > 0) amountPaise = parsed * 100
+    }
+    
     if (!amountPaise) {
       throw new Error('Invalid package selected')
     }

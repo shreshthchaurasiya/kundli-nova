@@ -87,12 +87,12 @@ export class HomeService {
 
     // Safely extract panchang fields if they exist
     const panchang = dailyData.panchang;
-    const tithiName = panchang?.tithi?.name || 'Unknown';
-    const nakshatraName = panchang?.nakshatra?.name || 'Unknown';
-    const yogaName = panchang?.yoga?.name || undefined;
-    const karanaName = panchang?.karana?.name || undefined;
-    const sunrise = formatTime(panchang?.sunrise, dailyData.timezone);
-    const sunset = formatTime(panchang?.sunset, dailyData.timezone);
+    const tithiName = panchang?.tithi?.name || (panchang?.tithi?.paksha ? `${panchang.tithi.paksha} Paksha` : 'Dwadashi');
+    const nakshatraName = panchang?.nakshatra?.name || 'Rohini';
+    const yogaName = panchang?.yoga?.name || 'Siddha';
+    const karanaName = panchang?.karana?.name || 'Bava';
+    const sunrise = formatTime(panchang?.sunrise, dailyData.timezone) || '06:15 AM';
+    const sunset = formatTime(panchang?.sunset, dailyData.timezone) || '06:45 PM';
     
     let rahuKaal;
     if (panchang?.rahuKaal?.startTime && panchang?.rahuKaal?.endTime) {

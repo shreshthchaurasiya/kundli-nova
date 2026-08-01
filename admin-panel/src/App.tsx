@@ -4,6 +4,7 @@ import { AdminLoginScreen } from './features/auth/AdminLoginScreen';
 import { AccessDeniedScreen } from './features/auth/AccessDeniedScreen';
 import { AdminDashboardScreen } from './features/dashboard/AdminDashboardScreen';
 import { RevenueScreen } from './features/revenue/RevenueScreen';
+import { FinancialLedgerScreen } from './features/revenue/FinancialLedgerScreen';
 import { AstrologersScreen } from './features/astrologers/AstrologersScreen';
 import { PaymentsScreen } from './features/payments/PaymentsScreen';
 import { WalletScreen } from './features/wallet/WalletScreen';
@@ -11,6 +12,7 @@ import { AstroCommissionScreen } from './features/commission/AstroCommissionScre
 import { PayoutAccountsScreen } from './features/payout-accounts/PayoutAccountsScreen';
 import { WithdrawalsScreen } from './features/withdrawals/WithdrawalsScreen';
 import { UsersScreen } from './features/users/UsersScreen';
+import { SubscriptionsScreen } from './features/subscriptions/SubscriptionsScreen';
 
 // Placeholder screen for pending features
 const PlaceholderScreen = ({ title }: { title: string }) => (
@@ -35,12 +37,14 @@ function App() {
         <Route path="/" element={<AdminLayout />}>
           <Route index element={<AdminDashboardScreen />} />
           <Route path="revenue" element={<RevenueScreen />} />
+          <Route path="ledger" element={<FinancialLedgerScreen />} />
           <Route path="astrologers" element={<AstrologersScreen />} />
           <Route path="payments" element={<PaymentsScreen />} />
           <Route path="payout-accounts" element={<PayoutAccountsScreen />} />
           <Route path="withdrawals" element={<WithdrawalsScreen />} />
           
           <Route path="users" element={<UsersScreen />} />
+          <Route path="subscriptions" element={<SubscriptionsScreen />} />
           <Route path="consultations" element={<PlaceholderScreen title="Consultations" />} />
           <Route path="wallet" element={<WalletScreen />} />
           <Route path="commission" element={<AstroCommissionScreen />} />

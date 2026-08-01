@@ -831,36 +831,7 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
             </div>
           </motion.div>
 
-          {/* Live Astrologers Status Row */}
-          <motion.div
-            variants={itemVariants}
-            onClick={() => {
-              const targetEl = document.getElementById('astrologer-section');
-              if (targetEl) {
-                targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              }
-            }}
-            className="flex items-center justify-between px-4 py-3 bg-[#FFFFFF] rounded-[16px] border border-gray-100/80 shadow-[0_2px_12px_rgba(0,0,0,0.01)] cursor-pointer active:scale-[0.99] transition-all"
-          >
-            <div className="flex items-center gap-2.5">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#16A34A]"></span>
-              </span>
-              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Connect with Experts</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="bg-emerald-50/50 border border-emerald-100/30 px-2.5 py-0.5 rounded-full">
-                <span className="text-[12px] font-extrabold text-[#16A34A] font-mono">
-                  {onlineCount} Online
-                </span>
-              </div>
-              <div className="flex items-center gap-0.5 text-gray-400 hover:text-gray-600 transition-colors">
-                <span className="text-[10px] font-extrabold uppercase tracking-widest pl-1">View All</span>
-                <ChevronRight size={12} className="text-gray-400 shrink-0" strokeWidth={2.5} />
-              </div>
-            </div>
-          </motion.div>
+
 
         </motion.div>
       </div>
@@ -887,6 +858,14 @@ export const TopAstrologerCard: React.FC<{ astro: Astrologer, onClick: () => voi
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-104"
           loading="lazy"
         /> : <div className="flex h-full w-full items-center justify-center bg-neutral-100 text-3xl font-black text-neutral-400">{astro.name.charAt(0)}</div>}
+        
+        {/* Instagram-style online green dot indicator */}
+        {astro.isOnline && (
+          <span className="absolute bottom-[6px] right-[6px] flex h-[14px] w-[14px] z-20">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-[14px] w-[14px] bg-[#16A34A] border-2 border-[#FFFFFF] shadow-[0_1px_3px_rgba(0,0,0,0.15)]"></span>
+          </span>
+        )}
       </div>
 
       {/* Right Details Section */}

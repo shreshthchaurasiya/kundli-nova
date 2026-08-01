@@ -48,6 +48,18 @@ interface NovaAIChatScreenProps {
   };
 }
 
+const getProfileBirthDetails = (p: any) => {
+  if (!p) return { gender: 'unknown', dob: '', tob: '', city: 'Unknown', state: 'Unknown' };
+  const bd = p.birthDetails || {};
+  return {
+    gender: bd.gender || p.gender || 'unknown',
+    dob: bd.dob || p.dob || '',
+    tob: bd.tob || p.tob || '',
+    city: bd.city || p.birth_city || p.city || 'Unknown',
+    state: bd.state || p.birth_state || p.state || 'Unknown'
+  };
+};
+
 export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChatScreenProps) {
   const repositories = useRepositories();
   const { defaultKundliProfile } = useProfile();
@@ -112,14 +124,11 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
       const yoga = null;
       const detailedReport = null;
 
+      const bd = getProfileBirthDetails(profile);
       const activeKundli: KundliPdfPayload = {
         birthDetails: {
           name: profile.name || 'Kundli Report',
-          gender: profile.birthDetails?.gender || 'unknown',
-          dob: profile.birthDetails?.dob || '',
-          tob: profile.birthDetails?.tob || '',
-          city: profile.birthDetails?.city || 'Unknown',
-          state: profile.birthDetails?.state || 'Unknown'
+          ...bd
         },
         chart,
         dasha,
@@ -362,14 +371,11 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
           setMessages(prev => prev.map(m => m.id === loadingMsgId ? { ...m, kundliLoadingStep: 3 } : m));
           await new Promise(resolve => setTimeout(resolve, 300));
 
+          const bd = getProfileBirthDetails(profile);
           const freshKundli: KundliPdfPayload = {
             birthDetails: {
               name: profile.name,
-              gender: profile.birthDetails?.gender || 'unknown',
-              dob: profile.birthDetails?.dob || '',
-              tob: profile.birthDetails?.tob || '',
-              city: profile.birthDetails?.city || 'Unknown',
-              state: profile.birthDetails?.state || 'Unknown'
+              ...bd
             },
             chart,
             dasha,
@@ -1094,7 +1100,13 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
                           )}
                         </div>
                         <p className="text-xs font-semibold text-neutral-500 mt-1 truncate">
-                          {p.birthDetails?.dob || 'Unknown DOB'} • {p.birthDetails?.city || 'Unknown City'}
+                          {(() => {
+                            const bd = getProfileBirthDetails(p);
+                            const formattedDob = bd.dob 
+                              ? new Date(bd.dob).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+                              : 'Unknown DOB';
+                            return `${formattedDob} • ${bd.city || 'Unknown City'}`;
+                          })()}
                         </p>
                       </div>
                       {isSelected && (

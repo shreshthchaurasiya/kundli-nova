@@ -3,12 +3,13 @@ import { ENDPOINTS } from './endpoints';
 import { KundliNovaDailyHoroscope, ZodiacSign, KundliNovaNatalChart, KundliNovaVimshottariDasha, KundliNovaDoshaAnalysis, KundliNovaYogaAnalysis, KundliNovaCompatibilityAnalysis } from '../../server/types/astrologyProvider';
 
 export class AstrologyApi {
-  /**
-   * Fetches the daily horoscope for a given zodiac sign.
-   * @param zodiac The lowercase zodiac sign (e.g., 'aries', 'taurus')
-   */
-  static async getDailyHoroscope(zodiac: ZodiacSign | string): Promise<KundliNovaDailyHoroscope> {
-    return ApiClient.get<KundliNovaDailyHoroscope>(ENDPOINTS.ASTROLOGY.DAILY_HOROSCOPE(zodiac));
+  static async getDailyHoroscope(
+    zodiac: ZodiacSign | string,
+    timeframe: 'Today' | 'Tomorrow' | 'Month' = 'Today'
+  ): Promise<KundliNovaDailyHoroscope> {
+    return ApiClient.get<KundliNovaDailyHoroscope>(
+      `${ENDPOINTS.ASTROLOGY.DAILY_HOROSCOPE(zodiac)}&timeframe=${timeframe.toLowerCase()}`
+    );
   }
   
   /**

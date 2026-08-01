@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronLeft, Share2, AlertCircle, RefreshCw, Heart, Briefcase, Smile, Plane, Sparkles, User, Lock } from 'lucide-react';
+import { ChevronLeft, Share2, AlertCircle, RefreshCw, Lock } from 'lucide-react';
 import { Screen } from '../types';
 import { useProfile } from '../contexts/ProfileContext';
 import { ZodiacSign, ZODIAC_SIGNS, KundliNovaDailyHoroscope } from '../server/types/astrologyProvider';
@@ -8,7 +8,6 @@ import { getWesternSunSign, ZODIAC_METADATA } from '../utils/astrology';
 import { AstrologyApi } from '../services/api/astrologyApi';
 import { ApiError } from '../services/api/apiErrors';
 import ZODIAC_IMAGES from '../assets/zodiac/index';
-import { generateDailyInsights } from '../utils/horoscopeInsights';
 
 interface HoroscopeScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
@@ -37,12 +36,12 @@ export default function HoroscopeScreen({ onNavigate }: HoroscopeScreenProps) {
   const [isRetryable, setIsRetryable] = useState(true);
   const [isStaleFallback, setIsStaleFallback] = useState(false);
 
-  const fetchHoroscope = useCallback(async (sign: ZodiacSign) => {
+  const fetchHoroscope = useCallback(async (sign: ZodiacSign, tab: TabName) => {
     setStatus('loading');
     setErrorMessage('');
     setIsStaleFallback(false);
     try {
-      const data = await AstrologyApi.getDailyHoroscope(sign);
+      const data = await AstrologyApi.getDailyHoroscope(sign, tab);
       setHoroscopeData(data);
       setStatus('success');
       if (data.isStaleFallback) {
@@ -56,7 +55,6 @@ export default function HoroscopeScreen({ onNavigate }: HoroscopeScreenProps) {
         if (error.statusCode === 401 || error.statusCode === 403) {
           setErrorMessage('Your session has expired. Please log in again.');
           setIsRetryable(false);
-          // Assuming existing auth behavior kicks in or user navigates
         } else if (error.statusCode === 429) {
           setErrorMessage('Too many requests. Please try again in a moment.');
           setIsRetryable(true);
@@ -75,8 +73,8 @@ export default function HoroscopeScreen({ onNavigate }: HoroscopeScreenProps) {
   }, []);
 
   useEffect(() => {
-    fetchHoroscope(selectedSign);
-  }, [selectedSign, fetchHoroscope]);
+    fetchHoroscope(selectedSign, activeTab);
+  }, [selectedSign, activeTab, fetchHoroscope]);
 
   const handleShare = async () => {
     if (!horoscopeData) return;
@@ -187,20 +185,16 @@ export default function HoroscopeScreen({ onNavigate }: HoroscopeScreenProps) {
       <div className="px-6 py-4 flex gap-4 shrink-0 border-b border-neutral-100 bg-white">
         {(['Today', 'Tomorrow', 'Month'] as TabName[]).map((tab) => {
           const isActive = tab === activeTab;
-          const isDisabled = tab !== 'Today';
           
           return (
             <button
               key={tab}
-              disabled={isDisabled}
-              onClick={() => !isDisabled && setActiveTab(tab)}
+              onClick={() => setActiveTab(tab)}
               className={`pb-2 text-[14px] font-[700] tracking-wide relative ${
                 isActive ? 'text-[#FF8A00]' : 'text-neutral-400'
-              } ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-              aria-disabled={isDisabled}
+              }`}
             >
               <div className="flex items-center gap-1">
-                {isDisabled && <Lock size={12} />}
                 {tab}
               </div>
               {isActive && (
@@ -245,7 +239,15 @@ export default function HoroscopeScreen({ onNavigate }: HoroscopeScreenProps) {
                 {selectedSign}
               </h2>
               <p className="text-[12px] font-[600] text-neutral-400 mt-0.5">
-                {metadata.dateRange}
+                {metadata.dateRange} {horoscopeData ? `• ${
+                  activeTab === 'Month'
+                    ? (() => {
+                        const parts = horoscopeData.date.split('-');
+                        const d = parts.length >= 2 ? new Date(Number(parts[0]), Number(parts[1]) - 1, 1) : new Date();
+                        return d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+                      })()
+                    : new Date(horoscopeData.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+                }` : ''}
               </p>
               <div className="flex items-center gap-3 mt-2">
                 <span className="text-[11px] font-[700] text-[#FF8A00] bg-[#FFF3E0] px-2.5 py-1 rounded-lg">
@@ -320,7 +322,21 @@ export default function HoroscopeScreen({ onNavigate }: HoroscopeScreenProps) {
               <div className="bg-white rounded-3xl p-6 shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-neutral-100/60 relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-[#FFFBEB] to-transparent opacity-50 -mr-10 -mt-10 rounded-full blur-2xl"></div>
                 
-                <h3 className="text-[12px] font-[800] text-[#FF8A00] uppercase tracking-widest mb-4">Today's Overview</h3>
+                  <div className="flex justify-between items-center mb-4 relative z-10">
+                  <h3 className="text-[12px] font-[800] text-[#FF8A00] uppercase tracking-widest">
+                    {activeTab === 'Today' ? "Today's" : activeTab === 'Tomorrow' ? "Tomorrow's" : "Month's"} Overview
+                  </h3>
+                  <span className="text-[11px] font-[750] text-[#FF8A00] bg-[#FFF9E6] px-2 py-0.5 rounded-md border border-[#FFE0B2]">
+                    {activeTab === 'Month' 
+                      ? (() => {
+                          const parts = horoscopeData.date.split('-');
+                          const d = parts.length >= 2 ? new Date(Number(parts[0]), Number(parts[1]) - 1, 1) : new Date();
+                          return d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+                        })()
+                      : new Date(horoscopeData.date).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })
+                    }
+                  </span>
+                </div>
                 <p className="text-[16px] leading-[1.65] font-[500] text-neutral-700 relative z-10">
                   {horoscopeData.overview}
                 </p>
@@ -338,82 +354,7 @@ export default function HoroscopeScreen({ onNavigate }: HoroscopeScreenProps) {
                 </div>
               </div>
 
-              {/* Detailed Insights */}
-              <div className="mt-6">
-                <h3 className="text-[18px] font-[800] text-neutral-900 mb-4 px-1">Detailed Insights</h3>
-                <div className="grid grid-cols-1 gap-4">
-                  {horoscopeData && generateDailyInsights(selectedSign, horoscopeData.date).map((insight, idx) => {
-                    const radius = 20;
-                    const circumference = 2 * Math.PI * radius;
-                    const strokeDashoffset = circumference - (insight.score / 100) * circumference;
-                    
-                    const getIcon = () => {
-                      switch(insight.name) {
-                        case 'Personal': return <User size={12} className="text-[#FF8A00]" />;
-                        case 'Professional': return <Briefcase size={12} className="text-[#FF8A00]" />;
-                        case 'Health': return <Heart size={12} className="text-[#FF8A00]" />;
-                        case 'Emotion': return <Smile size={12} className="text-[#FF8A00]" />;
-                        case 'Travel': return <Plane size={12} className="text-[#FF8A00]" />;
-                        case 'Luck': return <Sparkles size={12} className="text-[#FF8A00]" />;
-                        default: return null;
-                      }
-                    };
 
-                    return (
-                      <motion.div 
-                        key={insight.name}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: idx * 0.08 }}
-                        className="bg-white rounded-2xl p-4 shadow-sm border border-neutral-100 flex items-start gap-4"
-                      >
-                        {/* Circular Progress Gauge */}
-                        <div className="relative flex items-center justify-center shrink-0 w-[60px] h-[60px]">
-                          <svg className="transform -rotate-90 w-[60px] h-[60px]">
-                            <circle
-                              cx="30"
-                              cy="30"
-                              r={radius}
-                              stroke="currentColor"
-                              strokeWidth="4"
-                              fill="transparent"
-                              className="text-neutral-100"
-                            />
-                            <motion.circle
-                              cx="30"
-                              cy="30"
-                              r={radius}
-                              stroke="currentColor"
-                              strokeWidth="4"
-                              fill="transparent"
-                              strokeDasharray={circumference}
-                              initial={{ strokeDashoffset: circumference }}
-                              animate={{ strokeDashoffset }}
-                              transition={{ duration: 1.5, delay: 0.2 + idx * 0.1, ease: "easeOut" }}
-                              strokeLinecap="round"
-                              className="text-[#FF8A00]"
-                            />
-                          </svg>
-                          <div className="absolute inset-0 flex flex-col items-center justify-center">
-                            <span className="text-[13px] font-[800] text-neutral-800">{insight.score}%</span>
-                          </div>
-                        </div>
-
-                        {/* Content */}
-                        <div className="flex-1 pt-1">
-                          <div className="flex items-center gap-1.5 mb-1">
-                            {getIcon()}
-                            <h4 className="text-[14px] font-[800] text-neutral-900 tracking-tight">{insight.name}</h4>
-                          </div>
-                          <p className="text-[13px] font-[500] text-neutral-500 leading-relaxed">
-                            {insight.text}
-                          </p>
-                        </div>
-                      </motion.div>
-                    );
-                  })}
-                </div>
-              </div>
             </motion.div>
           )}
         </AnimatePresence>

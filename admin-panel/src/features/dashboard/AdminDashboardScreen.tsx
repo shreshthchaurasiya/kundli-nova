@@ -8,7 +8,8 @@ import {
   Building2, 
   ArrowRightLeft, 
   FileWarning, 
-  ShieldCheck 
+  ShieldCheck,
+  Sparkles
 } from 'lucide-react';
 
 export function AdminDashboardScreen() {
@@ -119,7 +120,7 @@ export function AdminDashboardScreen() {
           {isLoading ? (
             <div className="h-8 w-24 animate-pulse rounded bg-neutral-100" />
           ) : (
-            <h2 className="text-2xl font-black text-neutral-900">{formatINR(data?.razorpay_payment_volume)}</h2>
+            <h2 className="text-2xl font-black text-neutral-900">{formatINR(data?.reconciliation?.razorpay_payment_volume)}</h2>
           )}
         </div>
 
@@ -137,7 +138,7 @@ export function AdminDashboardScreen() {
           {isLoading ? (
             <div className="h-8 w-24 animate-pulse rounded bg-neutral-100" />
           ) : (
-            <h2 className="text-2xl font-black text-neutral-900">{formatINR(data?.gross_billing)}</h2>
+            <h2 className="text-2xl font-black text-neutral-900">{formatINR(data?.billing?.gross_billing)}</h2>
           )}
         </div>
 
@@ -156,7 +157,34 @@ export function AdminDashboardScreen() {
             <div className="h-8 w-24 animate-pulse rounded bg-emerald-100/50" />
           ) : (
             <h2 className="text-2xl font-black text-emerald-700">
-              {data?.company_revenue > 0 ? formatINR(data?.company_revenue) : '₹0'}
+              {data?.billing?.company_revenue > 0 ? formatINR(data?.billing?.company_revenue) : '₹0'}
+            </h2>
+          )}
+        </div>
+
+        {/* AI Subscription Revenue */}
+        <div className="rounded-2xl border border-blue-200 bg-blue-50/30 p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-600">
+                <Sparkles size={20} />
+              </div>
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-blue-700">AI Subscriptions</p>
+                <p className="text-[10px] font-medium text-blue-600/70">Total Premium Revenue</p>
+              </div>
+            </div>
+            {!isLoading && (
+              <span className="text-[10px] font-bold text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
+                {data?.ai_subscriptions?.active_count || 0} Active
+              </span>
+            )}
+          </div>
+          {isLoading ? (
+            <div className="h-8 w-24 animate-pulse rounded bg-blue-100/50" />
+          ) : (
+            <h2 className="text-2xl font-black text-blue-700">
+              {data?.ai_subscriptions?.revenue > 0 ? formatINR(data?.ai_subscriptions?.revenue) : '₹0'}
             </h2>
           )}
         </div>
@@ -176,7 +204,7 @@ export function AdminDashboardScreen() {
             <div className="h-8 w-24 animate-pulse rounded bg-orange-100/50" />
           ) : (
             <h2 className="text-2xl font-black text-orange-700">
-              {data?.astrologer_earnings > 0 ? formatINR(data?.astrologer_earnings) : '₹0'}
+              {data?.billing?.astrologer_earnings > 0 ? formatINR(data?.billing?.astrologer_earnings) : '₹0'}
             </h2>
           )}
         </div>
@@ -196,7 +224,7 @@ export function AdminDashboardScreen() {
             <div className="h-8 w-24 animate-pulse rounded bg-purple-100/50" />
           ) : (
             <h2 className="text-2xl font-black text-purple-700">
-              {data?.awaiting_commission > 0 ? formatINR(data?.awaiting_commission) : '₹0'}
+              {data?.billing?.awaiting_commission > 0 ? formatINR(data?.billing?.awaiting_commission) : '₹0'}
             </h2>
           )}
         </div>
@@ -209,37 +237,37 @@ export function AdminDashboardScreen() {
         <div className="rounded-xl border border-neutral-200 bg-white p-4">
           <Users size={18} className="mb-2 text-neutral-400" />
           <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-500">Total Users</p>
-          {isLoading ? <div className="mt-1 h-6 w-12 animate-pulse rounded bg-neutral-100" /> : <p className="text-lg font-black text-neutral-900">{data?.total_users}</p>}
+          {isLoading ? <div className="mt-1 h-6 w-12 animate-pulse rounded bg-neutral-100" /> : <p className="text-lg font-black text-neutral-900">{data?.users?.total}</p>}
         </div>
 
         <div className="rounded-xl border border-neutral-200 bg-white p-4">
           <Star size={18} className="mb-2 text-neutral-400" />
           <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-500">Astrologers</p>
-          {isLoading ? <div className="mt-1 h-6 w-12 animate-pulse rounded bg-neutral-100" /> : <p className="text-lg font-black text-neutral-900">{data?.total_astrologers}</p>}
+          {isLoading ? <div className="mt-1 h-6 w-12 animate-pulse rounded bg-neutral-100" /> : <p className="text-lg font-black text-neutral-900">{data?.astrologers?.total}</p>}
         </div>
 
         <div className="rounded-xl border border-neutral-200 bg-white p-4">
           <MessageSquare size={18} className="mb-2 text-neutral-400" />
           <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-500">Active Consults</p>
-          {isLoading ? <div className="mt-1 h-6 w-12 animate-pulse rounded bg-neutral-100" /> : <p className="text-lg font-black text-neutral-900">{data?.active_consultations}</p>}
+          {isLoading ? <div className="mt-1 h-6 w-12 animate-pulse rounded bg-neutral-100" /> : <p className="text-lg font-black text-neutral-900">{data?.consultations?.active}</p>}
         </div>
 
         <div className="rounded-xl border border-neutral-200 bg-white p-4">
           <ArrowRightLeft size={18} className="mb-2 text-neutral-400" />
           <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-500">Pending Withdrawals</p>
-          {isLoading ? <div className="mt-1 h-6 w-12 animate-pulse rounded bg-neutral-100" /> : <p className="text-lg font-black text-neutral-900">{data?.pending_withdrawals}</p>}
+          {isLoading ? <div className="mt-1 h-6 w-12 animate-pulse rounded bg-neutral-100" /> : <p className="text-lg font-black text-neutral-900">{data?.withdrawals?.pending}</p>}
         </div>
 
         <div className="rounded-xl border border-neutral-200 bg-white p-4">
           <ShieldCheck size={18} className="mb-2 text-neutral-400" />
           <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-500">Pending Verification</p>
-          {isLoading ? <div className="mt-1 h-6 w-12 animate-pulse rounded bg-neutral-100" /> : <p className="text-lg font-black text-neutral-900">{data?.pending_payout_accounts}</p>}
+          {isLoading ? <div className="mt-1 h-6 w-12 animate-pulse rounded bg-neutral-100" /> : <p className="text-lg font-black text-neutral-900">{data?.payouts?.pending_accounts}</p>}
         </div>
 
         <div className="rounded-xl border border-red-200 bg-red-50 p-4">
           <FileWarning size={18} className="mb-2 text-red-400" />
           <p className="text-[10px] font-bold uppercase tracking-wider text-red-500">Awaiting Comm.</p>
-          {isLoading ? <div className="mt-1 h-6 w-12 animate-pulse rounded bg-red-100/50" /> : <p className="text-lg font-black text-red-600">{formatINR(data?.awaiting_commission_amount)}</p>}
+          {isLoading ? <div className="mt-1 h-6 w-12 animate-pulse rounded bg-red-100/50" /> : <p className="text-lg font-black text-red-600">{formatINR(data?.billing?.awaiting_commission_amount)}</p>}
         </div>
 
       </div>
