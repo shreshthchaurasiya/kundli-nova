@@ -7,8 +7,10 @@ import { NavamshaProvider } from '../providers/navamshaProvider';
 import { KundliCalculationService } from '../services/kundliCalculationService';
 import { NovaAIContextService } from '../services/ai/NovaAIContextService';
 import { NovaAIPromptBuilder } from '../services/ai/NovaAIPromptBuilder';
+import { NovaAIToolRegistry } from '../services/ai/NovaAIToolRegistry';
 import { NovaAIConversationMemory } from '../types/novaAiContext';
 import { AIUsageService } from '../services/aiUsageService';
+import { supabaseAdmin } from '../config/supabase';
 
 export interface AiRouterConfig {
   geminiApiKey?: string;
@@ -30,6 +32,7 @@ export function createAiRouter(config: AiRouterConfig) {
   const kundliService = new KundliCalculationService(provider);
   const contextService = new NovaAIContextService(kundliService);
   const promptBuilder = new NovaAIPromptBuilder();
+  const toolRegistry = new NovaAIToolRegistry(kundliService);
 
   const protectedAiPaths = ['/api/ai', '/api/chat', '/api/explain'];
 
@@ -100,33 +103,51 @@ export function createAiRouter(config: AiRouterConfig) {
       return res.status(400).json({ code: 'INVALID_REQUEST', error: 'Please enter a message for Nova AI.' });
     }
 
-    const memory: NovaAIConversationMemory = {
-      sessionId: req.body?.sessionId || `session-${Date.now()}`,
-      topic: req.body?.topic || 'General Guidance',
-      recentMessages: safeMessages.slice(firstUserMessage).map((m: any) => ({
-        sender: m.sender,
-        text: m.text,
-        time: new Date().toISOString()
-      }))
-    };
-
-    let systemInstruction = NovaAIPromptBuilder.SYSTEM_INSTRUCTION;
-
+    // Fetch active profile details for dynamic context
+    let activeProfileContext = null;
+    console.log(`[Nova AI] /api/chat called by userId: ${userId}, profileId: ${profileId}`);
     if (profileId) {
       try {
-        const compatibilityContext = req.body?.compatibilityContext;
-        const context = await contextService.loadContext(userId, profileId, memory, profileBId, compatibilityContext);
-        const dynamicContext = promptBuilder.buildPromptContext(context);
-        systemInstruction = `${NovaAIPromptBuilder.SYSTEM_INSTRUCTION}\n\n${dynamicContext}`;
-      } catch (error) {
-        console.error('[Nova AI] Error loading context:', error);
-        systemInstruction = `${NovaAIPromptBuilder.SYSTEM_INSTRUCTION}\n\nAstrology Context: UNAVAILABLE`;
+        const { data: profileData, error } = await supabaseAdmin
+          .from('kundli_profiles')
+          .select('*')
+          .eq('id', profileId)
+          .eq('owner_id', userId)
+          .single();
+        console.log(`[Nova AI] Fetched profileData for ${profileId}:`, profileData ? profileData.name : 'null', 'Error:', error);
+        if (profileData) {
+          activeProfileContext = profileData;
+        }
+      } catch (e) {
+        console.error('[Nova AI] Failed to fetch active profile context:', e);
       }
     } else {
-      systemInstruction = `${NovaAIPromptBuilder.SYSTEM_INSTRUCTION}\n\nAstrology Context: UNAVAILABLE`;
+      console.log(`[Nova AI] No profileId provided in request body!`);
     }
 
-    const conversation = await Promise.all(safeMessages.slice(firstUserMessage).map(async (message: any) => {
+    const baseSystemInstruction = promptBuilder.buildSystemInstruction(activeProfileContext);
+    
+    // Fetch Long-Term Memory
+    let memoryContext = '';
+    try {
+      const { data: pastSessions } = await supabaseAdmin
+        .from('ai_chat_sessions')
+        .select('summary, created_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(3);
+        
+      if (pastSessions && pastSessions.length > 0) {
+        memoryContext = '\n\nPAST CONVERSATION MEMORY (Use this to remember user details):\n' + 
+          pastSessions.map(s => `- ${s.summary}`).join('\n');
+      }
+    } catch (e) {
+      console.error('[Nova AI] Failed to fetch memory', e);
+    }
+    
+    const systemInstruction = baseSystemInstruction + memoryContext;
+
+    const conversation: any[] = await Promise.all(safeMessages.slice(firstUserMessage).map(async (message: any) => {
       const parts: any[] = [];
       if (message.attachmentUrl) {
         try {
@@ -153,20 +174,69 @@ export function createAiRouter(config: AiRouterConfig) {
     }));
 
     try {
-      const response = await ai.models.generateContent({
-        model: 'gemini-flash-lite-latest',
-        contents: conversation,
+      // Try primary model first, fallback to lite if quota exhausted
+      const PRIMARY_MODEL = 'gemini-2.5-flash';
+      const FALLBACK_MODEL = 'gemini-flash-lite-latest';
+      
+      const createChat = (model: string) => ai.chats.create({
+        model,
         config: {
           systemInstruction,
           temperature: 0.7,
-          responseMimeType: 'application/json',
+          tools: [{ functionDeclarations: toolRegistry.getToolDeclarations() }],
         },
+        history: conversation.slice(0, -1),
       });
 
+      let chat = createChat(PRIMARY_MODEL);
+
+
+      const lastUserMessage = conversation[conversation.length - 1];
+      let response: any;
+      try {
+        response = await chat.sendMessage({ message: lastUserMessage.parts });
+      } catch (quotaErr: any) {
+        if (quotaErr?.status === 429) {
+          console.warn('[Nova AI] Primary model quota exhausted, falling back to lite model');
+          chat = createChat(FALLBACK_MODEL);
+          response = await chat.sendMessage({ message: lastUserMessage.parts });
+        } else {
+          throw quotaErr;
+        }
+      }
+
+      // Function Calling Loop (max 3 calls to prevent infinite loops)
+      let callsCount = 0;
+      while (response.functionCalls && response.functionCalls.length > 0 && callsCount < 3) {
+        callsCount++;
+        const functionResponses = await Promise.all(response.functionCalls.map(async (call) => {
+          const result = await toolRegistry.executeTool(call.name, call.args, userId);
+          return {
+            functionResponse: {
+              name: call.name,
+              response: typeof result === 'object' ? result : { result },
+            },
+          };
+        }));
+        
+        response = await chat.sendMessage({ message: functionResponses });
+      }
+
       let texts: string[];
-      let rawText = response.text || '[]';
+      let suggestions: string[] = [];
+      let rawText = response.text || '';
       
-      // Clean up markdown formatting (e.g., ```json\n...\n```)
+      // Extract SUGGESTED_QUESTIONS if present
+      const suggestionsMatch = rawText.match(/SUGGESTED_QUESTIONS:\s*(\[[^\]]+\])/);
+      if (suggestionsMatch && suggestionsMatch[1]) {
+        try {
+          suggestions = JSON.parse(suggestionsMatch[1]);
+          rawText = rawText.replace(suggestionsMatch[0], '').trim();
+        } catch (e) {
+          console.error('[Nova AI] Failed to parse suggested questions:', e);
+        }
+      }
+
       const jsonMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
       if (jsonMatch && jsonMatch[1]) {
         rawText = jsonMatch[1];
@@ -179,19 +249,49 @@ export function createAiRouter(config: AiRouterConfig) {
             .filter(item => item !== null && item !== undefined)
             .map(item => String(item).trim())
             .filter(Boolean)
-            .map(item => item.slice(0, 800)) // reasonable max length per bubble
-            .slice(0, 4); // max 4 bubbles
+            .map(item => item.slice(0, 2000))
+            .slice(0, 4);
         } else {
           texts = [String(parsed).trim().slice(0, 2000)];
         }
       } catch {
-        // Fallback: safely render the plain response as one message, stripping markdown fences if any remain
-        const cleanText = (response.text || '').replace(/```(?:json)?|```/g, '').trim();
+        const cleanText = rawText.replace(/```(?:json)?|```/g, '').trim();
         texts = cleanText ? [cleanText.slice(0, 2000)] : [];
       }
 
       if (!texts.length) throw new Error('Gemini returned an empty response');
-      return res.json({ texts });
+      
+      // Fire-and-forget background memory save
+      const sessionId = req.body?.sessionId || `session-${userId}`;
+      const memoryPrompt = `Summarize this conversation in 1-2 short sentences. Focus only on the user's current situation, goals, or problems. \nUser: ${lastUserMessage.parts[0].text}\nNova: ${texts.join(' ')}`;
+      
+      ai.models.generateContent({
+        model: 'gemini-flash-lite-latest',
+        contents: memoryPrompt,
+        config: { systemInstruction: 'You are a summarizer. Keep it extremely brief.' }
+      }).then(async (summaryRes) => {
+        const summary = summaryRes.text?.trim();
+        if (summary) {
+          try {
+            const { data: existing } = await supabaseAdmin
+              .from('ai_chat_sessions')
+              .select('id')
+              .eq('session_id', sessionId)
+              .eq('user_id', userId)
+              .maybeSingle();
+              
+            if (existing) {
+              await supabaseAdmin.from('ai_chat_sessions').update({ summary, updated_at: new Date().toISOString() }).eq('id', existing.id);
+            } else {
+              await supabaseAdmin.from('ai_chat_sessions').insert({ user_id: userId, session_id: sessionId, summary });
+            }
+          } catch (dbErr) {
+            console.error('[Nova AI] Failed to save memory summary:', dbErr);
+          }
+        }
+      }).catch(err => console.error('[Nova AI] Failed to save memory summary:', err));
+
+      return res.json({ texts, suggestions });
     } catch (error: any) {
       console.error('[Nova AI] Gemini request failed:', error?.message || 'Unknown provider error');
       return res.status(502).json({ code: 'AI_PROVIDER_ERROR', error: 'Nova AI is temporarily unavailable. Please try again.' });

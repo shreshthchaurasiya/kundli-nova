@@ -56,12 +56,17 @@ export function AstrologerDashboardProvider({ children }: { children: React.Reac
       setProfile(snapshot?.profile ?? null);
       setSessions(snapshot?.sessions ?? []);
 
-      setIsSummaryLoading(true);
-      setSummaryError(null);
-      astrologerDashboardService.getDashboardSummary(tz)
-        .then(setSummary)
-        .catch(err => setSummaryError(err instanceof Error ? err.message : 'Unable to load billing summary'))
-        .finally(() => setIsSummaryLoading(false));
+      if (snapshot?.profile) {
+        setIsSummaryLoading(true);
+        setSummaryError(null);
+        astrologerDashboardService.getDashboardSummary(tz)
+          .then(setSummary)
+          .catch(err => setSummaryError(err instanceof Error ? err.message : 'Unable to load billing summary'))
+          .finally(() => setIsSummaryLoading(false));
+      } else {
+        setSummary(null);
+        setIsSummaryLoading(false);
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to load the astrologer dashboard.');
     } finally {

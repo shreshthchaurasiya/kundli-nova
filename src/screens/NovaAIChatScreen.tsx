@@ -74,6 +74,7 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
   const [isTyping, setIsTyping] = useState(false);
   const [currentConvId, setCurrentConvId] = useState<string>('');
   const [currentTopic, setCurrentTopic] = useState<string>('General Guidance');
+  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const autoAnalysisTriggeredRef = useRef(false);
 
@@ -469,7 +470,7 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
   };
 
   const requestNovaResponse = async (conversation: Message[], profileId: string, profileBId?: string, compatibilityContext?: NormalizedCompatibilityContext) => {
-    const result = await postAiRequest<{ texts: string[] }>('/api/chat', {
+    const result = await postAiRequest<{ texts: string[], suggestions?: string[] }>('/api/chat', {
       messages: conversation
         .filter(message => message.text || message.attachmentUrl)
         .map(message => ({ sender: message.sender, text: message.text || '', attachmentUrl: message.attachmentUrl })),
@@ -481,11 +482,13 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
     if (!Array.isArray(result.texts) || result.texts.length === 0) {
       throw new Error('Nova AI ne empty response diya. Kripya dobara try karein.');
     }
+    setAiSuggestions(result.suggestions || []);
     return result.texts;
   };
 
   const handleSelectChip = async (chipText: string) => {
     if (isTyping) return;
+    setAiSuggestions([]);
 
     const userMsg: Message = {
       id: `msg-${Date.now()}`,
@@ -533,6 +536,7 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if ((!inputText.trim() && !selectedImage) || isTyping || isUploading) return;
+    setAiSuggestions([]);
 
     let attachmentUrl: string | undefined = undefined;
 
@@ -884,7 +888,21 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
       </div>
 
 
-      {showChips && (
+      {aiSuggestions.length > 0 ? (
+        <div className="bg-[#FFFFFF]/85 backdrop-blur-md border-t border-[#F3F4F6]/50 px-[20px] py-[10px] z-20 flex space-x-[8px] overflow-x-auto no-scrollbar scroll-smooth">
+          {aiSuggestions.map((suggestion, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => handleSelectChip(suggestion)}
+              disabled={isTyping}
+              className="bg-[#FFFFFF] text-neutral-700 border border-[#EBE8E0] px-3.5 py-1.5 rounded-full text-[12px] font-[750] shadow-[0_2px_4px_rgba(0,0,0,0.02)] whitespace-nowrap flex items-center space-x-1.5 transition-all hover:border-[#FF8A00]/40 active:scale-95 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span>{suggestion}</span>
+            </button>
+          ))}
+        </div>
+      ) : showChips && (
         <div className="bg-[#FFFFFF]/85 backdrop-blur-md border-t border-[#F3F4F6]/50 px-[20px] py-[10px] z-20 flex space-x-[8px] overflow-x-auto no-scrollbar scroll-smooth">
           {[
             { label: '❤️ Love', text: '❤️ Tell me about my Love & Relationships compatibility according to my Kundli.' },

@@ -115,6 +115,28 @@ export const updateProfile = async (
       throw new ApiError(500, `Failed to update profile: ${error.message || 'Unknown error'}`);
     }
 
+    // Sync to self kundli_profile
+    if (Object.keys(updates).some(k => ['name', 'gender', 'dob', 'tob', 'birth_state', 'birth_district', 'birth_city'].includes(k))) {
+      const kundliUpdates: Record<string, any> = {};
+      if (updates.name !== undefined) kundliUpdates.name = updates.name;
+      if (updates.gender !== undefined) kundliUpdates.gender = updates.gender;
+      if (updates.dob !== undefined) kundliUpdates.dob = updates.dob;
+      if (updates.tob !== undefined) kundliUpdates.tob = updates.tob;
+      if (updates.birth_state !== undefined) kundliUpdates.birth_state = updates.birth_state;
+      if (updates.birth_district !== undefined) kundliUpdates.birth_district = updates.birth_district;
+      if (updates.birth_city !== undefined) kundliUpdates.birth_city = updates.birth_city;
+
+      const { error: syncError } = await supabaseAdmin
+        .from('kundli_profiles')
+        .update(kundliUpdates)
+        .eq('owner_id', userId)
+        .eq('relation', 'self');
+      
+      if (syncError) {
+        console.error('Failed to sync self kundli_profile:', syncError);
+      }
+    }
+
     res.json({
       status: 'success',
       data: profile ? fromDbFields(profile) : null,

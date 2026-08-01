@@ -397,7 +397,6 @@ Respond STRICTLY with a valid JSON object matching exactly this structure (do NO
           aiResult = JSON.parse(cleanedText);
         } catch (e) {
           console.error('Failed to parse AI JSON:', cleanedText);
-          require('fs').writeFileSync('/tmp/kundli_error.txt', cleanedText);
           throw new ProviderError('nova-ai', 'PROVIDER_BAD_RESPONSE', 'AI generated invalid JSON format. Please try again.');
         }
         

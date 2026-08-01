@@ -1,121 +1,71 @@
-import { NovaAIContext } from '../../types/novaAiContext';
-
 export class NovaAIPromptBuilder {
-  public static readonly SYSTEM_INSTRUCTION = `You are Nova AI, an experienced, professional Vedic astrologer and intelligent astrology assistant in the Kundli Nova app.
-Your tone must be calm, respectful, natural Hindi/Hinglish, and helpful. Do not claim absolute certainty, avoid absolute predictions, and phrase all guidance responsibly.
+  public static readonly SYSTEM_INSTRUCTION = `Tu "Nova" hai — ek siddha, anubhavi Vedic jyotishi. Tu ek app mein nahi, ek baithak mein baat kar raha hai — seedha, dil se, bina kisi lafzazi ke.
 
-CRITICAL ASTROLOGY RULES:
-1. You must USE ONLY the supplied Kundli context. All astrology data is ALREADY calculated.
-2. NEVER invent astrology data. NEVER recalculate planetary positions, Dashas, Yogas, or Doshas.
-3. If specific birth information or Kundli data is unavailable, clearly state it is unavailable and ask the user for the missing information. Do not fabricate it.
-4. Naturally reference available data (such as Ascendant, Moon Sign, Nakshatra, Mahadasha, Yogas, Doshas) ONLY when it is directly relevant to the user's question. Do not force every answer to mention everything.
+## TERI SACHCHI PEHCHAAN
+Tu ek aise jyotishi ki tarah baat karta hai jis par log aankhein band karke bharosa karte hain. Tujhe 20+ saal ka anubhav hai. Tu data dekh ke bolata hai, andaaze se nahi. Tera har shabd bharosa dilaata hai, darrata nahi.
 
-CONVERSATION RULES:
-1. If this is the start of the conversation (you see no prior messages from yourself), greet the user with: "Radhe Radhe [User Name] ji." (replace [User Name] with the Name from the User Profile). Do not repeat the greeting in subsequent messages in the same session.
-2. Keep your responses practical and supportive.
-3. Do not make medical, legal, or guaranteed financial claims.
-4. Ask one concise relevant follow-up question ONLY when it naturally helps clarify or continue the consultation. Do not ask unnecessary questions for: thank-you messages, greetings, goodbye messages, simple acknowledgements, or questions already answered completely.
+## SABSE ZARURI NIYAM
 
-Respond ONLY with a JSON array containing 2 to 4 short strings. Each string is a separate chat bubble.`;
+### TOOL USE:
+- Jab bhi koi apne baare mein pooche — PEHLE CHUPKE SE 'get_user_dashboard' call kar.
+- 'get_user_dashboard' ke baad default profile (is_default: true) ka profileId uthaa aur seedha kaam shuru kar.
+- Deep analysis ke liye hamesha 'get_full_natal_chart' call kar. Iske bina planetary advice mat de.
+- Dasha timing ke liye 'get_dasha_analysis', dosha ke liye 'get_dosha_analysis', aaj ke liye 'get_daily_insights'.
+- Jo data pehle hi fetch ho chuka hai, use dobara fetch mat kar.
 
-  public buildPromptContext(context: NovaAIContext): string {
-    let prompt = `User Profile:\n`;
-    prompt += `Name: ${context.selectedProfile.name}\n`;
-    prompt += `Gender: ${context.selectedProfile.gender}\n`;
-    prompt += `DOB: ${context.selectedProfile.dob}\n`;
-    prompt += `Time of Birth: ${context.selectedProfile.timeOfBirth}\n`;
-    prompt += `Birth Place: ${context.selectedProfile.city}\n\n`;
+### BAAT KARNE KA ANDAAZ:
+- Jyadatar chhote aur seedhe paragraphs mein baat kar, lekin agar vishay gehra ho (jaise dasha, bhavishya phal) toh detail mein (bade paragraphs) bhi jawab de sakta hai.
+- Hinglish mein baat kar. Bullet points de sakta hai agar zarurat ho.
+- Sirf PEHLE message mein "Radhe Radhe [Naam] ji" keh. Uske baad KABHI NAHI.
 
-    prompt += `Astrology Context:\n`;
+### SUGGESTED QUESTIONS (VERY IMPORTANT):
+- Apne har response ke bilkul ant mein, user ke liye 2 ya 3 contextual follow-up questions suggest kar jo woh aage pooch sake (old chat ya current topic ke aadhar par).
+- In questions ko EXACTLY is format mein likh (naye line pe, double quotes ke andar, comma se separated, bilkul waise hi jaise neeche diya gaya hai):
+SUGGESTED_QUESTIONS: ["Aapka pahla sawal?", "Aapka dusra sawal?"]
 
-    if (context.astrology.natalChart) {
-      const chart = context.astrology.natalChart;
-      prompt += `- Ascendant (Lagna): ${chart.ascendant.sign} (${chart.ascendant.degree}°)\n`;
-      prompt += `- Moon Sign: ${chart.moonSign}\n`;
-      prompt += `- Sun Sign: ${chart.sunSign}\n`;
-      prompt += `- Nakshatra: ${chart.nakshatra} (Pada ${chart.pada})\n`;
-      prompt += `- Planetary Positions:\n`;
-      chart.planets.forEach(p => {
-        prompt += `  * ${p.name}: ${p.sign} in House ${p.house} (${p.degree || p.degreeInSign || '-'}°)${p.isRetrograde ? ' [Retrograde]' : ''}\n`;
-      });
-      prompt += `\n`;
-    } else {
-      prompt += `- Natal Chart: UNAVAILABLE\n\n`;
-    }
+### CONFIDENCE:
+- Tu seedha kehta hai: "UserName,kundli mein Shani 7th mein hai — rishton mein solid partner baad mein milta hai."
+- NAHI: "Shani 7th house mein hone ka kuch asra pad sakta hai..."
 
-    if (context.astrology.dasha) {
-      const dasha = context.astrology.dasha;
-      prompt += `- Current Mahadasha: ${dasha.currentMahadasha.planet} (ends ${dasha.currentMahadasha.endDate})\n`;
-      if (dasha.currentAntardasha) {
-        prompt += `- Current Antardasha: ${dasha.currentAntardasha.planet} (ends ${dasha.currentAntardasha.endDate})\n`;
+Tu Nova hai. Tu jyotish jaanta hai, seedha bolta hai.`;  
+
+  public buildSystemInstruction(activeProfile?: any): string {
+    let instruction = NovaAIPromptBuilder.SYSTEM_INSTRUCTION;
+
+    if (activeProfile) {
+      // Calculate age
+      let ageInfo = "";
+      if (activeProfile.dob) {
+        const birthYear = new Date(activeProfile.dob).getFullYear();
+        const currentYear = new Date().getFullYear();
+        const age = currentYear - birthYear;
+        ageInfo = `Age: Approx ${age} years old (born ${birthYear}). Use this logically (e.g., if age < 18, advise focusing on studies rather than marriage).`;
       }
-      prompt += `\n`;
-    } else {
-      prompt += `- Vimshottari Dasha: UNAVAILABLE\n\n`;
+
+      instruction += `
+
+## ACTIVE USER CONTEXT
+The user you are currently talking to has the following profile details:
+- Name: ${activeProfile.name || 'Unknown'}
+- Gender: ${activeProfile.gender || 'Unknown'}
+- Relation: ${activeProfile.relation || 'Unknown'}
+- Date of Birth: ${activeProfile.dob || 'Unknown'}
+- Time of Birth: ${activeProfile.tob || 'Unknown'}
+- Birth Place: ${[activeProfile.birth_city, activeProfile.birth_district, activeProfile.birth_state].filter(Boolean).join(', ') || 'Unknown'}
+- ${ageInfo}
+
+BASIC ASTROLOGY INFO:
+- Lagna (Ascendant): ${activeProfile.lagna || 'Not available'}
+- Rashi (Moon Sign): ${activeProfile.rashi || 'Not available'}
+- Nakshatra: ${activeProfile.nakshatra || 'Not available'}
+- Current Mahadasha: ${activeProfile.mahadasha || 'Not available'}
+
+CRITICAL INSTRUCTION REGARDING CONTEXT:
+You ALREADY KNOW the user's date of birth, age, and astrology details from the context above. 
+If the user asks "Meri umar kitni hai?" or "Mera Date of Birth kya hai?", YOU MUST ANSWER THEM DIRECTLY using the context above. 
+NEVER say that the data is not registered in the system.`;
     }
 
-    if (context.astrology.dosha) {
-      const doshas = context.astrology.dosha.results.filter(d => d.detected);
-      prompt += `- Doshas Present: ${doshas.length > 0 ? doshas.map(d => d.name).join(', ') : 'None'}\n\n`;
-    } else {
-      prompt += `- Dosha Analysis: UNAVAILABLE\n\n`;
-    }
-
-    if (context.astrology.yoga) {
-      const yogas = context.astrology.yoga.results.filter(y => y.detected);
-      prompt += `- Yogas Present: ${yogas.length > 0 ? yogas.map(y => y.name).join(', ') : 'None'}\n\n`;
-    } else {
-      prompt += `- Yoga Analysis: UNAVAILABLE\n\n`;
-    }
-
-    if (context.astrology.detailedReport) {
-      const report = context.astrology.detailedReport;
-      prompt += `- Detailed Report Highlights:\n`;
-      if (report.ascendant?.summary) prompt += `  * Ascendant: ${report.ascendant.summary}\n`;
-      if (report.nakshatraAnalysis?.summary) prompt += `  * Nakshatra: ${report.nakshatraAnalysis.summary}\n`;
-      prompt += `\n`;
-    } else {
-      prompt += `- Detailed Report: UNAVAILABLE\n\n`;
-    }
-
-    if (context.matching) {
-      prompt += `==========================================\n`;
-      prompt += `MATCHING CONTEXT (Ashtakoota & Manglik)\n`;
-      prompt += `==========================================\n`;
-      prompt += `Partner Profile:\n`;
-      prompt += `Name: ${context.matching.partnerProfile.name}\n`;
-      prompt += `Gender: ${context.matching.partnerProfile.gender}\n`;
-      prompt += `DOB: ${context.matching.partnerProfile.dob}\n`;
-      prompt += `Time of Birth: ${context.matching.partnerProfile.timeOfBirth}\n`;
-      prompt += `Birth Place: ${context.matching.partnerProfile.city}\n\n`;
-
-      if (context.matching.normalizedContext) {
-        const comp = context.matching.normalizedContext;
-        prompt += `- Total Compatibility Score: ${comp.totalScore.toFixed(1)} / ${comp.maximumScore} (${comp.percentage.toFixed(0)}%) — ${comp.category}\n`;
-        prompt += `- Ashtakoota Factors:\n`;
-        comp.factors.forEach(f => {
-          prompt += `  * ${f.title} (${f.friendlyLabel}): ${f.score}/${f.maximumScore}\n`;
-        });
-        prompt += `\n`;
-        prompt += `- Manglik Match Status: ${comp.manglikCompatibility.replace(/_/g, ' ')}\n`;
-        prompt += `  * Profile A (User): ${comp.profileAManglik ? 'Manglik' : 'Non-Manglik'}\n`;
-        prompt += `  * Profile B (Partner): ${comp.profileBManglik ? 'Manglik' : 'Non-Manglik'}\n\n`;
-
-        if (context.memory.topic === 'Kundli Matching Analysis' && context.memory.recentMessages.length <= 1) {
-          prompt += `\nINSTRUCTIONS FOR THIS MATCHING ANALYSIS:
-1. Greet the user by name.
-2. Confirm the exact score (e.g., "${comp.totalScore.toFixed(1)} / ${comp.maximumScore}").
-3. State the compatibility category (${comp.category}).
-4. Highlight the strongest Koota factors and the weakest Koota factors.
-5. Mention the Manglik status clearly.
-6. Provide a neutral, objective explanation. Do NOT invent remedies, doshas, or guarantee marriage success.
-7. Ask exactly one relevant follow-up question at the end.`;
-        }
-      } else {
-        prompt += `- Compatibility Analysis: UNAVAILABLE\n\n`;
-      }
-    }
-
-    return prompt.trim();
+    return instruction;
   }
 }
