@@ -1,6 +1,7 @@
 import React from 'react';
 import { Home, Users, User, LayoutGrid } from 'lucide-react';
 import { Tab } from '../types';
+import novaLogo from '../assets/nova-logo-new.jpg';
 
 interface BottomNavProps {
   currentTab: Tab;
@@ -15,17 +16,7 @@ export default function BottomNav({ currentTab, onTabChange }: BottomNavProps) {
       id: 'nova-ai', 
       label: 'Nova AI', 
       icon: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-[26px] h-[26px]">
-          {/* Inner crystal orb sphere */}
-          <circle cx="12" cy="12" r="4.2" fill="currentColor" fillOpacity="0.2" stroke="currentColor" strokeWidth="1.8" />
-          {/* Celestial orbit ring intersecting */}
-          <ellipse cx="12" cy="12" rx="9" ry="3" stroke="currentColor" strokeWidth="1.6" transform="rotate(-30 12 12)" />
-          {/* Subtle surrounding planetary bodies representing alignment */}
-          <circle cx="12" cy="4.5" r="0.8" fill="currentColor" />
-          <circle cx="12" cy="19.5" r="0.8" fill="currentColor" />
-          <circle cx="4.5" cy="12" r="0.8" fill="currentColor" />
-          <circle cx="19.5" cy="12" r="0.8" fill="currentColor" />
-        </svg>
+        <img src={novaLogo} alt="Nova AI" className="w-full h-full rounded-full object-cover" />
       ), 
       isFab: true 
     },
@@ -44,7 +35,7 @@ export default function BottomNav({ currentTab, onTabChange }: BottomNavProps) {
               <div key={tab.id} className="relative flex flex-col items-center justify-end w-full h-full pb-[2px] z-10">
                 <button
                   onClick={() => onTabChange(tab.id)}
-                  className="absolute top-[-26px] flex items-center justify-center w-[56px] h-[56px] rounded-full bg-[#FF8A00] text-white shadow-[0_4px_24px_rgba(255,138,0,0.6)] active:scale-95 transition-all duration-300 focus:outline-none"
+                  className="absolute top-[-26px] flex items-center justify-center w-[56px] h-[56px] rounded-full bg-[#FF8A00] text-white shadow-sm active:scale-95 transition-all duration-300 focus:outline-none"
                 >
                   {tab.icon}
                 </button>

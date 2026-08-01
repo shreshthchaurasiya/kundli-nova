@@ -48,8 +48,8 @@ export class DailyInsightsService {
       try {
         const kundli = await this.kundliService.getKundli(dailyData.profileId, ownerId);
         planets = kundli.planets;
-      } catch {
-        throw new Error('NATAL_CHART_UNAVAILABLE');
+      } catch (e: any) {
+        throw new Error(`NATAL_CHART_UNAVAILABLE: ${e.message}`);
       }
 
     // 4. Calculate Scores

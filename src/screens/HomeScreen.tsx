@@ -20,7 +20,7 @@ const BANNERS = [
   },
   {
     id: 2,
-    image: 'https://i.ibb.co/SXjvqx2X/Gemini-Generated-Image-jorej9jorej9jore.png',
+    image: 'https://i.ibb.co/DPD1jY37/unnamed.png',
     isImageOnly: true
   }
 ];
