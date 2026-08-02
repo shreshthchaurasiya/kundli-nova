@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, Compass, Hash, Palette, ShieldAlert, Activity,  Menu, ChevronRight, Star, Sparkles, ShieldCheck, Heart, Clock, SlidersHorizontal, SunMoon, Plus, Zap, Briefcase, TrendingUp, Quote, History, Sun, RefreshCw, AlertCircle, User } from 'lucide-react';
+import { Search, Compass, Hash, Palette, ShieldAlert, Activity,  Menu, ChevronRight, Star, Sparkles, ShieldCheck, Heart, Clock, SlidersHorizontal, SunMoon, Plus, Zap, Briefcase, TrendingUp, Quote, History, Sun, RefreshCw, AlertCircle, AlertTriangle, User, Lock } from 'lucide-react';
 import { Screen, Astrologer } from '../types';
 import { useProfile } from '../contexts/ProfileContext';
 import { useWallet } from '../contexts/WalletContext';
@@ -26,7 +26,7 @@ const BANNERS = [
 ];
 
 export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps) {
-  const { profile } = useProfile();
+  const { profile, activeProfileId } = useProfile();
   const { wallet } = useWallet();
   const { directory: astrologers, isLoadingDirectory } = useAstrologerPartner();
   const [currentBanner, setCurrentBanner] = useState(0);
@@ -476,13 +476,6 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
                 </div>
               )}
 
-              {/* Partial Warning */}
-              {homeStatus === 'partial' && (
-                <div className="mb-3 px-3 py-2 bg-amber-50 border border-amber-100/60 rounded-[12px] flex items-center gap-2">
-                  <AlertCircle size={12} className="text-amber-500 shrink-0" />
-                  <span className="text-[10.5px] font-semibold text-amber-700">Some insights are temporarily unavailable.</span>
-                </div>
-              )}
 
               {/* Real Data — shown only when we have a successful or partial response */}
               {(homeStatus === 'success' || homeStatus === 'partial') && homeData && (() => {
@@ -536,13 +529,15 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
                           <Heart size={13} className="text-rose-500 fill-rose-500/10" strokeWidth={2} />
                         </div>
                         <span className="text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Love</span>
-                        {loveScore !== null ? (
+                        {homeData.subscriptionPlan === 'free' ? (
+                          <div className="mb-0.5 mt-0.5"><Lock size={14} className="text-gray-300" strokeWidth={2.5} /></div>
+                        ) : loveScore !== null ? (
                           <div className="mb-0.5"><span className="text-[14px] font-extrabold text-gray-900">{loveScore}</span><span className="text-[9px] text-gray-400 font-semibold">/100</span></div>
                         ) : (
                           <span className="text-[9px] font-semibold text-gray-400 leading-tight">—</span>
                         )}
                         <span className="text-[9px] font-semibold text-gray-500 leading-tight">
-                          {insights.love.confidence === 'high' ? 'Strong' : insights.love.confidence === 'medium' ? 'Moderate' : '—'}
+                          {homeData.subscriptionPlan === 'free' ? 'Locked' : (insights.love.confidence === 'high' ? 'Strong' : insights.love.confidence === 'medium' ? 'Moderate' : '—')}
                         </span>
                       </div>
 
@@ -552,13 +547,15 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
                           <Briefcase size={13} className="text-amber-500" strokeWidth={2} />
                         </div>
                         <span className="text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Career</span>
-                        {careerScore !== null ? (
+                        {homeData.subscriptionPlan === 'free' ? (
+                          <div className="mb-0.5 mt-0.5"><Lock size={14} className="text-gray-300" strokeWidth={2.5} /></div>
+                        ) : careerScore !== null ? (
                           <div className="mb-0.5"><span className="text-[14px] font-extrabold text-gray-900">{careerScore}</span><span className="text-[9px] text-gray-400 font-semibold">/100</span></div>
                         ) : (
                           <span className="text-[9px] font-semibold text-gray-400 leading-tight">—</span>
                         )}
                         <span className="text-[9px] font-semibold text-gray-500 leading-tight">
-                          {insights.career.confidence === 'high' ? 'Focused' : insights.career.confidence === 'medium' ? 'Steady' : '—'}
+                          {homeData.subscriptionPlan === 'free' ? 'Locked' : (insights.career.confidence === 'high' ? 'Focused' : insights.career.confidence === 'medium' ? 'Steady' : '—')}
                         </span>
                       </div>
 
@@ -568,28 +565,54 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
                           <TrendingUp size={13} className="text-emerald-500" strokeWidth={2} />
                         </div>
                         <span className="text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Wealth</span>
-                        {wealthScore !== null ? (
+                        {homeData.subscriptionPlan === 'free' ? (
+                          <div className="mb-0.5 mt-0.5"><Lock size={14} className="text-gray-300" strokeWidth={2.5} /></div>
+                        ) : wealthScore !== null ? (
                           <div className="mb-0.5"><span className="text-[14px] font-extrabold text-gray-900">{wealthScore}</span><span className="text-[9px] text-gray-400 font-semibold">/100</span></div>
                         ) : (
                           <span className="text-[9px] font-semibold text-gray-400 leading-tight">—</span>
                         )}
                         <span className="text-[9px] font-semibold text-gray-500 leading-tight">
-                          {insights.wealth.confidence === 'high' ? 'Growing' : insights.wealth.confidence === 'medium' ? 'Stable' : '—'}
+                          {homeData.subscriptionPlan === 'free' ? 'Locked' : (insights.wealth.confidence === 'high' ? 'Growing' : insights.wealth.confidence === 'medium' ? 'Stable' : '—')}
                         </span>
                       </div>
                     </div>
 
-                    {/* CTA Button */}
-                    <button disabled className="w-full py-2.5 bg-[#111827]/70 cursor-not-allowed rounded-[14px] flex items-center justify-between px-4 group shadow-none">
-                      <div className="flex items-center gap-2.5 opacity-70">
-                        <svg className="w-4 h-4 text-[#F4A300] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                          <circle cx="12" cy="12" r="10" />
-                          <path d="M12 2v20M2 12h20M12 12l7.07-7.07M4.93 19.07l14.14-14.14M4.93 4.93l14.14 14.14" />
-                          <circle cx="12" cy="12" r="4" className="stroke-[#F4A300]/40" />
-                        </svg>
-                        <span className="text-[13px] font-bold text-white tracking-wide">Full Prediction (Coming Soon)</span>
+                    {/* Premium Curiosity Trigger Alert */}
+                    {insights.fomoAlertMessage && homeData.subscriptionPlan === 'free' && (
+                      <div className="mb-3 px-3 py-3 bg-[#FFF5F5] border border-[#FECACA] rounded-[12px] flex items-start gap-2.5 relative overflow-hidden shadow-sm">
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#EF4444] animate-pulse"></div>
+                        <AlertTriangle size={16} className="text-[#EF4444] shrink-0 mt-0.5 animate-pulse" />
+                        <div className="flex-1">
+                          <p className="text-[11px] font-black text-[#B91C1C] uppercase tracking-wide mb-0.5">Critical Astrological Shift</p>
+                          <p className="text-[12px] font-bold text-[#7F1D1D] leading-snug">
+                            {insights.fomoAlertMessage}
+                          </p>
+                        </div>
                       </div>
-                    </button>
+                    )}
+
+                    {/* CTA Button */}
+                    {homeData.subscriptionPlan === 'free' ? (
+                      <button 
+                        onClick={() => onNavigate('subscription')}
+                        className="w-full py-3 bg-gradient-to-r from-[#111827] to-[#1F2937] active:scale-[0.98] transition-transform rounded-[14px] flex items-center justify-between px-4 shadow-[0_4px_12px_rgba(0,0,0,0.1)] border border-gray-800"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Lock size={14} className="text-[#F4A300]" strokeWidth={2.5} />
+                          <span className="text-[13px] font-bold text-white tracking-wide">Unlock Complete AI Reading</span>
+                        </div>
+                        <span className="text-[11px] font-bold text-[#F4A300] bg-[#F4A300]/10 px-2 py-1 rounded-md">₹199/mo</span>
+                      </button>
+                    ) : (
+                      <button 
+                        onClick={() => onNavigate('nova-ai-chat', { profileId: activeProfileId, forceNew: true, initialQuery: 'Please give me a complete prediction based on my Kundli.' })}
+                        className="w-full py-3 bg-gradient-to-r from-[#FF8A00] to-[#E67A00] active:scale-[0.98] transition-transform rounded-[14px] flex items-center justify-center gap-2 shadow-[0_4px_12px_rgba(255,138,0,0.2)] border border-[#FF8A00]"
+                      >
+                        <Sparkles size={14} className="text-white" strokeWidth={2.5} />
+                        <span className="text-[13px] font-bold text-white tracking-wide">Full Prediction with Nova AI</span>
+                      </button>
+                    )}
 
                     <div className="flex items-center justify-center gap-1 mt-2.5 text-gray-400">
                       <Clock size={11} className="text-[#D68B00]/60" />
@@ -720,12 +743,6 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
                 </div>
               ) : homeData && homeData.luckyInsights ? (
                 <div className="flex flex-col gap-3">
-                  {homeData.luckyInsights.dataStatus === 'partial' && (
-                    <div className="text-[11px] text-[#D68B00] bg-[#FFF9E6] px-3 py-2 rounded-[10px] border border-[#F4A300]/20 font-medium flex items-center gap-1.5">
-                      <AlertCircle size={12} />
-                      Some lucky insights are temporarily unavailable.
-                    </div>
-                  )}
                   <div className="grid grid-cols-2 gap-3">
                     {homeData.luckyInsights.luckyColor && (
                       <div className="bg-gradient-to-b from-white to-[#FAFAFA] rounded-[14px] border border-gray-100 p-3 flex flex-col min-h-[70px]">

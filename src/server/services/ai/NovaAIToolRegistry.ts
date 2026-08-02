@@ -234,7 +234,10 @@ export class NovaAIToolRegistry {
 
   private async getDailyInsights(profileId: string, userId: string) {
     if (!profileId) throw new Error('profileId is required');
-    return await this.dailyInsightsService.getDailyInsights(userId, profileId);
+    const { DailyAstrologyService } = require('../dailyAstrologyService');
+    const dailyAstrology = new DailyAstrologyService();
+    const dailyData = await dailyAstrology.getDailyData(userId, profileId);
+    return await this.dailyInsightsService.getDailyInsightsFromData(userId, dailyData);
   }
 
   private async getFullNatalChart(profileId: string, userId: string) {

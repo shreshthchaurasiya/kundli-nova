@@ -30,4 +30,5 @@ export interface DailyPersonalizedInsights {
   unavailableInputs: string[];
   /** true when real birth + dasha data was used; false when only a neutral skeleton was produced */
   scoringAvailable: boolean;
+  fomoAlertMessage?: string;
 }

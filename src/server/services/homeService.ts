@@ -26,6 +26,23 @@ export class HomeService {
     // 1. Fetch data from existing services (Caching is handled internally by these services)
     const dailyData = await dailyAstrologyService.getDailyData(ownerId, profileId);
     
+    // Check subscription
+    const { supabaseAdmin } = require('../config/supabase');
+    const { data: sub } = await supabaseAdmin
+      .from('subscriptions')
+      .select('plan')
+      .eq('user_id', ownerId)
+      .eq('status', 'ACTIVE')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+    
+    let subscriptionPlan: 'free' | 'pro' | 'elite' = 'free';
+    if (sub && sub.plan) {
+      if (sub.plan.toLowerCase().includes('pro')) subscriptionPlan = 'pro';
+      else if (sub.plan.toLowerCase().includes('elite')) subscriptionPlan = 'elite';
+    }
+
     let dailyInsights: DailyPersonalizedInsights | null = null;
     let dataStatus: "complete" | "partial" = dailyData.dataStatus;
     const unavailableInputs = [...dailyData.unavailableFields];
@@ -111,8 +128,9 @@ export class HomeService {
     return {
       schemaVersion: "1.0",
       profile: {
-        firstName,
+        firstName: dailyData.profileName,
       },
+      subscriptionPlan,
       today: {
         formattedDate,
         weekday,

@@ -6,6 +6,7 @@ export interface HomePersonalizedResponse {
   profile: {
     firstName: string;
   };
+  subscriptionPlan: 'free' | 'pro' | 'elite';
 
   today: {
     formattedDate: string;

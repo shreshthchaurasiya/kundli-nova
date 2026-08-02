@@ -133,10 +133,35 @@ export class DailyInsightsService {
       generatedAt: new Date().toISOString(),
       dataStatus: dailyData.dataStatus,
       unavailableInputs: dailyData.unavailableFields,
-      scoringAvailable: true
+      scoringAvailable: true,
+      fomoAlertMessage: "Ek mahatvapurna grah yog aapke agle 21 dino ki yatra ko prabhavit kar sakta hai." // Default fallback
     };
 
     if (dailyData.dataStatus !== 'partial') {
+      try {
+        const { GoogleGenAI } = require('@google/genai');
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const allFactors = [...cosmicEnergy.factors, ...love.factors, ...career.factors, ...wealth.factors]
+          .map(f => f.label)
+          .join(', ');
+        
+        const prompt = `You are a Vedic Astrologer creating a single-line "FOMO" (curiosity-inducing) alert for a user's daily dashboard. 
+The user's astrological factors today are: ${allFactors || 'Mixed planetary energies'}.
+Write a 1-sentence (maximum 15 words) alert in conversational Hinglish that creates curiosity without causing panic or fear. 
+Example: "Aapke career sector mein achanak badlav ke sanket hain, kya aap taiyar hain?"
+Do not include any greeting or extra text. Just the single sentence.`;
+
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+        });
+        
+        if (response.text) {
+           result.fomoAlertMessage = response.text.trim();
+        }
+      } catch (err) {
+        console.error("Failed to generate AI FOMO text:", err);
+      }
       memoryCache.set(cacheKey, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
     }
 

@@ -117,6 +117,7 @@ export interface DailyPersonalizedInsightsDto {
   unavailableInputs: string[];
   /** true when real birth + dasha data was used; false when a neutral skeleton was returned */
   scoringAvailable: boolean;
+  fomoAlertMessage?: string;
 }
 
 export interface HomePersonalizedResponse {
@@ -124,6 +125,7 @@ export interface HomePersonalizedResponse {
   profile: {
     firstName: string;
   };
+  subscriptionPlan?: 'free' | 'pro' | 'elite';
   today: {
     formattedDate: string;
     weekday: string;

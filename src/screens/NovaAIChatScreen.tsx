@@ -45,6 +45,7 @@ interface NovaAIChatScreenProps {
     initialIntent?: 'explain-compatibility' | string;
     compatibilityContext?: NormalizedCompatibilityContext;
     mode?: string;
+    forceNew?: boolean;
   };
 }
 
@@ -193,7 +194,7 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
 
     const loadAndInit = async () => {
       isChatInitialized.current = true;
-      const { conversationId, initialQuery, serviceContext, profileBId, initialIntent } = routeParams || {};
+      const { conversationId, initialQuery, serviceContext, profileBId, initialIntent, forceNew } = routeParams || {};
 
       const profile = await repositories.kundliProfile.getProfileById(activeProfileId).catch(() => null);
       if (!profile || !profile.name) return;
@@ -219,7 +220,7 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
           setCurrentTopic(existing.topic);
           return;
         }
-      } else {
+      } else if (!forceNew) {
         // Find if this profile already has an active Nova session for this topic
         const existingForProfile = historyList.find(c => c.profileId === profile.id && c.kind === 'nova' && c.topic === topic);
         if (existingForProfile) {
