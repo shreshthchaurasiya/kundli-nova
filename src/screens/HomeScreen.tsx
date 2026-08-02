@@ -236,26 +236,6 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
             </div>
           </motion.div>
 
-          {/* Offer Countdown Strip */}
-          <motion.div
-            variants={itemVariants}
-            className="bg-[#FFFFFF] rounded-[16px] border border-[#F4A300]/20 shadow-[0_2px_10px_rgba(0,0,0,0.015)] px-4 py-2.5 flex items-center justify-between relative overflow-hidden"
-          >
-            {/* Soft decorative light gold gradient overlay */}
-            <div className="absolute inset-y-0 right-0 w-32 bg-gradient-to-l from-[#F4A300]/5 to-transparent pointer-events-none"></div>
-
-            <div className="flex items-center gap-2 relative z-10">
-              <Zap size={14} className="text-[#FF8A00] fill-[#FF8A00]/10" />
-              <span className="text-[12px] font-extrabold text-gray-900 tracking-wide">Special Welcome Offer Active</span>
-            </div>
-
-            <div className="flex items-center gap-1.5 shrink-0 bg-[#FFF9E6] border border-[#F4A300]/15 px-2.5 py-1 rounded-full relative z-10">
-              <span className="text-[9.5px] font-[800] text-[#D68B00] uppercase tracking-wider">Offer Ends In</span>
-              <span className="text-[12.5px] font-black text-gray-900 font-mono tracking-wider min-w-[64px] text-center">
-                {timeLeft === null ? '02:15:45' : timeLeft === 0 ? 'Offer Expired' : formatTime(timeLeft)}
-              </span>
-            </div>
-          </motion.div>
 
           {/* Quick Services Grid */}
           <motion.div
@@ -266,7 +246,7 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
               { icon: <img src="https://i.ibb.co/B5sjrYXW/image-removebg-preview-1.png" alt="Daily Horoscope" loading="eager" fetchPriority="high" draggable={false} onContextMenu={(e) => e.preventDefault()} className="w-full h-full object-cover scale-[1.3] select-none pointer-events-none transition-transform duration-300 group-hover:scale-[1.38]" />, bg: 'bg-gradient-to-br from-[#FFFBEB] to-[#F7E7C4]', borderColor: 'border-[#F7E7C4]/40', label: 'DAILY\nHOROSCOPE', action: () => onNavigate('horoscope') },
               { icon: <img src="https://i.ibb.co/N2z5f8Gh/image-removebg-preview-2.png" alt="Free Kundli" loading="eager" fetchPriority="high" draggable={false} onContextMenu={(e) => e.preventDefault()} className="w-full h-full object-cover scale-[1.3] select-none pointer-events-none transition-transform duration-300 group-hover:scale-[1.38]" />, bg: 'bg-gradient-to-br from-[#EFF6FF] to-[#D3E2F2]', borderColor: 'border-[#D3E2F2]/40', label: 'FREE\nKUNDLI', action: () => onNavigate('nova-kundli', { mode: 'kundli', returnTo: 'home' }) },
               { icon: <img src="https://i.ibb.co/4nKbYhZw/image-removebg-preview-3.png" alt="Kundli Matching" loading="eager" fetchPriority="high" draggable={false} onContextMenu={(e) => e.preventDefault()} className="w-full h-full object-cover scale-[1.3] select-none pointer-events-none transition-transform duration-300 group-hover:scale-[1.38]" />, bg: 'bg-gradient-to-br from-[#FEF2FE] to-[#F5D6D6]', borderColor: 'border-[#F5D6D6]/40', label: 'KUNDLI\nMATCHING', action: () => onNavigate('nova-kundli', { mode: 'matching', returnTo: 'home' }) },
-              { icon: <img src="https://i.ibb.co/sJRdZrtC/image-removebg-preview-4.png" alt="Numerology" loading="eager" fetchPriority="high" draggable={false} onContextMenu={(e) => e.preventDefault()} className="w-full h-full object-cover scale-[1.3] select-none pointer-events-none transition-transform duration-300 group-hover:scale-[1.38]" />, bg: 'bg-gradient-to-br from-[#FAF5FF] to-[#E2D6F5]', borderColor: 'border-[#E2D6F5]/40', label: 'NUMEROLOGY' },
+              { icon: <img src="https://i.ibb.co/sJRdZrtC/image-removebg-preview-4.png" alt="Numerology" loading="eager" fetchPriority="high" draggable={false} onContextMenu={(e) => e.preventDefault()} className="w-full h-full object-cover scale-[1.3] select-none pointer-events-none transition-transform duration-300 group-hover:scale-[1.38]" />, bg: 'bg-gradient-to-br from-[#FAF5FF] to-[#E2D6F5]', borderColor: 'border-[#E2D6F5]/40', label: 'NUMEROLOGY', action: () => onNavigate('numerology') },
             ].map((item, i) => (
               <motion.div
                 key={i}
@@ -490,35 +470,62 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
                 return (
                   <>
                     {/* Energy Summary Card */}
-                    <div className="bg-gradient-to-br from-[#FFFDF9] to-[#FAFAFA] border border-[#F4A300]/15 rounded-[18px] p-3 shadow-[0_2px_12px_rgba(0,0,0,0.015)] mb-3 flex items-center justify-between gap-3">
-                      <div className="flex-1">
-                        <span className="text-[10px] font-bold text-[#D68B00]/80 uppercase tracking-wider block mb-0.5">Cosmic Energy</span>
-                        {scoringAvailable && cosmicScore !== null ? (
-                          <h4 className="text-[20px] font-extrabold text-gray-900 leading-tight">{cosmicScore}<span className="text-[12px] text-gray-400 font-semibold">/100</span></h4>
-                        ) : (
-                          <h4 className="text-[13px] font-semibold text-gray-400 leading-tight">Score unavailable</h4>
-                        )}
-                        <p className="text-[10.5px] text-gray-500 mt-1">
-                          {homeData.dasha.mahadasha ? `Mahadasha: ${homeData.dasha.mahadasha}` : 'Based on your Kundli'}
-                          {homeData.dasha.antardasha ? ` · ${homeData.dasha.antardasha}` : ''}
-                        </p>
-                      </div>
-                      <div className="relative w-[60px] h-[60px] flex items-center justify-center shrink-0">
-                        <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-                          <path className="text-[#FFF9E6]" strokeWidth="3.2" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                          <path className="text-[#F4A300]" strokeWidth="3.5" strokeDasharray={dasharray} strokeLinecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                        </svg>
-                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <div className="relative bg-gradient-to-br from-[#FFFDF9] to-[#FAFAFA] border border-[#F4A300]/15 rounded-[18px] p-3 shadow-[0_2px_12px_rgba(0,0,0,0.015)] mb-3 overflow-hidden">
+                      {/* Original Content - Blurred for free plan */}
+                      <div className={`flex items-center justify-between gap-3 transition-all duration-300 ${homeData.subscriptionPlan === 'free' ? 'blur-[4px] opacity-30 select-none pointer-events-none' : ''}`}>
+                        <div className="flex-1">
+                          <span className="text-[10px] font-bold text-[#D68B00]/80 uppercase tracking-wider block mb-0.5">Cosmic Energy</span>
                           {scoringAvailable && cosmicScore !== null ? (
-                            <span className="text-[12.5px] font-black text-gray-900 leading-none">{cosmicScore}%</span>
+                            <h4 className="text-[20px] font-extrabold text-gray-900 leading-tight">{cosmicScore}<span className="text-[12px] text-gray-400 font-semibold">/100</span></h4>
                           ) : (
-                            <span className="text-[9px] text-gray-400 font-semibold text-center leading-tight">N/A</span>
+                            <h4 className="text-[13px] font-semibold text-gray-400 leading-tight">Score unavailable</h4>
                           )}
+                          <p className="text-[10.5px] text-gray-500 mt-1">
+                            {homeData.dasha.mahadasha ? `Mahadasha: ${homeData.dasha.mahadasha}` : 'Based on your Kundli'}
+                            {homeData.dasha.antardasha ? ` · ${homeData.dasha.antardasha}` : ''}
+                          </p>
                         </div>
-                        <div className="absolute top-[1px] right-[1px] bg-white rounded-full p-[2px] shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 flex items-center justify-center">
-                          <Sun size={8} className="text-[#F4A300] fill-[#F4A300]" strokeWidth={2.5} />
+                        <div className="relative w-[60px] h-[60px] flex items-center justify-center shrink-0">
+                          <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                            <path className="text-[#FFF9E6]" strokeWidth="3.2" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                            <path className="text-[#F4A300]" strokeWidth="3.5" strokeDasharray={dasharray} strokeLinecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                          </svg>
+                          <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            {scoringAvailable && cosmicScore !== null ? (
+                              <span className="text-[12.5px] font-black text-gray-900 leading-none">{cosmicScore}%</span>
+                            ) : (
+                              <span className="text-[9px] text-gray-400 font-semibold text-center leading-tight">N/A</span>
+                            )}
+                          </div>
+                          <div className="absolute top-[1px] right-[1px] bg-white rounded-full p-[2px] shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 flex items-center justify-center">
+                            <Sun size={8} className="text-[#F4A300] fill-[#F4A300]" strokeWidth={2.5} />
+                          </div>
                         </div>
                       </div>
+
+                      {/* FOMO Overlay for Free Plan */}
+                      {homeData.subscriptionPlan === 'free' && (
+                        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/20 p-2 cursor-pointer" onClick={() => onNavigate('subscription')}>
+                          <div className="bg-red-50/95 backdrop-blur-md border border-red-200/60 rounded-[14px] px-3 py-2.5 shadow-sm w-full h-full flex flex-col justify-center">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <AlertTriangle size={13} className="text-red-500" strokeWidth={2.5} />
+                              <span className="text-[10px] font-bold text-red-600 uppercase tracking-wider">Critical Astrological Shift</span>
+                            </div>
+                            <p className="text-[11px] font-semibold text-red-900/90 leading-snug line-clamp-2">
+                              {[
+                                "Ek mahatvapurna grah yog aapke agle 21 dino ki yatra ko prabhavit kar sakta hai.",
+                                "Aapke career mein ek achanak badlav aane ke sanket hain. Samay rahte savdhaan rahein.",
+                                "Agle 48 ghanto mein ek badi opportunity aa sakti hai, ise miss na karein.",
+                                "Aapki kundli mein ek gupt dhan yog ban raha hai, lekin ek choti si rukawat bhi hai.",
+                                "Ek purana rishta wapas aa sakta hai ya naye rishte mein utaar-chadhaav aane wala hai.",
+                                "Aapke swasthya ya mansik shanti par asar padne ke sanket hain. Kundli check karein.",
+                                "Agla hafta aapke arthik faislon ke liye behad mahatvapurna hone wala hai.",
+                                "Aapke grah gochar ek nayi disha dikha rahe hain, jise samajhna abhi zaroori hai."
+                              ][Math.floor(Date.now() / (1000 * 60 * 60 * 34)) % 8]}
+                            </p>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Three Insight Cards */}
@@ -578,19 +585,7 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
                       </div>
                     </div>
 
-                    {/* Premium Curiosity Trigger Alert */}
-                    {insights.fomoAlertMessage && homeData.subscriptionPlan === 'free' && (
-                      <div className="mb-3 px-3 py-3 bg-[#FFF5F5] border border-[#FECACA] rounded-[12px] flex items-start gap-2.5 relative overflow-hidden shadow-sm">
-                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#EF4444] animate-pulse"></div>
-                        <AlertTriangle size={16} className="text-[#EF4444] shrink-0 mt-0.5 animate-pulse" />
-                        <div className="flex-1">
-                          <p className="text-[11px] font-black text-[#B91C1C] uppercase tracking-wide mb-0.5">Critical Astrological Shift</p>
-                          <p className="text-[12px] font-bold text-[#7F1D1D] leading-snug">
-                            {insights.fomoAlertMessage}
-                          </p>
-                        </div>
-                      </div>
-                    )}
+
 
                     {/* CTA Button */}
                     {homeData.subscriptionPlan === 'free' ? (

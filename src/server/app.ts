@@ -49,8 +49,8 @@ app.use(morgan('combined'));
 // API Routes
 app.use('/api/v1', routesV1);
 
-// 404 & Error Handling
-app.use(notFoundHandler);
-app.use(errorHandler);
+// 404 & Error Handling for API only
+app.use('/api', notFoundHandler);
+app.use('/api', errorHandler);
 
 export default app;

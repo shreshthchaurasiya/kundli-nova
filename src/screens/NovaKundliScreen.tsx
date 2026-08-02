@@ -45,6 +45,7 @@ import { KundliProfile } from '../types/kundli';
 import { KundliChart } from '../components/astrology/KundliChart';
 import { ApiError } from '../services/api/apiErrors';
 import { useProfile } from '../contexts/ProfileContext';
+import { calculateMoolank, calculateBhagyank } from '../services/kundliService';
 
 interface NovaKundliScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
@@ -516,8 +517,8 @@ export default function NovaKundliScreen({ onNavigate, routeParams }: NovaKundli
     sunSign: apiChartData.planets.find(p => p.name.toLowerCase() === 'sun')?.sign || 'Unknown',
     moonSign: moon?.sign || 'Unknown',
     nakshatra: moon?.nakshatra || 'Unknown',
-    moolank: 1, // Fallback for demo
-    bhagyank: 1, // Fallback for demo
+    moolank: calculateMoolank(birthDetails.dob),
+    bhagyank: calculateBhagyank(birthDetails.dob),
   };
 
   const planetaryPositions = apiChartData.planets;

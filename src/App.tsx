@@ -25,6 +25,7 @@ import NovaKundliScreen from './screens/NovaKundliScreen';
 import KundliProfileFormScreen from './screens/KundliProfileFormScreen';
 import HelpSupportScreen from './screens/HelpSupportScreen';
 import HoroscopeScreen from './screens/HoroscopeScreen';
+import NumerologyScreen from './screens/NumerologyScreen';
 import SubscriptionScreen from './screens/SubscriptionScreen';
 import {
   AstrologerApplicationScreen,
@@ -238,6 +239,7 @@ export default function App() {
       case 'help-support': return <HelpSupportScreen onNavigate={navigate} routeParams={routeParams} />;
       case 'category-detail': return <CategoryDetailScreen category={routeParams?.category} onNavigate={navigate} />;
       case 'horoscope': return <HoroscopeScreen onNavigate={navigate} />;
+      case 'numerology': return <NumerologyScreen onNavigate={navigate} />;
       case 'subscription': return <SubscriptionScreen onNavigate={navigate} />;
       default: return <HomeScreen onNavigate={navigate} onOpenDrawer={() => setIsDrawerOpen(true)} />;
     }

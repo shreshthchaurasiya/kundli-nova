@@ -30,6 +30,7 @@ export type Screen =
   | 'nova-ai'
   | 'kundli-profile-form'
   | 'horoscope'
+  | 'numerology'
   | 'subscription';
 
 export type Tab = 'home' | 'chat-list' | 'chat-history' | 'nova-ai' | 'services' | 'profile';

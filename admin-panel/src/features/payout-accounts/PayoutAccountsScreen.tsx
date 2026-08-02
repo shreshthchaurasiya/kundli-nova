@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
-import { CheckCircle2, Search, Building } from 'lucide-react';
+import { CheckCircle2, Building } from 'lucide-react';
 
 export function PayoutAccountsScreen() {
   const [items, setItems] = useState<any[]>([]);

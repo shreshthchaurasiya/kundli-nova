@@ -4,6 +4,7 @@ import { luckyInsightsService } from './luckyInsightsService';
 import { HomePersonalizedResponse } from '../types/home';
 import { DailyPersonalizedInsights } from '../types/dailyInsights';
 import { DailyLuckyInsights } from '../types/luckyInsights';
+import { supabaseAdmin } from '../config/supabase';
 
 function formatTime(isoString: string | null | undefined, timezone: string): string | undefined {
   if (!isoString) return undefined;
@@ -27,7 +28,7 @@ export class HomeService {
     const dailyData = await dailyAstrologyService.getDailyData(ownerId, profileId);
     
     // Check subscription
-    const { supabaseAdmin } = require('../config/supabase');
+    // Check subscription
     const { data: sub } = await supabaseAdmin
       .from('subscriptions')
       .select('plan')

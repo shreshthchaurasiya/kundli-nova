@@ -1,45 +1,9 @@
-# Stage 5B: Vimshottari Dasha Backend & UI Integration
+# Stage 6: Numerology Screen Implementation
 
-This document outlines the final implementation plan for Stage 5B, reflecting user feedback and constraints.
+This document outlines the implementation plan for the new Numerology Screen.
 
 ## Proposed Changes
 
-### Backend Contracts (`src/server/types/astrologyProvider.ts`)
-- Redefine `KundliNovaDasha` as `KundliNovaVimshottariDasha` with the explicit structure:
-  ```typescript
-  interface DashaPeriod {
-    planet: 'Ketu' | 'Venus' | 'Sun' | 'Moon' | 'Mars' | 'Rahu' | 'Jupiter' | 'Saturn' | 'Mercury';
-    startDate: string; // ISO date
-    endDate: string; // ISO date
-    isCurrent: boolean;
-    remainingDays?: number;
-  }
-  interface KundliNovaVimshottariDasha {
-    schemaVersion: '1.0';
-    provider: string;
-    providerVersion: string;
-    calculatedAt: string; // ISO date
-    currentMahadasha: DashaPeriod;
-    currentAntardasha: DashaPeriod | null;
-    mahadashaTimeline: DashaPeriod[];
-  }
-  ```
-- Rename `getDasha` to `getVimshottariDasha` in `AstrologyCalculationProvider`.
-
-### Provider Implementation (`src/server/providers/navamshaProvider.ts`)
-- Implement `getVimshottariDasha(input: KundliNovaCalcInput)`.
-- **Do not invent or assume a live Navamsha endpoint**. Safely throw `PROVIDER_NOT_CONFIGURED` to allow the rest of the system to be tested using mocked providers.
-- Maintain isolation of the HTTP adapter. The actual endpoint integration can be done later when API documentation/keys are available.
-
-### Service Layer (`src/server/services/kundliCalculationService.ts`)
-- Extract `loadAuthorizedCalculationInput(profileId, userId)` as a private helper to handle profile lookup, ownership checks, and birth details validation without triggering API calls. Both Natal and Dasha methods will reuse this.
-- Add `getVimshottariDasha(profileId: string, userId: string)` using single-flight caching.
-- Cache key format: `vimshottari-dasha:${provider}:${providerVersion}:${profileId}:${normalized_dob}:${normalized_tob}:${lat}:${lng}:${timezone}`.
-- Calculate `remainingDays` reliably on the backend using ISO dates (clamping past periods to 0).
-
-### Routing & Controller
-- Add `getDasha` in `src/server/controllers/astrology.ts` mirroring `getKundli` error handling (503/502).
-- Add `GET /api/v1/astrology/dasha/:profileId` in `src/server/routes/v1/astrology.ts`.
 
 ### Frontend API
 - Add `ENDPOINTS.ASTROLOGY.GET_DASHA`.
