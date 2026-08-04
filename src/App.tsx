@@ -86,8 +86,14 @@ export default function App() {
         // If profile fetch failed due to API error (e.g. 429), don't force them to create a profile!
         // We will render an error screen below.
       } else if (!isProfileComplete) {
-        // A provisional OAuth identity cannot enter any application screen.
-        if (currentScreen !== 'create-profile') setCurrentScreen('create-profile');
+        // IMPORTANT: Only redirect to create-profile when the profile object has actually been
+        // fetched from the server and we can confirm onboarding is incomplete.
+        // If profile is still null here (e.g. a Supabase race or cold-start delay), do NOT
+        // redirect — the next re-render after profile loads will handle it correctly.
+        // This prevents the "Create Your Birth Profile" flash on hard refresh.
+        if (profile !== null && currentScreen !== 'create-profile') {
+          setCurrentScreen('create-profile');
+        }
       } else if (!hasStartedWelcomeChat) {
         // The welcome step is durable. Refreshing the page or returning from an
         // email confirmation cannot skip it.
@@ -102,7 +108,7 @@ export default function App() {
         setCurrentScreen('login');
       }
     }
-  }, [astrologerWorkspace, currentScreen, hasStartedWelcomeChat, isAuthenticated, isLoading, isLoadingAstrologerDashboard, isLoadingProfile, isProfileComplete, profileError]);
+  }, [astrologerWorkspace, currentScreen, hasStartedWelcomeChat, isAuthenticated, isLoading, isLoadingAstrologerDashboard, isLoadingProfile, isProfileComplete, profile, profileError]);
 
   useEffect(() => {
     if (toast) {

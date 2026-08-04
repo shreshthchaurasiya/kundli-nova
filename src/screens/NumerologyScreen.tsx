@@ -496,7 +496,7 @@ export default function NumerologyScreen({ onNavigate }: NumerologyScreenProps) 
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 py-6 pb-24 z-10 space-y-6">
+      <div className="flex-1 overflow-y-auto no-scrollbar px-5 py-6 pb-24 z-10 space-y-6">
         {selectedProfile && (
           <div 
             onClick={() => setIsProfileSwitcherOpen(true)}
@@ -590,13 +590,58 @@ export default function NumerologyScreen({ onNavigate }: NumerologyScreenProps) 
               )}
             </div>
 
-            {/* Five Tab Switcher Pill */}
-            <div className="flex bg-neutral-200/50 p-1 rounded-[16px] max-w-sm mx-auto shadow-inner border border-neutral-200/20 overflow-x-auto no-scrollbar gap-0.5">
-              <button onClick={() => setActiveSubTab('moolank')} className={`flex-1 py-2 px-2.5 rounded-[13px] text-[11px] font-extrabold transition-all duration-200 whitespace-nowrap ${activeSubTab === 'moolank' ? 'bg-white text-neutral-900 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-neutral-200/5' : 'text-neutral-500 hover:text-neutral-800'}`}>Moolank</button>
-              <button onClick={() => setActiveSubTab('bhagyank')} className={`flex-1 py-2 px-2.5 rounded-[13px] text-[11px] font-extrabold transition-all duration-200 whitespace-nowrap ${activeSubTab === 'bhagyank' ? 'bg-white text-neutral-900 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-neutral-200/5' : 'text-neutral-500 hover:text-neutral-800'}`}>Bhagyank</button>
-              <button onClick={() => setActiveSubTab('loshu')} className={`flex-1 py-2 px-2.5 rounded-[13px] text-[11px] font-extrabold transition-all duration-200 whitespace-nowrap ${activeSubTab === 'loshu' ? 'bg-white text-neutral-900 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-neutral-200/5' : 'text-neutral-500 hover:text-neutral-800'}`}>Loshu Grid</button>
-              <button onClick={() => setActiveSubTab('name')} className={`flex-1 py-2 px-2.5 rounded-[13px] text-[11px] font-extrabold transition-all duration-200 whitespace-nowrap ${activeSubTab === 'name' ? 'bg-white text-neutral-900 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-neutral-200/5' : 'text-neutral-500 hover:text-neutral-800'}`}>Name Match</button>
-              <button onClick={() => setActiveSubTab('forecast')} className={`flex-1 py-2 px-2.5 rounded-[13px] text-[11px] font-extrabold transition-all duration-200 whitespace-nowrap ${activeSubTab === 'forecast' ? 'bg-white text-neutral-900 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-neutral-200/5' : 'text-neutral-500 hover:text-neutral-800'}`}>Forecast</button>
+            {/* Five Tab Switcher Pill (Horizontal Scroll) */}
+            <div className="flex bg-neutral-200/40 p-1.5 rounded-[18px] max-w-sm mx-auto shadow-inner border border-neutral-200/20 overflow-x-auto no-scrollbar gap-1.5 flex-nowrap w-full">
+              <button 
+                onClick={() => setActiveSubTab('moolank')} 
+                className={`shrink-0 py-2.5 px-4 rounded-[14px] text-[11.5px] font-extrabold transition-all duration-200 whitespace-nowrap ${
+                  activeSubTab === 'moolank' 
+                    ? 'bg-white text-neutral-900 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-neutral-200/5' 
+                    : 'text-neutral-550 hover:text-neutral-800'
+                }`}
+              >
+                Moolank
+              </button>
+              <button 
+                onClick={() => setActiveSubTab('bhagyank')} 
+                className={`shrink-0 py-2.5 px-4 rounded-[14px] text-[11.5px] font-extrabold transition-all duration-200 whitespace-nowrap ${
+                  activeSubTab === 'bhagyank' 
+                    ? 'bg-white text-neutral-900 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-neutral-200/5' 
+                    : 'text-neutral-550 hover:text-neutral-800'
+                }`}
+              >
+                Bhagyank
+              </button>
+              <button 
+                onClick={() => setActiveSubTab('loshu')} 
+                className={`shrink-0 py-2.5 px-4 rounded-[14px] text-[11.5px] font-extrabold transition-all duration-200 whitespace-nowrap ${
+                  activeSubTab === 'loshu' 
+                    ? 'bg-white text-neutral-900 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-neutral-200/5' 
+                    : 'text-neutral-550 hover:text-neutral-800'
+                }`}
+              >
+                Loshu Grid
+              </button>
+              <button 
+                onClick={() => setActiveSubTab('name')} 
+                className={`shrink-0 py-2.5 px-4 rounded-[14px] text-[11.5px] font-extrabold transition-all duration-200 whitespace-nowrap ${
+                  activeSubTab === 'name' 
+                    ? 'bg-white text-neutral-900 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-neutral-200/5' 
+                    : 'text-neutral-550 hover:text-neutral-800'
+                }`}
+              >
+                Name Match
+              </button>
+              <button 
+                onClick={() => setActiveSubTab('forecast')} 
+                className={`shrink-0 py-2.5 px-4 rounded-[14px] text-[11.5px] font-extrabold transition-all duration-200 whitespace-nowrap ${
+                  activeSubTab === 'forecast' 
+                    ? 'bg-white text-neutral-900 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-neutral-200/5' 
+                    : 'text-neutral-550 hover:text-neutral-800'
+                }`}
+              >
+                Forecast
+              </button>
             </div>
 
             {/* Dynamic Rendering based on Tab */}

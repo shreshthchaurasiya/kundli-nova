@@ -33,7 +33,7 @@ export function AstrologerDashboardProvider({ children }: { children: React.Reac
   const [summary, setSummary] = useState<AstrologerDashboardSummary | null>(null);
   const [isSummaryLoading, setIsSummaryLoading] = useState(true);
   const [summaryError, setSummaryError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [isUpdatingAvailability, setIsUpdatingAvailability] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

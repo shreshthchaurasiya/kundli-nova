@@ -212,12 +212,15 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
       };
 
       if (conversationId) {
-        // Load existing conversation, ensuring it belongs to the active profile
-        const existing = historyList.find(c => c.id === conversationId && c.profileId === profile.id);
+        // Load existing conversation, ensuring it belongs to the active profile.
+        // Match by conversationId first; if profile differs, still load but tagged to profile.
+        const existing = historyList.find(c => c.id === conversationId);
         if (existing) {
           setMessages(existing.messages || []);
           setCurrentConvId(existing.id);
           setCurrentTopic(existing.topic);
+          // Do NOT trigger auto-analysis when loading an existing conversation.
+          autoAnalysisTriggeredRef.current = true;
           return;
         }
       } else if (!forceNew) {
@@ -227,6 +230,8 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
           setMessages(existingForProfile.messages || []);
           setCurrentConvId(existingForProfile.id);
           setCurrentTopic(existingForProfile.topic);
+          // Do NOT trigger auto-analysis when resuming an existing session.
+          autoAnalysisTriggeredRef.current = true;
           return;
         }
       }
@@ -1084,15 +1089,15 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
                       key={p.id}
                       onClick={() => {
                         if (activeProfileId !== p.id) {
+                          // Reset chat state completely for the new profile
+                          isChatInitialized.current = false;
+                          autoAnalysisTriggeredRef.current = false;
+                          setMessages([]);
+                          setAiSuggestions([]);
+                          setCurrentConvId('');
+                          setCurrentTopic('General Guidance');
+                          // Then switch profile — the useEffect will reinitialize
                           setActiveProfileId(p.id);
-                          const sysMsg = {
-                            id: `sys-switch-${Date.now()}`,
-                            text: `Switched context to ${p.name}'s Kundli. Nova AI will now answer questions based on this profile.`,
-                            sender: 'system',
-                            time: getFormattedTime(),
-                            type: 'system'
-                          };
-                          setMessages(prev => [...prev, sysMsg as any]);
                         }
                         setIsProfileSwitcherOpen(false);
                       }}
