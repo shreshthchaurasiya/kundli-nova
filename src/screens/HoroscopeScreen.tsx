@@ -14,7 +14,7 @@ interface HoroscopeScreenProps {
 }
 
 type LoadingState = 'idle' | 'loading' | 'success' | 'error';
-type TabName = 'Today' | 'Tomorrow' | 'Month';
+type TabName = 'Yesterday' | 'Today' | 'Tomorrow';
 
 export default function HoroscopeScreen({ onNavigate }: HoroscopeScreenProps) {
   const { profile } = useProfile();
@@ -40,8 +40,14 @@ export default function HoroscopeScreen({ onNavigate }: HoroscopeScreenProps) {
     setStatus('loading');
     setErrorMessage('');
     setIsStaleFallback(false);
+    // Calculate date string based on tab
+    const dateObj = new Date();
+    if (tab === 'Yesterday') dateObj.setDate(dateObj.getDate() - 1);
+    if (tab === 'Tomorrow') dateObj.setDate(dateObj.getDate() + 1);
+    const dateStr = dateObj.toISOString().split('T')[0];
+
     try {
-      const data = await AstrologyApi.getDailyHoroscope(sign, tab);
+      const data = await AstrologyApi.getDailyHoroscope(sign, dateStr);
       setHoroscopeData(data);
       setStatus('success');
       if (data.isStaleFallback) {
@@ -183,7 +189,7 @@ export default function HoroscopeScreen({ onNavigate }: HoroscopeScreenProps) {
 
       {/* Tabs */}
       <div className="px-6 py-4 flex gap-4 shrink-0 border-b border-neutral-100 bg-white">
-        {(['Today', 'Tomorrow', 'Month'] as TabName[]).map((tab) => {
+        {(['Yesterday', 'Today', 'Tomorrow'] as TabName[]).map((tab) => {
           const isActive = tab === activeTab;
           
           return (
@@ -238,17 +244,6 @@ export default function HoroscopeScreen({ onNavigate }: HoroscopeScreenProps) {
               <h2 className="text-[24px] font-[900] text-neutral-900 tracking-tight capitalize leading-tight">
                 {selectedSign}
               </h2>
-              <p className="text-[12px] font-[600] text-neutral-400 mt-0.5">
-                {metadata.dateRange} {horoscopeData ? `• ${
-                  activeTab === 'Month'
-                    ? (() => {
-                        const parts = horoscopeData.date.split('-');
-                        const d = parts.length >= 2 ? new Date(Number(parts[0]), Number(parts[1]) - 1, 1) : new Date();
-                        return d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
-                      })()
-                    : new Date(horoscopeData.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-                }` : ''}
-              </p>
               <div className="flex items-center gap-3 mt-2">
                 <span className="text-[11px] font-[700] text-[#FF8A00] bg-[#FFF3E0] px-2.5 py-1 rounded-lg">
                   {metadata.element}
@@ -319,28 +314,100 @@ export default function HoroscopeScreen({ onNavigate }: HoroscopeScreenProps) {
                 </div>
               )}
 
-              <div className="bg-white rounded-3xl p-6 shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-neutral-100/60 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-[#FFFBEB] to-transparent opacity-50 -mr-10 -mt-10 rounded-full blur-2xl"></div>
-                
-                  <div className="flex justify-between items-center mb-4 relative z-10">
-                  <h3 className="text-[12px] font-[800] text-[#FF8A00] uppercase tracking-widest">
-                    {activeTab === 'Today' ? "Today's" : activeTab === 'Tomorrow' ? "Tomorrow's" : "Month's"} Overview
-                  </h3>
-                  <span className="text-[11px] font-[750] text-[#FF8A00] bg-[#FFF9E6] px-2 py-0.5 rounded-md border border-[#FFE0B2]">
-                    {activeTab === 'Month' 
-                      ? (() => {
-                          const parts = horoscopeData.date.split('-');
-                          const d = parts.length >= 2 ? new Date(Number(parts[0]), Number(parts[1]) - 1, 1) : new Date();
-                          return d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
-                        })()
-                      : new Date(horoscopeData.date).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })
-                    }
-                  </span>
+              {horoscopeData.categories ? (
+                <div className="flex flex-col gap-4">
+                  {/* General Overview */}
+                  {horoscopeData.overview && (
+                    <div className="bg-white rounded-3xl p-6 shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-neutral-100/60 relative overflow-hidden">
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-[#FFFBEB] to-transparent opacity-50 -mr-10 -mt-10 rounded-full blur-2xl"></div>
+                      <div className="flex justify-between items-center mb-4 relative z-10">
+                        <h3 className="text-[12px] font-[800] text-[#FF8A00] uppercase tracking-widest">
+                          {activeTab}'s Overview
+                        </h3>
+                        <span className="text-[11px] font-[750] text-[#FF8A00] bg-[#FFF9E6] px-2 py-0.5 rounded-md border border-[#FFE0B2]">
+                          {new Date(horoscopeData.date).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
+                        </span>
+                      </div>
+                      <p className="text-[15px] leading-[1.6] font-[500] text-neutral-700 relative z-10">
+                        {horoscopeData.overview}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-3">
+                    {horoscopeData.categories.personal && (
+                      <div className="bg-white rounded-2xl p-5 shadow-sm border border-pink-100 relative overflow-hidden">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-[18px]">💖</span>
+                          <h4 className="text-[13px] font-[800] text-pink-500 uppercase tracking-wider">Personal & Love</h4>
+                        </div>
+                        <p className="text-[14px] font-[500] text-neutral-700 leading-relaxed">{horoscopeData.categories.personal}</p>
+                      </div>
+                    )}
+                    {horoscopeData.categories.profession && (
+                      <div className="bg-white rounded-2xl p-5 shadow-sm border border-blue-100 relative overflow-hidden">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-[18px]">💼</span>
+                          <h4 className="text-[13px] font-[800] text-blue-500 uppercase tracking-wider">Career & Finance</h4>
+                        </div>
+                        <p className="text-[14px] font-[500] text-neutral-700 leading-relaxed">{horoscopeData.categories.profession}</p>
+                      </div>
+                    )}
+                    {horoscopeData.categories.health && (
+                      <div className="bg-white rounded-2xl p-5 shadow-sm border border-green-100 relative overflow-hidden">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-[18px]">🌿</span>
+                          <h4 className="text-[13px] font-[800] text-green-500 uppercase tracking-wider">Health & Wellness</h4>
+                        </div>
+                        <p className="text-[14px] font-[500] text-neutral-700 leading-relaxed">{horoscopeData.categories.health}</p>
+                      </div>
+                    )}
+                    {horoscopeData.categories.travel && (
+                      <div className="bg-white rounded-2xl p-5 shadow-sm border border-purple-100 relative overflow-hidden">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-[18px]">✈️</span>
+                          <h4 className="text-[13px] font-[800] text-purple-500 uppercase tracking-wider">Travel</h4>
+                        </div>
+                        <p className="text-[14px] font-[500] text-neutral-700 leading-relaxed">{horoscopeData.categories.travel}</p>
+                      </div>
+                    )}
+                    {horoscopeData.categories.emotions && (
+                      <div className="bg-white rounded-2xl p-5 shadow-sm border border-indigo-100 relative overflow-hidden">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-[18px]">🎭</span>
+                          <h4 className="text-[13px] font-[800] text-indigo-500 uppercase tracking-wider">Emotions & Mind</h4>
+                        </div>
+                        <p className="text-[14px] font-[500] text-neutral-700 leading-relaxed">{horoscopeData.categories.emotions}</p>
+                      </div>
+                    )}
+                    {horoscopeData.categories.luck && (
+                      <div className="bg-white rounded-2xl p-5 shadow-sm border border-amber-100 relative overflow-hidden">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-[18px]">🍀</span>
+                          <h4 className="text-[13px] font-[800] text-amber-500 uppercase tracking-wider">Luck & Fortune</h4>
+                        </div>
+                        <p className="text-[14px] font-[500] text-neutral-700 leading-relaxed">{horoscopeData.categories.luck}</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <p className="text-[16px] leading-[1.65] font-[500] text-neutral-700 relative z-10">
-                  {horoscopeData.overview}
-                </p>
-              </div>
+              ) : (
+                <div className="bg-white rounded-3xl p-6 shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-neutral-100/60 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-[#FFFBEB] to-transparent opacity-50 -mr-10 -mt-10 rounded-full blur-2xl"></div>
+                  
+                  <div className="flex justify-between items-center mb-4 relative z-10">
+                    <h3 className="text-[12px] font-[800] text-[#FF8A00] uppercase tracking-widest">
+                      {activeTab}'s Overview
+                    </h3>
+                    <span className="text-[11px] font-[750] text-[#FF8A00] bg-[#FFF9E6] px-2 py-0.5 rounded-md border border-[#FFE0B2]">
+                      {new Date(horoscopeData.date).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
+                    </span>
+                  </div>
+                  <p className="text-[16px] leading-[1.65] font-[500] text-neutral-700 relative z-10">
+                    {horoscopeData.overview}
+                  </p>
+                </div>
+              )}
 
               {/* Static Metadata Cards */}
               <div className="grid grid-cols-2 gap-3 mt-2">

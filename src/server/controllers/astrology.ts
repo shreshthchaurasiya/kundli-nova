@@ -15,7 +15,7 @@ const kundliCalculationService = new KundliCalculationService(navamshaProvider);
 
 export const getDailyHoroscope = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { zodiac } = req.query;
+    const { zodiac, date } = req.query;
 
     if (!zodiac || typeof zodiac !== 'string') {
       return res.status(400).json({
@@ -33,7 +33,8 @@ export const getDailyHoroscope = async (req: Request, res: Response, next: NextF
       });
     }
 
-    const horoscope = await dailyHoroscopeService.getDailyHoroscope(zodiacLower);
+    const targetDate = typeof date === 'string' ? date : undefined;
+    const horoscope = await dailyHoroscopeService.getDailyHoroscope(zodiacLower, targetDate);
 
     return res.status(200).json({
       status: 'success',

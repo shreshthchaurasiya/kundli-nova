@@ -3,7 +3,7 @@ import { ApiResponse, RequestOptions } from './apiTypes';
 import { ApiError, NetworkError, TimeoutError } from './apiErrors';
 import { getAccessToken } from './authTokenProvider';
 
-const DEFAULT_TIMEOUT_MS = 15000;
+const DEFAULT_TIMEOUT_MS = 30000;
 
 export class ApiClient {
   static async request<T = any>(
@@ -93,12 +93,14 @@ export class ApiClient {
 
       return responseBody.data as T;
     } catch (error: any) {
-      console.error('API Client caught error:', error);
       clearTimeout(id);
 
       if (error.name === 'AbortError') {
-        throw new TimeoutError();
+        // Suppress logging for intentional aborts
+        throw new TimeoutError('Request was aborted');
       }
+
+      console.error('API Client caught error:', error);
 
       if (error instanceof ApiError) {
         throw error;

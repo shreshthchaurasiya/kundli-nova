@@ -1,19 +1,22 @@
-import { ApiNinjasHoroscopeProvider } from '../providers/apiNinjasHoroscopeProvider';
+import { ProkeralaHoroscopeProvider } from '../providers/prokeralaHoroscopeProvider';
 import { KundliNovaDailyHoroscope, ZodiacSign, ZODIAC_SIGNS } from '../types/astrologyProvider';
 import { ProviderError, ProviderErrorCode } from '../errors/ProviderError';
 
 interface CacheEntry {
   data: KundliNovaDailyHoroscope;
-  businessDate: string;
+  businessDate: string; // The date this data is valid for
 }
 
 export class DailyHoroscopeService {
   private cache: Map<string, CacheEntry> = new Map();
   private inflight: Map<string, Promise<KundliNovaDailyHoroscope>> = new Map();
-  private provider: ApiNinjasHoroscopeProvider;
+  private provider: ProkeralaHoroscopeProvider;
+  
+  // Cache for 24 hours
+  private readonly CACHE_TTL_SECONDS = 24 * 60 * 60;
 
   constructor() {
-    this.provider = new ApiNinjasHoroscopeProvider();
+    this.provider = new ProkeralaHoroscopeProvider();
   }
 
   /**
@@ -30,15 +33,15 @@ export class DailyHoroscopeService {
     return formatter.format(new Date());
   }
 
-  public async getDailyHoroscope(zodiac: ZodiacSign): Promise<KundliNovaDailyHoroscope> {
+  public async getDailyHoroscope(zodiac: ZodiacSign, targetDate?: string): Promise<KundliNovaDailyHoroscope> {
     if (!ZODIAC_SIGNS.includes(zodiac)) {
       throw new Error(`Invalid zodiac sign: ${zodiac}`);
     }
 
-    const businessDate = this.getBusinessDate();
-    const cacheKey = `api-ninjas:${zodiac}:${businessDate}`;
+    const businessDate = targetDate || this.getBusinessDate();
+    const cacheKey = `prokerala:${zodiac}:${businessDate}`;
 
-    // 1. Check if we already have it in the cache for TODAY
+    // 1. Check if we already have it in the cache for the requested date
     const existing = this.cache.get(cacheKey);
     if (existing && existing.businessDate === businessDate) {
       return existing.data;
@@ -90,7 +93,7 @@ export class DailyHoroscopeService {
       }
       
       throw new ProviderError(
-        'api-ninjas',
+        'prokerala',
         'PROVIDER_UNAVAILABLE',
         `Horoscope provider unavailable: ${error instanceof Error ? error.message : 'Unknown error'}`
       );

@@ -5,11 +5,12 @@ import { KundliNovaDailyHoroscope, ZodiacSign, KundliNovaNatalChart, KundliNovaV
 export class AstrologyApi {
   static async getDailyHoroscope(
     zodiac: ZodiacSign | string,
-    timeframe: 'Today' | 'Tomorrow' | 'Month' = 'Today'
+    date?: string
   ): Promise<KundliNovaDailyHoroscope> {
-    return ApiClient.get<KundliNovaDailyHoroscope>(
-      `${ENDPOINTS.ASTROLOGY.DAILY_HOROSCOPE(zodiac)}&timeframe=${timeframe.toLowerCase()}`
-    );
+    const url = date 
+      ? `${ENDPOINTS.ASTROLOGY.DAILY_HOROSCOPE(zodiac)}&date=${date}`
+      : ENDPOINTS.ASTROLOGY.DAILY_HOROSCOPE(zodiac);
+    return ApiClient.get<KundliNovaDailyHoroscope>(url);
   }
   
   /**

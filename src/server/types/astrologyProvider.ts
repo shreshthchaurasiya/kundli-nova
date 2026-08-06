@@ -312,6 +312,14 @@ export interface KundliNovaDailyHoroscope {
   period: 'today';
   date: string; // YYYY-MM-DD in Asia/Kolkata
   overview: string;
+  categories?: {
+    personal?: string;
+    health?: string;
+    profession?: string;
+    emotions?: string;
+    travel?: string;
+    luck?: string;
+  };
   generatedAt: string;
   isStaleFallback?: boolean;
   warning?: string;
