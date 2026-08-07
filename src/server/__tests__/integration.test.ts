@@ -16,15 +16,30 @@ vi.mock('../config/env', () => ({
 }));
 
 // Mock Supabase
-vi.mock('../config/supabase', () => ({
-  supabaseAdmin: {
-    auth: {
-      getUser: vi.fn(),
+vi.mock('../config/supabase', () => {
+  const chainable = {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    order: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    single: vi.fn(),
+    maybeSingle: vi.fn(),
+    update: vi.fn().mockReturnThis(),
+    delete: vi.fn().mockReturnThis(),
+    insert: vi.fn().mockReturnThis()
+  };
+  return {
+    supabaseAdmin: {
+      from: vi.fn(() => chainable),
+      rpc: vi.fn(),
+      auth: { getUser: vi.fn() }
     },
-    from: vi.fn(),
-    rpc: vi.fn(),
-  },
-}));
+    createAuthClient: vi.fn(() => ({
+      rpc: vi.fn().mockResolvedValue({ data: { profile: null } }),
+      from: vi.fn(() => chainable)
+    }))
+  };
+});
 
 describe('API Integration Tests', () => {
   beforeEach(() => {
