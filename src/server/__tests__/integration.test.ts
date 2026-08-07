@@ -31,8 +31,13 @@ vi.mock('../config/supabase', () => {
   return {
     supabaseAdmin: {
       from: vi.fn(() => chainable),
-      rpc: vi.fn()
-    }
+      rpc: vi.fn(),
+      auth: { getUser: vi.fn() }
+    },
+    createAuthClient: vi.fn(() => ({
+      rpc: vi.fn().mockResolvedValue({ data: { profile: null } }),
+      from: vi.fn(() => chainable)
+    }))
   };
 });
 
