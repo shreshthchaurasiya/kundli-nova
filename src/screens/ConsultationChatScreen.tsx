@@ -46,8 +46,11 @@ import {
   astrologerService, 
   retrieveImageFromIndexedDB
 } from '../services/astrologyServices';
-import { consultationStorage } from '../services/storage/consultationStorage';
 import { chatStorage } from '../services/storage/chatStorage';
+import { ApiConsultationRepository } from '../repositories/api/apiConsultationRepository';
+import { ApiError, NetworkError, TimeoutError } from '../services/api/apiErrors';
+
+const consultationRepository = new ApiConsultationRepository();
 
 // Custom lazy-loaded image component for IndexedDB images to prevent UI flicker
 function IndexedDBImage({ url, className, alt }: { url: string; className?: string; alt?: string }) {
@@ -85,7 +88,7 @@ interface ConsultationChatScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
 }
 
-export default function ConsultationChatScreen({ astrologerId = '1', readOnlySessionId, onNavigate }: ConsultationChatScreenProps) {
+export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1111-1111-111111111111', readOnlySessionId, onNavigate }: ConsultationChatScreenProps) {
   const [astro, setAstro] = useState<Astrologer>(() => {
     return ASTROLOGERS.find(a => a.id === astrologerId) || ASTROLOGERS[0];
   });
@@ -108,7 +111,6 @@ export default function ConsultationChatScreen({ astrologerId = '1', readOnlySes
   const [activeSessionId, setActiveSessionId] = useState<string>('');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [totalCharged, setTotalCharged] = useState(0);
-  const [isSpeedUpMode, setIsSpeedUpMode] = useState(false); // 10s = 1min for testing
   
   // Low balance grace period state
   const [gracePeriodSeconds, setGracePeriodSeconds] = useState(30);
@@ -139,9 +141,13 @@ export default function ConsultationChatScreen({ astrologerId = '1', readOnlySes
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [isBillingCardCollapsed, setIsBillingCardCollapsed] = useState(false);
 
-  const ratePerMin = astro?.pricePerMinute || 25;
-  const minimumMinutes = 5;
-  const minimumRequired = ratePerMin * minimumMinutes; // e.g. 125
+  const [ratePerMin, setRatePerMin] = useState(0);
+  const [minimumMinutes, setMinimumMinutes] = useState(0);
+  const [heartbeatIntervalSeconds, setHeartbeatIntervalSeconds] = useState(0);
+  const [requestTimeoutSeconds, setRequestTimeoutSeconds] = useState(0);
+  const [rechargeGraceSeconds, setRechargeGraceSeconds] = useState(0);
+  const [verificationError, setVerificationError] = useState('');
+  const minimumRequired = ratePerMin * minimumMinutes;
 
   // -----------------------------------------------------------------
   // INITIALIZATION & ACTIVE SESSION RESTORATION
@@ -187,146 +193,77 @@ export default function ConsultationChatScreen({ astrologerId = '1', readOnlySes
         }
       }
 
-      // 4. RESTORE ACTIVE SESSION
-      const activeReq = consultationStorage.getActiveRequest();
-      if (activeReq) {
-        if (['ACTIVE', 'LOW_BALANCE', 'RECHARGING'].includes(activeReq.status)) {
-          setActiveSessionId(activeReq.id);
-          const currentRate = activeReq.ratePerMinute || activeReq.ratePerMin || 25;
-
-          const secondsInMinute = isSpeedUpMode ? 10 : 60;
-          let currentElapsedSeconds = activeReq.elapsedSeconds || 0;
-          let currentBilledMinutes = activeReq.billedMinutes || 1;
-          let currentTotalCharged = activeReq.totalCharged || currentRate;
-
-          // Re-calculate how much elapsed real time has passed since startedAt
-          if (activeReq.startedAt) {
-            const totalElapsedMs = Date.now() - new Date(activeReq.startedAt).getTime();
-            const calculatedElapsedSeconds = Math.floor(totalElapsedMs / 1000);
-            if (calculatedElapsedSeconds > currentElapsedSeconds) {
-              currentElapsedSeconds = calculatedElapsedSeconds;
-            }
-
-            const completedMinutes = Math.floor(currentElapsedSeconds / secondsInMinute);
-            const expectedTotalMinutes = 1 + completedMinutes;
-
-            if (expectedTotalMinutes > currentBilledMinutes) {
-              const unbilledMinutes = expectedTotalMinutes - currentBilledMinutes;
-              const billCost = unbilledMinutes * currentRate;
-
-              const currentWalletBal = await walletService.getBalance();
-              if (currentWalletBal >= billCost) {
-                await walletService.debit(billCost);
-                currentBilledMinutes = expectedTotalMinutes;
-                currentTotalCharged += billCost;
-              } else {
-                const affordableMinutes = Math.floor(currentWalletBal / currentRate);
-                if (affordableMinutes > 0) {
-                  const affordableCost = affordableMinutes * currentRate;
-                  await walletService.debit(affordableCost);
-                  currentBilledMinutes += affordableMinutes;
-                  currentTotalCharged += affordableCost;
-                }
-                
-                activeReq.status = 'ENDED';
-                activeReq.endedAt = new Date().toISOString();
-                activeReq.elapsedSeconds = currentElapsedSeconds;
-                activeReq.totalCharged = currentTotalCharged;
-                activeReq.billedMinutes = currentBilledMinutes;
-                
-                consultationStorage.saveSessionSession(activeReq);
-                consultationStorage.removeActiveRequest();
-                consultationStorage.removeActiveRequestTime();
-                
-                setCurrentState('ENDED');
-                setElapsedSeconds(currentElapsedSeconds);
-                setTotalCharged(currentTotalCharged);
-                return;
-              }
-            }
-          }
-
-          setElapsedSeconds(currentElapsedSeconds);
-          setTotalCharged(currentTotalCharged);
-
-          activeReq.elapsedSeconds = currentElapsedSeconds;
-          activeReq.billedMinutes = currentBilledMinutes;
-          activeReq.totalCharged = currentTotalCharged;
-          consultationStorage.setActiveRequest(activeReq);
-          consultationStorage.setActiveRequestTime(Date.now());
-
-          const chatMsgs = await chatService.getMessages(activeReq.id);
-          setMessages(chatMsgs);
-
-          const formattedStart = new Date(activeReq.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          setStartTimeString(formattedStart);
-
-          setCurrentState(activeReq.status);
-          return;
-        }
-      }
-
-      // If no restoration, launch fresh CHECKING_WALLET flow
-      runWalletVerification(balance);
+      await runWalletVerification();
     }
 
     loadInitialData();
   }, [astrologerId]);
 
-  // Sync state and timestamp to repository for gap-proof session restoration
-  useEffect(() => {
-    if (activeSessionId && (currentState === 'ACTIVE' || currentState === 'LOW_BALANCE' || currentState === 'RECHARGING') && !readOnlySessionId) {
-      const activeRequestObj = consultationStorage.getActiveRequest();
-      if (activeRequestObj) {
-        activeRequestObj.status = currentState;
-        activeRequestObj.elapsedSeconds = elapsedSeconds;
-        activeRequestObj.totalCharged = totalCharged;
-        consultationStorage.setActiveRequest(activeRequestObj);
-        consultationStorage.setActiveRequestTime(Date.now());
-      }
-    }
-  }, [currentState, elapsedSeconds, totalCharged, activeSessionId, readOnlySessionId]);
-
   // -----------------------------------------------------------------
   // 1. WALLET VERIFICATION FLOW
   // -----------------------------------------------------------------
-  const runWalletVerification = async (currentBal: number) => {
+  const runWalletVerification = async () => {
     setCurrentState('CHECKING_WALLET');
-    await new Promise(resolve => setTimeout(resolve, 1500)); // refined animation delay
+    setVerificationError('');
+    try {
+      const result = await consultationRepository.createSession(astrologerId);
+      setWalletBalance(result.balance);
+      setRatePerMin(result.ratePerMinute);
+      setMinimumMinutes(result.minimumMinutes);
+      setHeartbeatIntervalSeconds(result.heartbeatIntervalSeconds);
+      setRequestTimeoutSeconds(result.requestTimeoutSeconds);
+      setRechargeGraceSeconds(result.rechargeGraceSeconds);
 
-    if (currentBal < minimumRequired) {
-      setCurrentState('INSUFFICIENT_BALANCE');
-    } else {
-      runKundliPreparation();
+      if (result.outcome === 'insufficient_balance' || !result.session) {
+        setCurrentState('INSUFFICIENT_BALANCE');
+        return;
+      }
+
+      const session = result.session;
+      setActiveSessionId(session.id);
+      setElapsedSeconds(session.elapsedSeconds);
+      setTotalCharged(session.totalCharged);
+
+      if (session.startedAt) {
+        setStartTimeString(new Date(session.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      }
+
+      if (['ACTIVE', 'LOW_BALANCE', 'RECHARGING'].includes(session.status)) {
+        const heartbeat = await consultationRepository.heartbeat(session.id);
+        hydrateBillingState(heartbeat.session, heartbeat.balance);
+        setMessages(await chatService.getMessages(session.id));
+        return;
+      }
+
+      if (session.status === 'WAITING_FOR_ASTROLOGER' && result.outcome === 'existing_session') {
+        runAstrologerReviewWait(session.id, result.requestTimeoutSeconds);
+        return;
+      }
+
+      runKundliPreparation(session.id, result.requestTimeoutSeconds);
+    } catch (error) {
+      console.error('Consultation eligibility check failed', error);
+      if (error instanceof ApiError) {
+        const message = error.statusCode === 401
+          ? 'Your login session is missing or expired. Please sign in again.'
+          : error.message;
+        setVerificationError(`${message} (HTTP ${error.statusCode})`);
+      } else if (error instanceof TimeoutError || error instanceof NetworkError) {
+        setVerificationError(error.message);
+      } else {
+        setVerificationError('Secure consultation service could not be reached. Please retry.');
+      }
     }
   };
 
-  // Demo Recharge Trigger
-  const handleDemoRecharge = async (amount: number) => {
-    const updatedBal = await walletService.recharge(amount);
-    setWalletBalance(updatedBal);
-    
-    // If we were inside the active chat grace period
-    if (currentState === 'RECHARGING') {
-      setCurrentState('ACTIVE');
-      setGracePeriodSeconds(30); // reset
-      
-      // Inject system log of successful wallet recharge
-      const logMsg: Message = {
-        id: `recharge-success-${Date.now()}`,
-        text: `⚡ In-chat Recharge Successful! ₹${amount} credited. Active session resumed.`,
-        sender: 'system',
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        type: 'system'
-      };
-      const updatedMsgs = [...messages, logMsg];
-      setMessages(updatedMsgs);
-      await chatService.saveMessages(activeSessionId, updatedMsgs);
-    } else {
-      // Continue regular flow
-      runKundliPreparation();
-    }
+  const hydrateBillingState = (session: import('../types').ConsultationSession, balance?: number) => {
+    setCurrentState(session.status);
+    setElapsedSeconds(session.elapsedSeconds);
+    setTotalCharged(session.totalCharged);
+    if (balance !== undefined) setWalletBalance(balance);
   };
+
+  const handleRechargeNavigation = () => onNavigate('wallet');
 
   // -----------------------------------------------------------------
   // 2. KUNDLI PREPARATION FLOW
@@ -339,7 +276,7 @@ export default function ConsultationChatScreen({ astrologerId = '1', readOnlySes
     "Sharing Kundli securely with astrologer"
   ];
 
-  const runKundliPreparation = async () => {
+  const runKundliPreparation = async (sessionId: string, timeoutSeconds: number) => {
     setCurrentState('PREPARING_KUNDLI');
     setKundliStepIdx(0);
     
@@ -350,19 +287,16 @@ export default function ConsultationChatScreen({ astrologerId = '1', readOnlySes
     }
 
     // Now transition to review waiting
-    runAstrologerReviewWait();
+    runAstrologerReviewWait(sessionId, timeoutSeconds);
   };
 
   // -----------------------------------------------------------------
   // 3. ASTROLOGER REVIEW WAITING FLOW
   // -----------------------------------------------------------------
-  const runAstrologerReviewWait = async () => {
+  const runAstrologerReviewWait = async (sessionId = activeSessionId, timeoutSeconds = requestTimeoutSeconds) => {
     setCurrentState('WAITING_FOR_ASTROLOGER');
-    setWaitingTimeoutSeconds(60);
-
-    // Initialize consultation request in local storage
-    const req = await consultationService.createRequest(astrologerId, 'current-user');
-    setActiveSessionId(req.id);
+    setWaitingTimeoutSeconds(timeoutSeconds);
+    setActiveSessionId(sessionId);
 
     // Start 60-second waiting timeout countdown
     if (waitingTimerRef.current) clearInterval(waitingTimerRef.current);
@@ -371,7 +305,7 @@ export default function ConsultationChatScreen({ astrologerId = '1', readOnlySes
         if (prev <= 1) {
           clearInterval(waitingTimerRef.current!);
           setCurrentState('EXPIRED');
-          consultationService.expireRequest(req.id);
+          consultationRepository.expireSession(sessionId).catch(() => undefined);
           return 0;
         }
         return prev - 1;
@@ -417,20 +351,20 @@ export default function ConsultationChatScreen({ astrologerId = '1', readOnlySes
     await chatService.saveMessages(activeSessionId, initialMsgs);
     
     // Mark ACTIVE
-    await consultationService.startSession(activeSessionId);
-    setCurrentState('ACTIVE');
+    const result = await consultationRepository.transitionForDevelopment(activeSessionId, 'ACTIVE');
+    hydrateBillingState(result.session, result.balance);
   };
 
   const handleSimulateReject = async () => {
     if (waitingTimerRef.current) clearInterval(waitingTimerRef.current);
-    await consultationService.rejectRequest(activeSessionId);
-    setCurrentState('REJECTED');
+    const result = await consultationRepository.transitionForDevelopment(activeSessionId, 'REJECTED');
+    hydrateBillingState(result.session, result.balance);
   };
 
   const handleSimulateTimeout = async () => {
     if (waitingTimerRef.current) clearInterval(waitingTimerRef.current);
-    await consultationService.expireRequest(activeSessionId);
-    setCurrentState('EXPIRED');
+    const result = await consultationRepository.transitionForDevelopment(activeSessionId, 'EXPIRED');
+    hydrateBillingState(result.session, result.balance);
   };
 
   // -----------------------------------------------------------------
@@ -453,56 +387,31 @@ export default function ConsultationChatScreen({ astrologerId = '1', readOnlySes
     };
   }, [currentState, activeSessionId, readOnlySessionId]);
 
-  // Handle per-minute deductions based on elapsed seconds
+  // Billing is calculated and debited only by the backend RPC. The UI heartbeat
+  // merely asks the server for the authoritative session and wallet state.
   useEffect(() => {
     const isChatActive = currentState === 'ACTIVE' || currentState === 'LOW_BALANCE' || currentState === 'RECHARGING';
-    if (!isChatActive || !activeSessionId || elapsedSeconds === 0 || readOnlySessionId) {
+    if (!isChatActive || !activeSessionId || !heartbeatIntervalSeconds || readOnlySessionId) {
       return;
     }
 
-    const secondsInMinute = isSpeedUpMode ? 10 : 60;
-    
-    if (elapsedSeconds % secondsInMinute === 0) {
-      const totalMinutesBilled = Math.floor(elapsedSeconds / secondsInMinute);
-      const nextCharged = totalMinutesBilled * ratePerMin;
-
-      walletService.debit(ratePerMin).then(updatedBal => {
-        setWalletBalance(updatedBal);
-        setTotalCharged(nextCharged);
-
-        // Make the deduction message ID extremely unique to avoid duplicate keys in React mapping
-        const deductMsgId = `deduct-log-${activeSessionId}-${elapsedSeconds}`;
-
-        // Log deduction event in-chat as system bubble
-        const deductionMsg: Message = {
-          id: deductMsgId,
-          text: `₹${ratePerMin} deducted for this minute. Current Wallet: ₹${updatedBal}.`,
-          sender: 'system',
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          type: 'system'
-        };
-
-        setMessages(prevMsgs => {
-          // Double-check to prevent rendering duplicate key messages
-          if (prevMsgs.some(m => m.id === deductMsgId)) {
-            return prevMsgs;
-          }
-          const updated = [...prevMsgs, deductionMsg];
-          chatService.saveMessages(activeSessionId, updated);
-          return updated;
-        });
-
-        // Transition logic based on remaining resources
-        if (updatedBal < ratePerMin) {
-          setCurrentState('RECHARGING');
-        } else if (updatedBal <= 50) {
-          setCurrentState('LOW_BALANCE');
-        } else {
-          setCurrentState('ACTIVE');
+    const heartbeat = async () => {
+      try {
+        const result = await consultationRepository.heartbeat(activeSessionId);
+        hydrateBillingState(result.session, result.balance);
+        if (result.session.rechargeDeadlineAt) {
+          const remaining = Math.max(0, Math.ceil((new Date(result.session.rechargeDeadlineAt).getTime() - Date.now()) / 1000));
+          setGracePeriodSeconds(remaining);
         }
-      });
-    }
-  }, [elapsedSeconds, currentState, activeSessionId, isSpeedUpMode, ratePerMin]);
+      } catch (error) {
+        console.error('Consultation heartbeat failed', error);
+      }
+    };
+
+    void heartbeat();
+    const heartbeatTimer = window.setInterval(heartbeat, heartbeatIntervalSeconds * 1000);
+    return () => window.clearInterval(heartbeatTimer);
+  }, [currentState, activeSessionId, heartbeatIntervalSeconds, readOnlySessionId]);
 
   // Grace Period countdown when state is RECHARGING (< ₹25)
   useEffect(() => {
@@ -511,7 +420,7 @@ export default function ConsultationChatScreen({ astrologerId = '1', readOnlySes
       return;
     }
 
-    setGracePeriodSeconds(30);
+    setGracePeriodSeconds(current => current || rechargeGraceSeconds);
 
     graceTimerRef.current = setInterval(() => {
       setGracePeriodSeconds(prev => {
@@ -527,7 +436,7 @@ export default function ConsultationChatScreen({ astrologerId = '1', readOnlySes
     return () => {
       if (graceTimerRef.current) clearInterval(graceTimerRef.current);
     };
-  }, [currentState]);
+  }, [currentState, rechargeGraceSeconds]);
 
   const handleGracePeriodExpired = async () => {
     // Grace period ended without recharge -> Force End Session gracefully
@@ -539,13 +448,8 @@ export default function ConsultationChatScreen({ astrologerId = '1', readOnlySes
     if (graceTimerRef.current) clearInterval(graceTimerRef.current);
     if (waitingTimerRef.current) clearInterval(waitingTimerRef.current);
 
-    // Conclude session via service
-    await consultationService.endSession(activeSessionId, elapsedSeconds, totalCharged);
-    
-    // Retain clean ended states
-    setCurrentState('ENDED');
-    consultationStorage.removeActiveRequest();
-    consultationStorage.removeActiveRequestTime();
+    const result = await consultationRepository.endSession(activeSessionId);
+    hydrateBillingState(result.session, result.balance);
     setShowEndConfirm(false);
   };
 
@@ -819,6 +723,28 @@ export default function ConsultationChatScreen({ astrologerId = '1', readOnlySes
 
   // 1. CHECKING WALLET SCREEN
   if (currentState === 'CHECKING_WALLET') {
+    if (verificationError) {
+      return (
+        <div className="flex flex-col h-full w-full bg-white font-sans items-center justify-center px-6 text-center">
+          <div className="space-y-5 max-w-sm">
+            <div className="w-16 h-16 rounded-full bg-red-50 border border-red-100 flex items-center justify-center text-red-500 mx-auto">
+              <AlertCircle size={26} />
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-lg font-[900] text-neutral-900 tracking-tight">Security Check Failed</h3>
+              <p className="text-neutral-500 text-xs font-semibold leading-relaxed">{verificationError}</p>
+            </div>
+            <div className="flex gap-3 justify-center">
+              <button onClick={() => onNavigate('astrologers')} className="h-11 px-5 rounded-xl bg-neutral-100 text-neutral-700 text-xs font-bold border-none">Go Back</button>
+              <button onClick={() => void runWalletVerification()} className="h-11 px-5 rounded-xl bg-[#FF8A00] text-white text-xs font-black border-none flex items-center gap-2">
+                <RefreshCw size={13} />
+                Retry
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="flex flex-col h-full w-full bg-white font-sans items-center justify-center px-6 select-none text-center">
         <div className="space-y-6 max-w-sm">
@@ -889,7 +815,7 @@ export default function ConsultationChatScreen({ astrologerId = '1', readOnlySes
 
             <div className="flex items-start space-x-2 bg-neutral-50 p-3 rounded-xl text-[10.5px] text-neutral-600 font-semibold leading-relaxed text-left border border-neutral-100">
               <Info size={14} className="shrink-0 mt-0.5 text-[#FF8A00]" />
-              <span>Click Recharge below to add a demo balance of ₹150 instantly. This will automatically continue your consultation process.</span>
+              <span>Recharge your wallet securely, then return here to start the consultation.</span>
             </div>
           </div>
         </div>
@@ -902,11 +828,11 @@ export default function ConsultationChatScreen({ astrologerId = '1', readOnlySes
             Cancel Request
           </button>
           <button 
-            onClick={() => handleDemoRecharge(150)}
+            onClick={handleRechargeNavigation}
             className="flex-1 h-12 rounded-xl bg-[#FF8A00] hover:bg-[#E07A00] text-white text-xs font-black flex items-center justify-center space-x-1.5 shadow-md shadow-[#FF8A00]/10 transition-all border-none"
           >
             <Coins size={14} />
-            <span>Recharge ₹150 Now</span>
+            <span>Open Wallet</span>
           </button>
         </div>
       </div>
@@ -1152,7 +1078,7 @@ export default function ConsultationChatScreen({ astrologerId = '1', readOnlySes
           <div className="space-y-2">
             <h3 className="text-lg font-[900] text-neutral-900 tracking-tight">Request Expired</h3>
             <p className="text-neutral-500 text-xs font-semibold leading-relaxed">
-              {astro?.name} did not accept the request within the response interval of 60 seconds. Please try again or explore other online scholars.
+              {astro?.name} did not accept the request within the response interval of {requestTimeoutSeconds} seconds. Please try again or explore other online scholars.
             </p>
           </div>
           <div className="flex space-x-3 justify-center">
@@ -1163,7 +1089,7 @@ export default function ConsultationChatScreen({ astrologerId = '1', readOnlySes
               Go Back
             </button>
             <button 
-              onClick={runAstrologerReviewWait}
+              onClick={() => void runWalletVerification()}
               className="h-11 px-4 rounded-xl bg-neutral-900 text-white text-xs font-bold flex items-center space-x-1.5"
             >
               <RefreshCw size={12} />
@@ -1392,11 +1318,11 @@ export default function ConsultationChatScreen({ astrologerId = '1', readOnlySes
                   End Session
                 </button>
                 <button 
-                  onClick={() => handleDemoRecharge(150)}
+                  onClick={handleRechargeNavigation}
                   className="flex-1 h-12 bg-[#FF8A00] hover:bg-[#E07A00] text-white font-black rounded-xl text-xs transition-colors flex items-center justify-center space-x-1 border-none cursor-pointer"
                 >
                   <Coins size={14} />
-                  <span>Add ₹150</span>
+                  <span>Open Wallet</span>
                 </button>
               </div>
             </motion.div>
@@ -1665,16 +1591,7 @@ export default function ConsultationChatScreen({ astrologerId = '1', readOnlySes
           <div className="px-4 pb-2 pt-1 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-[10px] text-neutral-500 font-semibold select-none border-t border-neutral-200/20">
             <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
               <span className="bg-neutral-200 text-neutral-600 font-extrabold px-1.5 py-0.5 rounded uppercase">Sandbox Mode</span>
-              <button 
-                onClick={() => setIsSpeedUpMode(!isSpeedUpMode)}
-                className={`px-2 py-0.5 rounded font-extrabold transition-all border ${
-                  isSpeedUpMode 
-                    ? 'bg-[#FF8A00] border-[#FF8A00] text-white' 
-                    : 'bg-white border-neutral-200 text-neutral-600'
-                }`}
-              >
-                ⚡ Speed-Up (10s = 1m): {isSpeedUpMode ? 'ON' : 'OFF'}
-              </button>
+              <span className="bg-white border border-neutral-200 text-neutral-600 px-2 py-0.5 rounded font-extrabold">Server Billing</span>
             </div>
             <span className="text-neutral-400 font-medium truncate min-w-0">Full Session ID: <span className="font-mono text-[9.5px] select-all">{activeSessionId || '#RESTORED'}</span></span>
           </div>
@@ -1843,10 +1760,10 @@ export default function ConsultationChatScreen({ astrologerId = '1', readOnlySes
             <span className="truncate">Low Balance warning — Recharge to continue consultation (₹{walletBalance.toFixed(0)} left)</span>
           </div>
           <button 
-            onClick={() => handleDemoRecharge(150)}
+            onClick={handleRechargeNavigation}
             className="shrink-0 bg-amber-600 text-white font-extrabold text-[10px] px-2.5 py-1 rounded-lg uppercase tracking-wider transition-colors border-none cursor-pointer hover:bg-amber-700"
           >
-            Add ₹150
+            Recharge
           </button>
         </div>
       )}

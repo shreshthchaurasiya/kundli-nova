@@ -9,7 +9,7 @@ export const DUMMY_BANNERS = [
 
 export const ASTROLOGERS: Astrologer[] = [
   {
-    id: '1',
+    id: '11111111-1111-1111-1111-111111111111',
     name: 'Astro Rahul',
     image: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400&auto=format&fit=crop&q=80',
     experience: '10 Years',
@@ -22,7 +22,7 @@ export const ASTROLOGERS: Astrologer[] = [
     about: 'Expert in Vedic Astrology and Tarot card reading with over 10 years of experience helping people find their path.'
   },
   {
-    id: '2',
+    id: '22222222-2222-2222-2222-222222222222',
     name: 'Tarot Priya',
     image: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400&auto=format&fit=crop&q=80',
     experience: '6 Years',
@@ -35,7 +35,7 @@ export const ASTROLOGERS: Astrologer[] = [
     about: 'Intuitive Tarot reader and numerologist.'
   },
   {
-    id: '3',
+    id: '33333333-3333-3333-3333-333333333333',
     name: 'Pandit Sharma',
     image: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=80',
     experience: '25 Years',
@@ -52,14 +52,14 @@ export const ASTROLOGERS: Astrologer[] = [
 export const CHAT_THREADS: ChatThread[] = [
   {
     id: 'c1',
-    astrologerId: '1',
+    astrologerId: '11111111-1111-1111-1111-111111111111',
     lastMessage: 'Your sun sign indicates a favorable time for career growth.',
     unreadCount: 2,
     timestamp: '10:45 AM'
   },
   {
     id: 'c2',
-    astrologerId: '2',
+    astrologerId: '22222222-2222-2222-2222-222222222222',
     lastMessage: 'Let me pull one more card for you.',
     unreadCount: 0,
     timestamp: 'Yesterday'

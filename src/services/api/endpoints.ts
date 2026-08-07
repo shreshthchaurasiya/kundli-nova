@@ -8,7 +8,6 @@ export const ENDPOINTS = {
   WALLET: {
     GET: `${API_BASE}/wallet`,
     TRANSACTIONS: `${API_BASE}/wallet/transactions`,
-    RECHARGE: `${API_BASE}/wallet/recharge`,
   },
   CONSULTATION: {
     CREATE: `${API_BASE}/consultations`,
@@ -16,6 +15,8 @@ export const ENDPOINTS = {
     GET_BY_ID: (id: string) => `${API_BASE}/consultations/${id}`,
     HEARTBEAT: (id: string) => `${API_BASE}/consultations/${id}/heartbeat`,
     END: (id: string) => `${API_BASE}/consultations/${id}/end`,
+    EXPIRE: (id: string) => `${API_BASE}/consultations/${id}/expire`,
+    DEV_TRANSITION: (id: string) => `${API_BASE}/consultations/${id}/dev-transition`,
   },
   PROFILE: {
     GET: `${API_BASE}/profile`,

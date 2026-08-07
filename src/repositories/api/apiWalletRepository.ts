@@ -1,4 +1,3 @@
-import { v4 as uuidv4 } from 'uuid';
 import { IWalletRepository } from '../interfaces/wallet';
 import { WalletState, WalletTransaction } from '../../types/wallet';
 import { ApiClient } from '../../services/api/apiClient';
@@ -19,22 +18,11 @@ export class ApiWalletRepository implements IWalletRepository {
     return data;
   }
 
-  async recharge(amount: number, title: string, referenceId?: string): Promise<WalletState> {
-    // Generate idempotency key for this recharge action if not provided by referenceId
-    const idempotencyKey = referenceId || uuidv4();
-    
-    const data = await ApiClient.post<{ balance: number }>(ENDPOINTS.WALLET.RECHARGE, {
-      body: { amount, title, idempotencyKey },
-    });
-
-    return {
-      balance: data.balance,
-      transactions: [],
-      updatedAt: new Date().toISOString(),
-    };
+  async recharge(_amount?: number, _title?: string, _referenceId?: string): Promise<WalletState> {
+    throw new Error('Direct frontend wallet recharge is not allowed. Use verified Razorpay checkout.');
   }
 
-  async debit(): Promise<WalletState> {
+  async debit(_amount?: number, _title?: string, _referenceId?: string): Promise<WalletState> {
     throw new Error('Direct frontend wallet debit is not allowed. Mutations must occur via backend RPCs.');
   }
 

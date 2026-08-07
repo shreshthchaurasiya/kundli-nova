@@ -76,7 +76,7 @@ export default function ChatHistoryScreen({ onNavigate }: ChatHistoryScreenProps
         const seedSessions: ConsultationSession[] = [
           {
             id: 'session-seed-1',
-            astrologerId: '2', // Tarot Priya
+            astrologerId: '22222222-2222-2222-2222-222222222222', // Tarot Priya
             userId: 'dev-user',
             status: 'ENDED',
             createdAt: seed1Date.toISOString(),
@@ -92,7 +92,7 @@ export default function ChatHistoryScreen({ onNavigate }: ChatHistoryScreenProps
           },
           {
             id: 'session-seed-2',
-            astrologerId: '3', // Pandit Sharma
+            astrologerId: '33333333-3333-3333-3333-333333333333', // Pandit Sharma
             userId: 'dev-user',
             status: 'ENDED',
             createdAt: seed2Date.toISOString(),
@@ -108,7 +108,7 @@ export default function ChatHistoryScreen({ onNavigate }: ChatHistoryScreenProps
           },
           {
             id: 'session-seed-3',
-            astrologerId: '1', // Astro Rahul
+            astrologerId: '11111111-1111-1111-1111-111111111111', // Astro Rahul
             userId: 'dev-user',
             status: 'ENDED',
             createdAt: seed3Date.toISOString(),

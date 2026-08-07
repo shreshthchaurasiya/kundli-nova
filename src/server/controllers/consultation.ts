@@ -1,31 +1,83 @@
 import { Response, NextFunction } from 'express';
 import type { AuthenticatedRequest } from '../types';
 import { supabaseAdmin } from '../config/supabase';
+import { env } from '../config/env';
 import { ApiError } from '../errors/ApiError';
+
+type SessionRow = Record<string, unknown> & {
+  id: string;
+  user_id: string;
+  status: string;
+};
+
+type RpcResult = Record<string, unknown> & {
+  session?: SessionRow | null;
+  balance?: number | string;
+};
+
+const serializeSession = (row: SessionRow | null) => {
+  if (!row) return null;
+  return {
+    id: row.id,
+    userId: row.user_id,
+    astrologerId: row.astrologer_id,
+    status: row.status,
+    ratePerMinute: Number(row.rate_per_minute),
+    requestedAt: row.requested_at,
+    createdAt: row.requested_at,
+    startedAt: row.started_at ?? undefined,
+    endedAt: row.ended_at ?? undefined,
+    lastBilledAt: row.last_billed_at ?? undefined,
+    billedMinutes: Number(row.billed_minutes),
+    totalCharged: Number(row.total_charged),
+    elapsedSeconds: Number(row.elapsed_seconds),
+    rechargeDeadlineAt: row.recharge_deadline_at ?? undefined,
+  };
+};
+
+const requireOwnedSession = async (sessionId: string, userId: string) => {
+  const { data, error } = await supabaseAdmin
+    .from('consultation_sessions')
+    .select('*')
+    .eq('id', sessionId)
+    .single();
+
+  if (error || !data) throw new ApiError(404, 'Session not found');
+  if (data.user_id !== userId) throw new ApiError(403, 'Unauthorized access to session');
+  return data as SessionRow;
+};
+
+const runSessionRpc = async (name: string, args: Record<string, unknown>) => {
+  const { data, error } = await supabaseAdmin.rpc(name, args);
+  if (error) throw new ApiError(409, error.message);
+  return data as RpcResult;
+};
+
+const serializeRpcResult = (result: RpcResult) => ({
+  ...result,
+  balance: result.balance === undefined ? undefined : Number(result.balance),
+  session: serializeSession(result.session ?? null),
+});
 
 export const createSession = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const userId = req.user!.id;
-    const { astrologerId, ratePerMinute } = req.body;
+    const result = await runSessionRpc('create_consultation_session', {
+      p_user_id: req.user!.id,
+      p_astrologer_id: req.body.astrologerId,
+    });
 
-    const { data, error } = await supabaseAdmin
-      .from('consultation_sessions')
-      .insert({
-        user_id: userId,
-        astrologer_id: astrologerId,
-        rate_per_minute: ratePerMinute,
-        status: 'CHECKING_WALLET', // Or whatever initial state makes sense
-      })
-      .select()
-      .single();
-
-    if (error) {
-      throw new ApiError(500, `Failed to create session: ${error.message}`);
-    }
-
-    res.status(201).json({
+    const session = result.session as SessionRow | null;
+    res.status(result.outcome === 'created' ? 201 : 200).json({
       status: 'success',
-      data,
+      data: {
+        ...serializeRpcResult(result),
+        ratePerMinute: Number(session?.rate_per_minute ?? result.rate_per_minute),
+        minimumMinutes: Number(result.minimum_minutes),
+        minimumRequired: Number(result.minimum_required),
+        heartbeatIntervalSeconds: Number(result.heartbeat_interval_seconds),
+        requestTimeoutSeconds: Number(result.request_timeout_seconds),
+        rechargeGraceSeconds: Number(result.recharge_grace_seconds),
+      },
     });
   } catch (error) {
     next(error);
@@ -34,25 +86,17 @@ export const createSession = async (req: AuthenticatedRequest, res: Response, ne
 
 export const getActiveSession = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const userId = req.user!.id;
-
     const { data, error } = await supabaseAdmin
       .from('consultation_sessions')
       .select('*')
-      .eq('user_id', userId)
-      .in('status', ['ACTIVE', 'LOW_BALANCE', 'WAITING_FOR_ASTROLOGER', 'CHECKING_WALLET'])
+      .eq('user_id', req.user!.id)
+      .in('status', ['ACTIVE', 'LOW_BALANCE', 'RECHARGING', 'WAITING_FOR_ASTROLOGER'])
       .order('requested_at', { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
 
-    if (error && error.code !== 'PGRST116') {
-      throw new ApiError(500, 'Database error checking active session');
-    }
-
-    res.status(200).json({
-      status: 'success',
-      data: data || null,
-    });
+    if (error) throw new ApiError(500, 'Database error checking active session');
+    res.status(200).json({ status: 'success', data: serializeSession(data as SessionRow | null) });
   } catch (error) {
     next(error);
   }
@@ -60,28 +104,8 @@ export const getActiveSession = async (req: AuthenticatedRequest, res: Response,
 
 export const getSessionById = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const userId = req.user!.id;
-    const sessionId = req.params.id;
-
-    const { data, error } = await supabaseAdmin
-      .from('consultation_sessions')
-      .select('*')
-      .eq('id', sessionId)
-      .single();
-
-    if (error || !data) {
-      throw new ApiError(404, 'Session not found');
-    }
-
-    // Verify ownership securely
-    if (data.user_id !== userId) {
-      throw new ApiError(403, 'Unauthorized access to session');
-    }
-
-    res.status(200).json({
-      status: 'success',
-      data,
-    });
+    const session = await requireOwnedSession(req.params.id, req.user!.id);
+    res.status(200).json({ status: 'success', data: serializeSession(session) });
   } catch (error) {
     next(error);
   }
@@ -89,37 +113,9 @@ export const getSessionById = async (req: AuthenticatedRequest, res: Response, n
 
 export const heartbeatSession = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const userId = req.user!.id;
-    const sessionId = req.params.id;
-
-    // 1. First Verify Ownership
-    const { data: session, error: sessionError } = await supabaseAdmin
-      .from('consultation_sessions')
-      .select('user_id, status')
-      .eq('id', sessionId)
-      .single();
-
-    if (sessionError || !session) {
-      throw new ApiError(404, 'Session not found');
-    }
-
-    if (session.user_id !== userId) {
-      throw new ApiError(403, 'Unauthorized access to session');
-    }
-
-    // 2. Call transactional RPC to calculate elapsed time, update billing fields, and charge wallet
-    const { data: rpcResult, error: rpcError } = await supabaseAdmin.rpc('bill_consultation_session', {
-      p_session_id: sessionId,
-    });
-
-    if (rpcError) {
-      throw new ApiError(500, `Billing RPC failed: ${rpcError.message}`);
-    }
-
-    res.status(200).json({
-      status: 'success',
-      data: rpcResult,
-    });
+    await requireOwnedSession(req.params.id, req.user!.id);
+    const result = await runSessionRpc('bill_consultation_session', { p_session_id: req.params.id });
+    res.status(200).json({ status: 'success', data: serializeRpcResult(result) });
   } catch (error) {
     next(error);
   }
@@ -127,41 +123,38 @@ export const heartbeatSession = async (req: AuthenticatedRequest, res: Response,
 
 export const endSession = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const userId = req.user!.id;
-    const sessionId = req.params.id;
-
-    // First ensure ownership
-    const { data: checkData, error: checkError } = await supabaseAdmin
-      .from('consultation_sessions')
-      .select('user_id')
-      .eq('id', sessionId)
-      .single();
-
-    if (checkError || !checkData || checkData.user_id !== userId) {
-      throw new ApiError(403, 'Unauthorized');
-    }
-
-    // Call final heartbeat to clear out any remaining due balance
-    await supabaseAdmin.rpc('bill_consultation_session', {
-      p_session_id: sessionId,
+    await requireOwnedSession(req.params.id, req.user!.id);
+    const result = await runSessionRpc('finish_consultation_session', {
+      p_session_id: req.params.id,
+      p_reason: 'user_ended',
     });
+    res.status(200).json({ status: 'success', data: serializeRpcResult(result) });
+  } catch (error) {
+    next(error);
+  }
+};
 
-    // Mark as ended
-    const { data, error } = await supabaseAdmin
-      .from('consultation_sessions')
-      .update({ status: 'ENDED', ended_at: new Date().toISOString() })
-      .eq('id', sessionId)
-      .select()
-      .single();
+export const expireSession = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    await requireOwnedSession(req.params.id, req.user!.id);
+    const result = await runSessionRpc('expire_waiting_consultation', { p_session_id: req.params.id });
+    res.status(200).json({ status: 'success', data: serializeRpcResult(result) });
+  } catch (error) {
+    next(error);
+  }
+};
 
-    if (error) {
-      throw new ApiError(500, `Failed to end session: ${error.message}`);
+export const transitionSessionForDevelopment = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    if (env.NODE_ENV !== 'development') {
+      throw new ApiError(404, 'Route not found');
     }
-
-    res.status(200).json({
-      status: 'success',
-      data,
+    await requireOwnedSession(req.params.id, req.user!.id);
+    const result = await runSessionRpc('transition_waiting_consultation', {
+      p_session_id: req.params.id,
+      p_target_status: req.body.targetStatus,
     });
+    res.status(200).json({ status: 'success', data: serializeRpcResult(result) });
   } catch (error) {
     next(error);
   }

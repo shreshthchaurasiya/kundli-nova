@@ -14,9 +14,6 @@
 
 import { supabase } from '../../lib/supabase';
 
-const AUTH_MODE = (import.meta as any).env.VITE_AUTH_MODE || 'production';
-const TEST_PHONE_NUMBER = (import.meta as any).env.VITE_TEST_PHONE_NUMBER || '';
-
 export type PhoneAuthError = {
   code: 'INVALID_PHONE' | 'SEND_OTP_FAILED' | 'VERIFY_OTP_FAILED' | 'SIGN_OUT_FAILED';
   message: string;
@@ -39,11 +36,7 @@ export function normalizeIndianPhone(raw: string): string | null {
  * In development mode, bypasses real SMS and allows ANY number.
  */
 export async function sendOtp(phone: string): Promise<{ error: PhoneAuthError | null }> {
-  if (AUTH_MODE === 'development') {
-    console.info(`[PhoneAuth] Development mode active. Any number is accepted with OTP 123456.`);
-    // Dev mode: pretend we sent an OTP
-    return { error: null };
-  }
+
 
   const { error } = await supabase.auth.signInWithOtp({ phone });
 
@@ -67,51 +60,7 @@ export async function verifyOtp(
   phone: string,
   token: string,
 ): Promise<{ error: PhoneAuthError | null }> {
-  if (AUTH_MODE === 'development') {
-    if (token !== '123456') {
-      return { error: { code: 'VERIFY_OTP_FAILED', message: 'Invalid test OTP (use 123456)' } };
-    }
 
-    // Phone-based trick to create a REAL session for ANY phone number in dev mode
-    const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:3000/api/v1';
-    try {
-      const response = await fetch(`${API_BASE}/auth/dev-login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone })
-      });
-
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        return {
-          error: {
-            code: 'VERIFY_OTP_FAILED',
-            message: errData.message || 'Failed to register dev phone number on backend.'
-          }
-        };
-      }
-    } catch (err: any) {
-      return {
-        error: {
-          code: 'VERIFY_OTP_FAILED',
-          message: err.message || 'Network error connecting to backend auth proxy.'
-        }
-      };
-    }
-
-    // Now that the backend has created/confirmed the user and set their password,
-    // sign in directly with the phone and password to establish a real Supabase Auth session.
-    const { error } = await supabase.auth.signInWithPassword({
-      phone,
-      password: 'dev-password-123',
-    });
-
-    if (error) {
-      return { error: { code: 'VERIFY_OTP_FAILED', message: error.message } };
-    }
-
-    return { error: null };
-  }
 
   const { error } = await supabase.auth.verifyOtp({ phone, token, type: 'sms' });
 

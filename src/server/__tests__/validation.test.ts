@@ -1,27 +1,23 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest';
-import { rechargeSchema } from '../validation';
+import { createConsultationSchema } from '../validation';
 
 describe('Validation Schemas', () => {
-  it('validates correct recharge payload', () => {
+  it('validates the persisted PostgreSQL astrologer UUID without requiring a client rate', () => {
     const validData = {
       body: {
-        amount: 100,
-        title: 'Recharge',
-        idempotencyKey: 'key-123'
+        astrologerId: '11111111-1111-1111-1111-111111111111',
       }
     };
-    expect(rechargeSchema.parse(validData)).toBeDefined();
+    expect(createConsultationSchema.parse(validData)).toBeDefined();
   });
 
-  it('rejects negative amount', () => {
+  it('rejects a non-UUID astrologer identifier', () => {
     const invalidData = {
       body: {
-        amount: -50,
-        title: 'Recharge',
-        idempotencyKey: 'key-123'
+        astrologerId: '1',
       }
     };
-    expect(() => rechargeSchema.parse(invalidData)).toThrow();
+    expect(() => createConsultationSchema.parse(invalidData)).toThrow();
   });
 });

@@ -25,6 +25,26 @@ export default defineConfig(({ mode }) => {
           server.middlewares.use(aiApp);
         },
       },
+      {
+        name: 'kundli-nova-secure-api',
+        async configureServer(server) {
+          // Antigravity and `npx vite` run on :5173 without a separate Express
+          // process. Mount only API requests here so secure wallet and
+          // consultation routes work while Vite still serves the frontend.
+          const { default: backendApp } = await import('./src/server/app');
+          server.middlewares.use((req, res, next) => {
+            if (!req.url?.startsWith('/api/')) {
+              next();
+              return;
+            }
+            backendApp(
+              req as unknown as express.Request,
+              res as unknown as express.Response,
+              next,
+            );
+          });
+        },
+      },
     ],
     resolve: {
       alias: {
@@ -32,15 +52,6 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
-      // The React dev server runs on :5173 while the secure Express API runs
-      // on :3000. Keep API calls same-origin in the browser and proxy them in
-      // development so profile saves, wallet, and consultation flows work.
-      proxy: {
-        '/api': {
-          target: process.env.VITE_API_PROXY_TARGET || 'http://localhost:3000',
-          changeOrigin: true,
-        },
-      },
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',

@@ -56,14 +56,10 @@ describe('API Repositories', () => {
       await expect(repo.debit()).rejects.toThrow('Direct frontend wallet debit is not allowed');
     });
 
-    it('preserves idempotency key on retry', async () => {
+    it('rejects direct recharge in favor of verified Razorpay checkout', async () => {
       const repo = new ApiWalletRepository();
-      (ApiClient.post as any).mockResolvedValueOnce({ balance: 600 });
-      await repo.recharge(100, 'Test', 'idemp-123');
-      expect(ApiClient.post).toHaveBeenCalledWith(
-        expect.stringContaining('/wallet/recharge'),
-        expect.objectContaining({ body: expect.objectContaining({ idempotencyKey: 'idemp-123' }) })
-      );
+      await expect(repo.recharge(100, 'Test', 'idemp-123')).rejects.toThrow('verified Razorpay checkout');
+      expect(ApiClient.post).not.toHaveBeenCalled();
     });
   });
   
