@@ -67,11 +67,18 @@ export const upgradeWithWallet = async (req: AuthenticatedRequest, res: Response
     const userId = req.user!.id;
     const { plan } = req.body; // 'PRO' or 'ELITE'
 
-    if (!['PRO', 'ELITE'].includes(plan)) {
-      throw new ApiError(400, 'Invalid plan selected.');
+    const { data: planData, error: planError } = await supabaseAdmin
+      .from('subscription_plans')
+      .select('price')
+      .eq('name', plan)
+      .eq('is_active', true)
+      .single();
+
+    if (planError || !planData) {
+      throw new ApiError(400, 'Invalid or inactive plan selected.');
     }
 
-    const amount = plan === 'PRO' ? 199 : 499;
+    const amount = planData.price;
     const durationMonths = 1;
 
     const { data, error } = await supabaseAdmin.rpc('upgrade_subscription_wallet', {

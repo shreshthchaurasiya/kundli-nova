@@ -660,7 +660,7 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
       <CelestialChatBackground />
 
       {/* Top Header */}
-      <div className="bg-[#FFFFFF]/85 backdrop-blur-md px-[16px] sm:px-[20px] pt-[max(16px,env(safe-area-inset-top))] sm:pt-[24px] pb-[16px] shadow-[0_2px_12px_rgba(0,0,0,0.02)] z-20 flex items-center justify-between border-b border-[#F3F4F6] relative">
+      <div className="bg-[#FFFFFF] px-[16px] sm:px-[20px] pt-[max(16px,env(safe-area-inset-top))] pb-[12px] z-20 flex items-center justify-between border-b border-[#F1F1F1] relative shrink-0">
         <div className="flex items-center">
           <button 
             onClick={() => {
@@ -670,36 +670,33 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
                 onNavigate('nova-ai');
               }
             }}
-            className="p-[8px] -ml-[8px] mr-[6px] rounded-full hover:bg-gray-50 active:bg-gray-100 transition-colors text-[#111827]"
+            className="p-[8px] -ml-[8px] mr-[8px] sm:mr-[12px] rounded-full hover:bg-neutral-50 active:bg-neutral-100 transition-colors text-[#111827]"
           >
             <ArrowLeft size={22} strokeWidth={2.5} />
           </button>
 
-          <div className="flex items-center space-x-[12px]">
-            <div className="relative">
-              {/* Premium Crystal Orb Icon representing the AI Astrologer */}
-              <div className="w-[42px] h-[42px] rounded-full bg-gradient-to-tr from-[#FF8A00] to-[#FFA733] text-white flex items-center justify-center shadow-[0_3px_12px_rgba(255,138,0,0.2)]">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="w-[20px] h-[20px]">
-                  <circle cx="12" cy="12" r="5.2" fill="currentColor" fillOpacity="0.25" stroke="currentColor" strokeWidth="1.8" />
-                  <ellipse cx="12" cy="12" rx="9" ry="2.8" stroke="currentColor" strokeWidth="1.5" transform="rotate(-30 12 12)" />
-                  <circle cx="12" cy="4.5" r="0.8" fill="currentColor" />
-                  <circle cx="12" cy="19.5" r="0.8" fill="currentColor" />
-                </svg>
+          <div className="flex items-center space-x-[10px]">
+            <div className="relative flex-shrink-0">
+              <div className="w-[44px] h-[44px] sm:w-[48px] sm:h-[48px] rounded-full overflow-hidden border-[1.5px] border-[#FF8A00] flex items-center justify-center bg-neutral-50">
+                <img 
+                  src="/nova-ai-avatar.png" 
+                  alt="Nova AI" 
+                  className="w-full h-full object-cover object-center"
+                />
               </div>
-              <div className="absolute bottom-[0px] right-[0px] w-[9px] h-[9px] bg-[#10B981] border-2 border-[#FFFFFF] rounded-full" />
+              <div className="absolute bottom-[0px] right-[2px] w-[10px] h-[10px] bg-[#10B981] border-2 border-[#FFFFFF] rounded-full" />
             </div>
             
-            <div className="flex flex-col">
+            <div className="flex flex-col justify-center">
               <div className="flex items-center space-x-1">
-                <h2 className="text-[15.5px] font-[850] text-[#111827] leading-[1.2] tracking-tight">Nova AI</h2>
-                <Sparkles size={11.5} className="text-[#FF8A00] fill-[#FF8A00]" />
+                <h2 className="text-[16px] sm:text-[17px] font-semibold text-[#111827] leading-tight truncate">Nova AI ✨</h2>
               </div>
               <div 
-                className="flex items-center space-x-1 mt-[1.5px] cursor-pointer"
+                className="flex items-center space-x-1 mt-[2px] cursor-pointer"
                 onClick={() => setIsProfileSwitcherOpen(true)}
               >
-                <div className="text-[11.5px] text-[#6B7280] font-semibold leading-[1.3] truncate max-w-[120px]">
-                  {profileData?.name ? `Kundli: ${profileData.name}` : 'Personal AI Astrologer'}
+                <div className="text-[12px] sm:text-[13px] text-[#6B7280] leading-tight truncate max-w-[140px]">
+                  Kundli • {profileData?.name ? profileData.name : 'Shreshth GPT'}
                 </div>
                 <ChevronDown size={11} className="text-[#6B7280]" />
               </div>
@@ -708,12 +705,12 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
         </div>
 
         {/* Right Header Controls (Compact) */}
-        <div className="flex items-center space-x-[8px] text-neutral-400">
+        <div className="flex items-center text-neutral-400 pl-[8px]">
           <button 
             onClick={() => onNavigate('chat-history')}
-            className="p-2 rounded-full hover:bg-neutral-50 active:bg-neutral-100 transition-colors focus:outline-none"
+            className="p-[8px] -mr-[8px] rounded-full hover:bg-neutral-50 active:bg-neutral-100 transition-colors focus:outline-none"
           >
-            <History size={19} strokeWidth={2.2} />
+            <History size={20} strokeWidth={2.2} />
           </button>
         </div>
       </div>
@@ -931,7 +928,7 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
       )}
 
       {/* Message Input Bar (Fixed bottom layout) */}
-      <div className="relative bg-[#FFFFFF] px-[16px] py-[12px] pb-[max(20px,env(safe-area-inset-bottom))] border-t border-[#F3F4F6] z-20 flex flex-col shadow-[0_-4px_20px_rgba(0,0,0,0.01)] shrink-0">
+      <div className="relative bg-[#FFFFFF] px-[12px] sm:px-[16px] py-[12px] pb-[max(12px,env(safe-area-inset-bottom))] z-20 flex flex-col shrink-0">
         <input 
           type="file" 
           ref={fileInputRef} 
@@ -941,7 +938,7 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
         />
         
         {imagePreviewUrl && (
-          <div className="mb-3 flex items-start gap-3 rounded-xl border border-neutral-100 bg-neutral-50 p-2">
+          <div className="mb-3 flex items-start gap-3 rounded-xl border border-neutral-100 bg-neutral-50 p-2 mx-[4px]">
             <div className="relative h-16 w-16 shrink-0 rounded-lg overflow-hidden border border-neutral-200">
               <img src={imagePreviewUrl} alt="Preview" className="h-full w-full object-cover" />
               <button
@@ -959,35 +956,45 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
           </div>
         )}
 
-        <div className="flex items-center space-x-[12px] w-full">
-          <form onSubmit={handleSendMessage} className="flex-1 flex items-center bg-[#F9FAFB] border border-[#F3F4F6] rounded-[24px] pr-[6px] pl-[12px]">
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isTyping || isUploading}
-              className="text-neutral-400 mr-2 p-1.5 hover:text-[#FF8A00] hover:bg-[#FF8A00]/10 rounded-full transition-colors disabled:opacity-50"
-            >
-              <Paperclip size={18} strokeWidth={2} />
-            </button>
+        <div className="flex items-center w-full">
+          <form 
+            onSubmit={handleSendMessage} 
+            className="flex-1 flex items-center bg-[#FFFFFF] border border-[#FF8A00]/30 focus-within:border-[#FF8A00]/60 rounded-[26px] pl-[16px] pr-[6px] min-h-[54px] shadow-[0_2px_12px_rgba(0,0,0,0.03)] transition-colors"
+          >
+            <div className="text-[#FF8A00] mr-[10px] shrink-0">
+              <Sparkles size={18} strokeWidth={2} className="fill-[#FF8A00]/20" />
+            </div>
+            
             <input 
               type="text" 
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
-              placeholder="Ask Nova AI..." 
-              className="flex-1 bg-transparent border-none focus:outline-none text-[13.5px] sm:text-[14px] font-medium text-[#111827] placeholder:text-[#9CA3AF] h-[48px]"
+              placeholder="Ask Nova AI anything..." 
+              className="flex-1 bg-transparent border-none focus:outline-none text-[14px] sm:text-[15px] font-medium text-[#111827] placeholder:text-[#9CA3AF] h-[54px]"
             />
             
-            <button 
-              type="submit"
-              disabled={(!inputText.trim() && !selectedImage) || isTyping || isUploading}
-              className={`w-[36px] h-[36px] rounded-full flex items-center justify-center shrink-0 transition-all ${
-                (inputText.trim() || selectedImage) && !isTyping && !isUploading
-                  ? 'bg-[#FF8A00] text-[#FFFFFF] shadow-[0_2px_8px_rgba(255,138,0,0.3)] active:scale-[0.96]' 
-                  : 'bg-[#F3F4F6] text-[#9CA3AF]'
-              }`}
-            >
-              <Send size={15} strokeWidth={2.5} className="ml-[2.5px]" />
-            </button>
+            <div className="flex items-center shrink-0 space-x-[4px] ml-[4px]">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isTyping || isUploading}
+                className="text-neutral-400 p-[8px] hover:text-[#FF8A00] hover:bg-[#FF8A00]/10 rounded-full transition-colors disabled:opacity-50"
+              >
+                <Paperclip size={20} strokeWidth={2} />
+              </button>
+              
+              <button 
+                type="submit"
+                disabled={(!inputText.trim() && !selectedImage) || isTyping || isUploading}
+                className={`w-[42px] h-[42px] rounded-full flex items-center justify-center transition-all ${
+                  (inputText.trim() || selectedImage) && !isTyping && !isUploading
+                    ? 'bg-[#FF8A00] text-[#FFFFFF] shadow-[0_2px_8px_rgba(255,138,0,0.3)] active:scale-[0.96]' 
+                    : 'bg-[#F3F4F6] text-[#9CA3AF]'
+                }`}
+              >
+                <Send size={18} strokeWidth={2.5} className="ml-[2px]" />
+              </button>
+            </div>
           </form>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { KeyRound, Mail, ShieldAlert } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
 
 export function AdminLoginScreen() {
   const [email, setEmail] = useState('kunlinova@gmail.com');
@@ -14,12 +15,16 @@ export function AdminLoginScreen() {
     setError('');
     setLoading(true);
 
-    // Hardcoded local authentication bypass
-    if (email === 'kunlinova@gmail.com' && password === 'kundlinova@123') {
+    const { data, error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (authError) {
+      setError(authError.message || 'Invalid login credentials');
+    } else if (data.session) {
       localStorage.setItem('adminAuth', 'true');
       navigate('/');
-    } else {
-      setError('Invalid login credentials');
     }
     
     setLoading(false);
