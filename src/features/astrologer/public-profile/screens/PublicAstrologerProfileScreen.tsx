@@ -102,7 +102,7 @@ export default function PublicAstrologerProfileScreen({ astrologerId, onNavigate
           <div className="absolute bottom-4 right-4 z-10 bg-black/75 backdrop-blur-sm px-3.5 py-1.5 rounded-full text-white flex items-center space-x-1 shadow-lg border border-white/10 text-[11px] font-bold">
             <span className="text-[10px] leading-none mb-0.5">⭐</span>
             <span>{astro.rating}</span>
-            <span className="text-neutral-300 font-medium">({astro.consultations >= 1000 ? `${(astro.consultations / 1000).toFixed(1)}k` : astro.consultations} Reviews)</span>
+            <span className="text-neutral-300 font-medium">({astro.reviewsCount >= 1000 ? `${(astro.reviewsCount / 1000).toFixed(1)}k` : astro.reviewsCount} Reviews)</span>
           </div>
         </div>
 
@@ -199,7 +199,7 @@ export default function PublicAstrologerProfileScreen({ astrologerId, onNavigate
             </div>
             <div className="space-y-1 border-l border-neutral-100/70">
               <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">Consultations</span>
-              <p className="text-[13px] font-bold text-neutral-800 leading-none">{(astro.consultations / 1000).toFixed(1)}k+</p>
+              <p className="text-[13px] font-bold text-neutral-800 leading-none">{astro.consultations >= 1000 ? `${(astro.consultations / 1000).toFixed(1)}k+` : astro.consultations}</p>
             </div>
             <div className="space-y-1 border-l border-neutral-100/70">
               <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">Response</span>
@@ -257,7 +257,7 @@ export default function PublicAstrologerProfileScreen({ astrologerId, onNavigate
               </div>
               <div className="text-right">
                 <p className="flex items-center justify-end gap-1 text-lg font-black text-neutral-900"><Star size={13} className="fill-[#FF8A00] text-[#FF8A00]" />{astro.rating}</p>
-                <p className="text-[10px] font-semibold text-neutral-400">{astro.consultations.toLocaleString('en-IN')} consultations</p>
+                <p className="text-[10px] font-semibold text-neutral-400">{astro.reviewsCount.toLocaleString('en-IN')} reviews</p>
               </div>
             </div>
           </div>

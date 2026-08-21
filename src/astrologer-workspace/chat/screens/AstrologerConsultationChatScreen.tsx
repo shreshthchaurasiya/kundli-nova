@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, LoaderCircle, Send, ShieldCheck, ScrollText, ImagePlus, X, Loader2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Screen } from '../../../types';
 import CelestialChatBackground from '../../../components/chat/CelestialChatBackground';
 import { ConsultationMessageBubble, useRealtimeConsultationChat } from '../../../features/consultation-chat';
@@ -30,8 +31,24 @@ export default function AstrologerConsultationChatScreen({
   readOnly = false,
   onNavigate,
 }: AstrologerConsultationChatScreenProps) {
-  const { messages, sessionStatus, kundliProfileId, isLoading, isSending, error, send, sendImage } = useRealtimeConsultationChat(sessionId);
+  const { messages, sessionStatus, kundliProfileId, isLoading, isSending, error, send, sendImage, partnerTyping, setTyping } = useRealtimeConsultationChat(sessionId, 'astrologer');
   const [input, setInput] = useState('');
+  const typingTimeoutRef = useRef<number | null>(null);
+
+  const handleTyping = (text: string) => {
+    setInput(text);
+    if (text.trim()) {
+      setTyping(true);
+      if (typingTimeoutRef.current) {
+        window.clearTimeout(typingTimeoutRef.current);
+      }
+      typingTimeoutRef.current = window.setTimeout(() => {
+        setTyping(false);
+      }, 2000);
+    } else {
+      setTyping(false);
+    }
+  };
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -147,6 +164,21 @@ export default function AstrologerConsultationChatScreen({
             <p className="mt-1 text-[11px] font-medium leading-relaxed text-neutral-500">Send the first message when you are ready. Kundli Nova does not generate astrologer replies automatically.</p>
           </div>
         ) : messages.map(message => <div key={message.id}><ConsultationMessageBubble message={message} ownSender="astrologer" /></div>)}
+        
+        <AnimatePresence>
+          {partnerTyping && (
+            <motion.div
+              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="flex items-center gap-1.5 bg-white border border-neutral-100 shadow-sm rounded-2xl rounded-bl-none px-4 py-3 w-fit ml-2 mt-2"
+            >
+              <motion.div className="w-1.5 h-1.5 bg-[#FF8A00] rounded-full" animate={{ y: [0, -4, 0] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0 }} />
+              <motion.div className="w-1.5 h-1.5 bg-[#FF8A00] rounded-full" animate={{ y: [0, -4, 0] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0.2 }} />
+              <motion.div className="w-1.5 h-1.5 bg-[#FF8A00] rounded-full" animate={{ y: [0, -4, 0] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0.4 }} />
+            </motion.div>
+          )}
+        </AnimatePresence>
         <div ref={endRef} />
       </main>
 
@@ -190,7 +222,7 @@ export default function AstrologerConsultationChatScreen({
                 accept="image/jpeg,image/png,image/webp"
                 className="hidden"
               />
-              <input value={input} onChange={event => setInput(event.target.value)} maxLength={4000} placeholder={selectedImage ? "Add a caption..." : "Write a helpful response…"} className="h-12 min-w-0 flex-1 rounded-2xl border border-neutral-100 bg-neutral-50 px-4 text-[13px] font-medium outline-none focus:border-orange-200" />
+              <input value={input} onChange={event => handleTyping(event.target.value)} maxLength={4000} placeholder={selectedImage ? "Add a caption..." : "Write a helpful response…"} className="h-12 min-w-0 flex-1 rounded-2xl border border-neutral-100 bg-neutral-50 px-4 text-[13px] font-medium outline-none focus:border-orange-200" />
               <button type="submit" disabled={isSending || (!input.trim() && !selectedImage)} className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#FF8A00] text-white disabled:opacity-40">
                 {isSending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
               </button>

@@ -1,17 +1,19 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { ApiChatRepository } from '../../../repositories/api/apiChatRepository';
 import { Message } from '../../../types';
 
 const chatRepository = new ApiChatRepository();
 
-export function useRealtimeConsultationChat(sessionId: string) {
+export function useRealtimeConsultationChat(sessionId: string, currentUserRole: 'user' | 'astrologer' = 'user') {
   const [messages, setMessages] = useState<Message[]>([]);
   const [sessionStatus, setSessionStatus] = useState<string>('');
   const [kundliProfileId, setKundliProfileId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [partnerTyping, setPartnerTyping] = useState(false);
+  const channelRef = useRef<any>(null);
 
   const refreshMessages = useCallback(async () => {
     if (!sessionId) return;
@@ -49,7 +51,11 @@ export function useRealtimeConsultationChat(sessionId: string) {
     const subscriptionStatus = { current: 'INITIAL' };
 
     const channel = supabase
-      .channel(`consultation-chat:${sessionId}`)
+      .channel(`consultation-chat:${sessionId}`, {
+        config: {
+          broadcast: { self: false },
+        },
+      })
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'consultation_messages', filter: `session_id=eq.${sessionId}` },
@@ -85,6 +91,9 @@ export function useRealtimeConsultationChat(sessionId: string) {
             if (isDuplicate) return current;
             return [...current, newMsg];
           });
+          
+          // If a new message comes in, assume they stopped typing
+          setPartnerTyping(false);
         }
       )
       .on(
@@ -93,7 +102,7 @@ export function useRealtimeConsultationChat(sessionId: string) {
         (payload) => {
           setSessionStatus((prev) => {
             if (['ENDED', 'REJECTED', 'EXPIRED', 'CANCELLED'].includes(prev)) {
-              return prev; // terminal statuses are read-only
+               return prev; // terminal statuses are read-only
             }
             if (payload.new.status) return payload.new.status;
             return prev;
@@ -103,6 +112,11 @@ export function useRealtimeConsultationChat(sessionId: string) {
           }
         }
       )
+      .on('broadcast', { event: 'typing' }, (payload) => {
+        if (payload.payload?.sender !== currentUserRole) {
+          setPartnerTyping(payload.payload?.isTyping || false);
+        }
+      })
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           if (subscriptionStatus.current === 'DISCONNECTED') {
@@ -113,11 +127,34 @@ export function useRealtimeConsultationChat(sessionId: string) {
           subscriptionStatus.current = 'DISCONNECTED';
         }
       });
+      
+    channelRef.current = channel;
 
     return () => {
       void supabase.removeChannel(channel);
+      channelRef.current = null;
     };
-  }, [refreshMessages, refreshStatus, sessionId]);
+  }, [refreshMessages, refreshStatus, sessionId, currentUserRole]);
+
+  const setTyping = useCallback((isTyping: boolean) => {
+    if (!channelRef.current) return;
+    void channelRef.current.send({
+      type: 'broadcast',
+      event: 'typing',
+      payload: { isTyping, sender: currentUserRole }
+    });
+  }, [currentUserRole]);
+
+  const generateId = () => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  };
 
   const send = useCallback(async (text: string) => {
     const trimmed = text.trim();
@@ -125,7 +162,7 @@ export function useRealtimeConsultationChat(sessionId: string) {
     setIsSending(true);
     setError(null);
     try {
-      const message = await chatRepository.sendMessage(sessionId, trimmed, crypto.randomUUID());
+      const message = await chatRepository.sendMessage(sessionId, trimmed, generateId());
       setMessages(current => current.some(item => item.id === message.id) ? current : [...current, message]);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to send this message.');
@@ -160,7 +197,7 @@ export function useRealtimeConsultationChat(sessionId: string) {
       }
 
       // 3. Finalize the message
-      const message = await chatRepository.sendMessage(sessionId, caption || '', crypto.randomUUID(), 'image', path);
+      const message = await chatRepository.sendMessage(sessionId, caption || '', generateId(), 'image', path);
       setMessages(current => current.some(item => item.id === message.id) ? current : [...current, message]);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to send this image.');
@@ -170,5 +207,5 @@ export function useRealtimeConsultationChat(sessionId: string) {
     }
   }, [isSending, sessionId]);
 
-  return { messages, sessionStatus, kundliProfileId, isLoading, isSending, error, send, sendImage, refreshMessages };
+  return { messages, sessionStatus, kundliProfileId, isLoading, isSending, error, send, sendImage, refreshMessages, partnerTyping, setTyping };
 }

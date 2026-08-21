@@ -45,6 +45,7 @@ type AstrologerRow = {
   skills: string[];
   rating: number | string;
   consultations: number;
+  reviews_count?: number;
   price_per_minute: number | string;
   status: 'ONLINE' | 'BUSY' | 'OFFLINE';
   about: string | null;
@@ -60,8 +61,8 @@ const applicationSelect = [
 ].join(',');
 
 const astrologerSelect = [
-  'id', 'name', 'image', 'experience', 'languages', 'skills', 'rating',
-  'consultations', 'price_per_minute', 'status', 'about',
+  'id', 'user_id', 'name', 'image', 'experience', 'languages', 'skills',
+  'rating', 'consultations', 'reviews_count', 'price_per_minute', 'status', 'about',
 ].join(',');
 
 function mapApplication(row: ApplicationRow): AstrologerApplication {
@@ -106,6 +107,7 @@ function mapAstrologer(row: AstrologerRow): Astrologer {
     skills: row.skills,
     rating: Number(row.rating),
     consultations: row.consultations,
+    reviewsCount: row.reviews_count ?? 0,
     pricePerMinute: Number(row.price_per_minute),
     isOnline: row.status === 'ONLINE',
     about: row.about ?? '',

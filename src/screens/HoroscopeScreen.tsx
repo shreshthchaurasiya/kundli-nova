@@ -187,32 +187,6 @@ export default function HoroscopeScreen({ onNavigate }: HoroscopeScreenProps) {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="px-6 py-4 flex gap-4 shrink-0 border-b border-neutral-100 bg-white">
-        {(['Yesterday', 'Today', 'Tomorrow'] as TabName[]).map((tab) => {
-          const isActive = tab === activeTab;
-          
-          return (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`pb-2 text-[14px] font-[700] tracking-wide relative ${
-                isActive ? 'text-[#FF8A00]' : 'text-neutral-400'
-              }`}
-            >
-              <div className="flex items-center gap-1">
-                {tab}
-              </div>
-              {isActive && (
-                <motion.div
-                  layoutId="activeTab"
-                  className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#FF8A00] rounded-t-full"
-                />
-              )}
-            </button>
-          );
-        })}
-      </div>
 
       {/* Content Area */}
       <div className="flex-1 overflow-y-auto px-5 py-6 bg-[#FAFAFA]" id="horoscope-panel" role="tabpanel">

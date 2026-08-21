@@ -44,6 +44,7 @@ export interface Astrologer {
   skills: string[];
   rating: number;
   consultations: number;
+  reviewsCount: number;
   pricePerMinute: number;
   isOnline: boolean;
   about: string;

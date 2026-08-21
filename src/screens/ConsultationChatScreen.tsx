@@ -93,10 +93,26 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { messages, sessionStatus, kundliProfileId, send, sendImage, isSending, error: hookError } = useRealtimeConsultationChat(activeSessionId);
+  const { messages, sessionStatus, kundliProfileId, send, sendImage, isSending, error: hookError, partnerTyping, setTyping } = useRealtimeConsultationChat(activeSessionId, 'user');
   const displayError = chatError || hookError;
 
   const [inputText, setInputText] = useState('');
+  const typingTimeoutRef = useRef<number | null>(null);
+
+  const handleTyping = (text: string) => {
+    setInputText(text);
+    if (activeSessionId && text.trim()) {
+      setTyping(true);
+      if (typingTimeoutRef.current) {
+        window.clearTimeout(typingTimeoutRef.current);
+      }
+      typingTimeoutRef.current = window.setTimeout(() => {
+        setTyping(false);
+      }, 2000);
+    } else if (!text.trim()) {
+      setTyping(false);
+    }
+  };
   const [activeCall, setActiveCall] = useState<'voice' | 'video' | null>(null);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [startTimeString, setStartTimeString] = useState('');
@@ -559,8 +575,19 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
   };
 
   // Review submission
-  const handleReviewSubmit = () => {
-    // Demo submission of review
+  const handleReviewSubmit = async () => {
+    if (astro?.id && activeSessionId) {
+      try {
+        await consultationRepository.submitReview(
+          astro.id,
+          activeSessionId,
+          rating,
+          reviewText
+        );
+      } catch (err) {
+        console.error('Failed to submit review:', err);
+      }
+    }
     onNavigate('home');
   };
 
@@ -1396,25 +1423,6 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
             </div>
           </div>
         </div>
-
-        {/* Media call tools */}
-        {!readOnlySessionId && (
-          <div className="flex items-center space-x-1.5">
-            <button
-              onClick={() => setActiveCall('voice')}
-              className="p-2 rounded-full border border-neutral-200 text-neutral-700 hover:bg-neutral-50 active:bg-neutral-100 transition-all cursor-pointer"
-            >
-              <Phone size={15} strokeWidth={2.5} />
-            </button>
-
-            <button
-              onClick={() => setActiveCall('video')}
-              className="p-2 rounded-full border border-neutral-200 text-neutral-700 hover:bg-neutral-50 active:bg-neutral-100 transition-all cursor-pointer"
-            >
-              <Video size={16} strokeWidth={2.5} />
-            </button>
-          </div>
-        )}
       </div>
 
       {/* ACTIVE SESSION CALM BAR */}
@@ -1589,6 +1597,21 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
           )}
           {messages.map(renderMessageBubble)}
 
+          <AnimatePresence>
+            {partnerTyping && (
+              <motion.div
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="flex items-center gap-1.5 bg-white border border-neutral-100 shadow-sm rounded-2xl rounded-bl-none px-4 py-3 w-fit ml-2 mb-2"
+              >
+                <motion.div className="w-1.5 h-1.5 bg-[#FF8A00] rounded-full" animate={{ y: [0, -4, 0] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0 }} />
+                <motion.div className="w-1.5 h-1.5 bg-[#FF8A00] rounded-full" animate={{ y: [0, -4, 0] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0.2 }} />
+                <motion.div className="w-1.5 h-1.5 bg-[#FF8A00] rounded-full" animate={{ y: [0, -4, 0] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0.4 }} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <div ref={messagesEndRef} className="h-4" />
         </div>
 
@@ -1686,7 +1709,7 @@ export default function ConsultationChatScreen({ astrologerId, readOnlySessionId
                 <input
                   type="text"
                   value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
+                  onChange={(e) => handleTyping(e.target.value)}
                   disabled={currentState === 'RECHARGING'}
                   placeholder={
                     currentState === 'RECHARGING'

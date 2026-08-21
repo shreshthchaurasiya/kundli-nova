@@ -2,6 +2,7 @@ import { IConsultationRepository } from '../interfaces/consultation';
 import { ConsultationHeartbeatResult, ConsultationRequestResult, ConsultationSession } from '../../types/consultation';
 import { ApiClient } from '../../services/api/apiClient';
 import { ENDPOINTS } from '../../services/api/endpoints';
+import { supabase } from '../../lib/supabase';
 
 export class ApiConsultationRepository implements IConsultationRepository {
   private activeSubscriptions = new Set<(session: ConsultationSession | null) => void>();
@@ -23,6 +24,21 @@ export class ApiConsultationRepository implements IConsultationRepository {
     return await ApiClient.post<ConsultationRequestResult>(ENDPOINTS.CONSULTATION.CREATE, {
       body: { astrologerId, kundliProfileId },
     });
+  }
+
+  async submitReview(astrologerId: string, consultationId: string, rating: number, reviewText: string): Promise<void> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Authentication required');
+
+    const { error } = await supabase.from('astrologer_reviews').insert({
+      astrologer_id: astrologerId,
+      customer_id: user.id,
+      consultation_id: consultationId,
+      rating: rating,
+      review_text: reviewText
+    });
+
+    if (error) throw error;
   }
 
   async getSession(id: string): Promise<ConsultationSession> {

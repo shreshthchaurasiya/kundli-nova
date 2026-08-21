@@ -5,40 +5,39 @@ import LoginScreen from './screens/LoginScreen';
 import SignupScreen from './screens/SignupScreen';
 import ForgotPasswordScreen from './screens/ForgotPasswordScreen';
 import OtpScreen from './screens/OtpScreen';
-import CreateProfileScreen from './screens/CreateProfileScreen';
-import WelcomeGiftScreen from './screens/WelcomeGiftScreen';
-import HomeScreen from './screens/HomeScreen';
-import WalletScreen from './screens/WalletScreen';
-import ChatScreen from './screens/ChatScreen';
-import ChatListScreen from './screens/ChatListScreen';
-import AstrologersScreen from './screens/AstrologersScreen';
-import CategoryScreen from './screens/CategoryScreen';
-import ProfileScreen from './screens/ProfileScreen';
-import EditProfileScreen from './screens/EditProfileScreen';
-import ViewKundliScreen from './screens/ViewKundliScreen';
-import ConsultationChatScreen from './screens/ConsultationChatScreen';
-import ChatHistoryScreen from './screens/ChatHistoryScreen';
-import CategoryDetailScreen from './screens/CategoryDetailScreen';
-import NovaAIScreen from './screens/NovaAIScreen';
-import NovaAIChatScreen from './screens/NovaAIChatScreen';
-import NovaKundliScreen from './screens/NovaKundliScreen';
-import KundliProfileFormScreen from './screens/KundliProfileFormScreen';
-import HelpSupportScreen from './screens/HelpSupportScreen';
-import HoroscopeScreen from './screens/HoroscopeScreen';
-import NumerologyScreen from './screens/NumerologyScreen';
-import SubscriptionScreen from './screens/SubscriptionScreen';
-import {
-  AstrologerApplicationScreen,
-  AstrologerPartnershipScreen,
-  PublicAstrologerProfileScreen,
-} from './features/astrologer';
-import {
-  AstrologerDashboardScreen,
-  AstrologerConsultationChatScreen,
-  AstrologerProfileEditorScreen,
-  useAstrologerDashboard,
-} from './astrologer-workspace';
+const CreateProfileScreen = React.lazy(() => import('./screens/CreateProfileScreen'));
+const WelcomeGiftScreen = React.lazy(() => import('./screens/WelcomeGiftScreen'));
+const HomeScreen = React.lazy(() => import('./screens/HomeScreen'));
+const WalletScreen = React.lazy(() => import('./screens/WalletScreen'));
+const ChatScreen = React.lazy(() => import('./screens/ChatScreen'));
+const ChatListScreen = React.lazy(() => import('./screens/ChatListScreen'));
+const AstrologersScreen = React.lazy(() => import('./screens/AstrologersScreen'));
+const CategoryScreen = React.lazy(() => import('./screens/CategoryScreen'));
+const ProfileScreen = React.lazy(() => import('./screens/ProfileScreen'));
+const EditProfileScreen = React.lazy(() => import('./screens/EditProfileScreen'));
+const ViewKundliScreen = React.lazy(() => import('./screens/ViewKundliScreen'));
+const ConsultationChatScreen = React.lazy(() => import('./screens/ConsultationChatScreen'));
+const ChatHistoryScreen = React.lazy(() => import('./screens/ChatHistoryScreen'));
+const CategoryDetailScreen = React.lazy(() => import('./screens/CategoryDetailScreen'));
+const NovaAIScreen = React.lazy(() => import('./screens/NovaAIScreen'));
+const NovaAIChatScreen = React.lazy(() => import('./screens/NovaAIChatScreen'));
+const NovaKundliScreen = React.lazy(() => import('./screens/NovaKundliScreen'));
+const KundliProfileFormScreen = React.lazy(() => import('./screens/KundliProfileFormScreen'));
+const HelpSupportScreen = React.lazy(() => import('./screens/HelpSupportScreen'));
+const HoroscopeScreen = React.lazy(() => import('./screens/HoroscopeScreen'));
+const NumerologyScreen = React.lazy(() => import('./screens/NumerologyScreen'));
+const SubscriptionScreen = React.lazy(() => import('./screens/SubscriptionScreen'));
+
+const AstrologerApplicationScreen = React.lazy(() => import('./features/astrologer').then(m => ({ default: m.AstrologerApplicationScreen })));
+const AstrologerPartnershipScreen = React.lazy(() => import('./features/astrologer').then(m => ({ default: m.AstrologerPartnershipScreen })));
+const PublicAstrologerProfileScreen = React.lazy(() => import('./features/astrologer').then(m => ({ default: m.PublicAstrologerProfileScreen })));
+
+const AstrologerDashboardScreen = React.lazy(() => import('./astrologer-workspace').then(m => ({ default: m.AstrologerDashboardScreen })));
+const AstrologerConsultationChatScreen = React.lazy(() => import('./astrologer-workspace').then(m => ({ default: m.AstrologerConsultationChatScreen })));
+const AstrologerProfileEditorScreen = React.lazy(() => import('./astrologer-workspace').then(m => ({ default: m.AstrologerProfileEditorScreen })));
+import { useAstrologerDashboard } from './astrologer-workspace';
 import BottomNav from './components/BottomNav';
+import IosInstallPrompt from './components/IosInstallPrompt';
 import { Screen, Tab } from './types';
 import { AnimatePresence, motion } from 'motion/react';
 import { runMigrations } from './services/storage';
@@ -267,7 +266,9 @@ export default function App() {
             transition={{ duration: 0.2 }}
             className="flex-1 overflow-hidden flex flex-col relative"
           >
-            {renderScreen()}
+            <React.Suspense fallback={<SplashScreen onFinish={() => {}} />}>
+              {renderScreen()}
+            </React.Suspense>
           </motion.div>
         </AnimatePresence>
 

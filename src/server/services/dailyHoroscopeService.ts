@@ -1,4 +1,4 @@
-import { ProkeralaHoroscopeProvider } from '../providers/prokeralaHoroscopeProvider';
+import { ApiNinjasHoroscopeProvider } from '../providers/apiNinjasHoroscopeProvider';
 import { KundliNovaDailyHoroscope, ZodiacSign, ZODIAC_SIGNS } from '../types/astrologyProvider';
 import { ProviderError, ProviderErrorCode } from '../errors/ProviderError';
 
@@ -10,13 +10,13 @@ interface CacheEntry {
 export class DailyHoroscopeService {
   private cache: Map<string, CacheEntry> = new Map();
   private inflight: Map<string, Promise<KundliNovaDailyHoroscope>> = new Map();
-  private provider: ProkeralaHoroscopeProvider;
+  private provider: ApiNinjasHoroscopeProvider;
   
   // Cache for 24 hours
   private readonly CACHE_TTL_SECONDS = 24 * 60 * 60;
 
   constructor() {
-    this.provider = new ProkeralaHoroscopeProvider();
+    this.provider = new ApiNinjasHoroscopeProvider();
   }
 
   /**
