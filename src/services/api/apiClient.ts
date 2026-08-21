@@ -3,7 +3,7 @@ import { ApiResponse, RequestOptions } from './apiTypes';
 import { ApiError, NetworkError, TimeoutError } from './apiErrors';
 import { getAccessToken } from './authTokenProvider';
 
-const DEFAULT_TIMEOUT_MS = 15000;
+const DEFAULT_TIMEOUT_MS = 30000;
 
 export class ApiClient {
   static async request<T = any>(
@@ -38,8 +38,9 @@ export class ApiClient {
       headers.set('Authorization', `Bearer ${token}`);
     }
 
+    const timeoutMs = (options as any).timeout || DEFAULT_TIMEOUT_MS;
     const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+    const id = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       const response = await fetch(finalUrl, {
@@ -53,7 +54,32 @@ export class ApiClient {
 
       const contentType = response.headers.get('content-type');
       let responseBody: ApiResponse = { status: 'error', message: 'Unknown error' };
-      
+
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('Retry-After');
+        let retryAfterMs = 5000;
+        if (retryAfter) {
+          if (!isNaN(Number(retryAfter))) {
+            retryAfterMs = Number(retryAfter) * 1000;
+          } else {
+            const date = new Date(retryAfter);
+            if (!isNaN(date.getTime())) {
+              retryAfterMs = Math.max(0, date.getTime() - Date.now());
+            }
+          }
+        }
+
+        let errorMsg = 'Too many requests. Please try again later.';
+        const text = await response.text();
+        try {
+          const body = JSON.parse(text);
+          errorMsg = body.message || errorMsg;
+        } catch {
+          if (text && text.trim()) errorMsg = text.trim();
+        }
+        throw new ApiError(429, errorMsg, 'RATE_LIMITED', { retryAfterMs });
+      }
+
       if (contentType && contentType.includes('application/json')) {
         responseBody = await response.json();
       } else {
@@ -67,13 +93,15 @@ export class ApiClient {
 
       return responseBody.data as T;
     } catch (error: any) {
-      console.error('API Client caught error:', error);
       clearTimeout(id);
-      
+
       if (error.name === 'AbortError') {
-        throw new TimeoutError();
+        // Suppress logging for intentional aborts
+        throw new TimeoutError('Request was aborted');
       }
-      
+
+      console.error('API Client caught error:', error);
+
       if (error instanceof ApiError) {
         throw error;
       }
@@ -81,7 +109,7 @@ export class ApiClient {
       if (error instanceof TypeError && error.message === 'Failed to fetch') {
         throw new NetworkError();
       }
-      
+
       throw new ApiError(500, error.message || 'An unexpected client error occurred', 'INTERNAL_ERROR');
     }
   }

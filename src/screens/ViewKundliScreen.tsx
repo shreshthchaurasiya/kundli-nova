@@ -1,51 +1,107 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, Sparkles, Compass, Shield, User, Calendar, Clock, MapPin, Eye, Info, ListFilter, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Sparkles, Compass, Shield, User, Calendar, Clock, MapPin, Info, ListFilter, AlertCircle, FileText, Download, Loader2 } from 'lucide-react';
 import { Screen } from '../types';
 import { useProfile } from '../contexts/ProfileContext';
+import { KundliChart } from '../components/astrology/KundliChart';
+import { AstrologyApi } from '../services/api/astrologyApi';
+import { generateKundliPdf, KundliPdfPayload } from '../services/kundliPdfService';
+import { KundliNovaNatalChart, KundliNovaVimshottariDasha, KundliNovaDoshaAnalysis, KundliNovaYogaAnalysis, KundliNovaDetailedReport } from '../server/types/astrologyProvider';
 
 interface ViewKundliScreenProps {
   onNavigate: (screen: Screen) => void;
 }
 
-interface ProfileData {
-  name?: string;
-  fullName?: string;
-  dob?: string;
-  tob?: string;
-  birthTime?: string;
-  country?: string;
-  state?: string;
-  district?: string;
-  city?: string;
-}
-
 export default function ViewKundliScreen({ onNavigate }: ViewKundliScreenProps) {
-  const { profile } = useProfile();
+  const { profile, defaultKundliProfile } = useProfile();
 
-  const fullName = profile?.fullName || profile?.name || 'Guest User';
-  const dob = profile?.dob || 'Not Provided';
-  const tob = profile?.tob || profile?.birthTime || 'Not Provided';
+  const [loading, setLoading] = useState(true);
+  const [chartData, setChartData] = useState<KundliNovaNatalChart | null>(null);
+  const [dashaData, setDashaData] = useState<KundliNovaVimshottariDasha | null>(null);
+  const [doshaData, setDoshaData] = useState<KundliNovaDoshaAnalysis | null>(null);
+  const [yogaData, setYogaData] = useState<KundliNovaYogaAnalysis | null>(null);
+  const [detailedReport, setDetailedReport] = useState<KundliNovaDetailedReport | null>(null);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
+  const fullName = profile?.fullName || profile?.name || defaultKundliProfile?.name || 'Guest User';
+  const dob = profile?.dob || defaultKundliProfile?.dateOfBirth || 'Not Provided';
+  const tob = profile?.tob || profile?.birthTime || defaultKundliProfile?.timeOfBirth || 'Not Provided';
   
-  // Format location nicely
   const getBirthPlace = () => {
-    const parts = [profile?.city, profile?.district, profile?.state, profile?.country].filter(Boolean);
+    const parts = [
+      profile?.city || defaultKundliProfile?.placeOfBirth,
+      profile?.district,
+      profile?.state,
+      profile?.country
+    ].filter(Boolean);
     return parts.length > 0 ? parts.join(', ') : 'Not Provided';
   };
   const birthPlace = getBirthPlace();
 
-  // Planets list
-  const PLANETS = [
-    { name: 'Sun', sanskrit: 'Surya' },
-    { name: 'Moon', sanskrit: 'Chandra' },
-    { name: 'Mars', sanskrit: 'Mangal' },
-    { name: 'Mercury', sanskrit: 'Budha' },
-    { name: 'Jupiter', sanskrit: 'Guru' },
-    { name: 'Venus', sanskrit: 'Shukra' },
-    { name: 'Saturn', sanskrit: 'Shani' },
-    { name: 'Rahu', sanskrit: 'North Node' },
-    { name: 'Ketu', sanskrit: 'South Node' }
-  ];
+  useEffect(() => {
+    let isMounted = true;
+    const loadKundli = async () => {
+      setLoading(true);
+      try {
+        const profileId = defaultKundliProfile?.id || 'self';
+        const [chart, dasha, dosha, yoga, report] = await Promise.all([
+          AstrologyApi.getKundli(profileId).catch(() => null),
+          AstrologyApi.getDasha(profileId).catch(() => null),
+          AstrologyApi.getDoshaAnalysis(profileId).catch(() => null),
+          AstrologyApi.getYogaAnalysis(profileId).catch(() => null),
+          AstrologyApi.getDetailedKundliReport(profileId).catch(() => null)
+        ]);
+
+        if (isMounted) {
+          setChartData(chart);
+          setDashaData(dasha);
+          setDoshaData(dosha);
+          setYogaData(yoga);
+          setDetailedReport(report);
+        }
+      } catch (err) {
+        console.error('Error loading Kundli details:', err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    loadKundli();
+    return () => { isMounted = false; };
+  }, [defaultKundliProfile]);
+
+  const handleDownloadPdf = async () => {
+    if (!chartData) return;
+    setIsGeneratingPdf(true);
+    try {
+      const pdfPayload: KundliPdfPayload = {
+        birthDetails: {
+          name: fullName,
+          gender: profile?.gender || 'Male',
+          dob,
+          tob,
+          city: profile?.city || defaultKundliProfile?.placeOfBirth || 'New Delhi',
+          state: profile?.state || 'Delhi'
+        },
+        chart: chartData,
+        dasha: dashaData,
+        dosha: doshaData,
+        yoga: yogaData,
+        detailedReport: detailedReport,
+        generatedAt: new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+      };
+
+      const pdfResult = await generateKundliPdf(pdfPayload);
+      pdfResult.download(`Kundli_Nova_Report_${fullName.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`);
+    } catch (err) {
+      console.error('Failed to generate PDF:', err);
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
+  const ascendantSign = chartData?.ascendant?.sign || 'Aries';
+  const planetsList = chartData?.planets || [];
 
   return (
     <div className="flex flex-col h-full bg-white overflow-y-auto no-scrollbar pb-24 select-none">
@@ -69,14 +125,36 @@ export default function ViewKundliScreen({ onNavigate }: ViewKundliScreenProps) 
 
       <div className="px-6 py-6 space-y-6">
         
-        {/* Title and Short Description */}
-        <div>
-          <span className="text-[#FF8A00] text-xs font-[800] tracking-wider uppercase block mb-1">Celestial Blueprint</span>
-          <h2 className="text-2xl font-[900] text-neutral-900 tracking-tight leading-none">Your Janam Kundli</h2>
-          <p className="text-neutral-500 text-[13.5px] font-medium leading-relaxed mt-2.5">
-            Based on your unique birth coordinates, date, and exact time of birth. This chart maps the exact planetary alignments of the cosmos at your moment of birth.
-          </p>
+        {/* Title & PDF Download Banner */}
+        <div className="flex items-start justify-between">
+          <div>
+            <span className="text-[#FF8A00] text-xs font-[800] tracking-wider uppercase block mb-1">Celestial Blueprint</span>
+            <h2 className="text-2xl font-[900] text-neutral-900 tracking-tight leading-none">Janam Kundli Report</h2>
+            <p className="text-neutral-500 text-[13.5px] font-medium leading-relaxed mt-2.5">
+              Precision calculated based on your birth coordinates and exact planetary alignments.
+            </p>
+          </div>
         </div>
+
+        {/* Action Button: Download Detailed PDF Report */}
+        <motion.button
+          whileTap={{ scale: 0.98 }}
+          onClick={handleDownloadPdf}
+          disabled={loading || isGeneratingPdf || !chartData}
+          className="w-full h-[54px] bg-gradient-to-r from-[#FF8A00] to-[#E07A00] text-white font-[800] rounded-2xl text-[14.5px] flex items-center justify-center space-x-2.5 shadow-lg shadow-[#FF8A00]/20 cursor-pointer disabled:opacity-50 transition-all"
+        >
+          {isGeneratingPdf ? (
+            <>
+              <Loader2 size={18} className="animate-spin" />
+              <span>Generating Detailed AI Report...</span>
+            </>
+          ) : (
+            <>
+              <Download size={18} />
+              <span>Download Detailed AI Report (PDF)</span>
+            </>
+          )}
+        </motion.button>
 
         {/* 1. Kundli Summary Card */}
         <div className="bg-neutral-50/80 border border-neutral-100 rounded-[20px] p-5 space-y-4">
@@ -117,43 +195,37 @@ export default function ViewKundliScreen({ onNavigate }: ViewKundliScreenProps) 
           </div>
         </div>
 
-        {/* 2. Premium Kundli Chart Placeholder Card */}
+        {/* 2. Interactive North Indian Kundli Chart */}
         <div className="bg-neutral-50/40 border border-neutral-100 rounded-[22px] p-5 flex flex-col items-center relative overflow-hidden">
           <div className="w-full flex items-center justify-between border-b border-neutral-100 pb-3 mb-4">
             <div className="flex items-center space-x-2">
               <Sparkles size={16} className="text-[#FF8A00]" />
               <span className="text-[11.5px] font-[800] text-neutral-400 uppercase tracking-wider">Lagna Kundli (D1 Chart)</span>
             </div>
-            <span className="text-[10px] font-[800] text-neutral-400 uppercase tracking-widest bg-neutral-100 px-2 py-0.5 rounded-full">
-              Pristine
+            <span className="text-[10px] font-[800] text-emerald-600 uppercase tracking-widest bg-emerald-50 border border-emerald-100 px-2.5 py-0.5 rounded-full">
+              Live Chart
             </span>
           </div>
 
-          {/* Elegant Sacred Geometry Vector Outline Backdrop */}
-          <div className="w-full aspect-square max-w-[260px] bg-white rounded-[18px] border border-neutral-200/60 p-4 relative flex items-center justify-center shadow-[0_2px_12px_rgba(0,0,0,0.01)] opacity-70">
-            <svg viewBox="0 0 200 200" className="w-full h-full text-neutral-300 stroke-current fill-none">
-              <g strokeWidth="0.8">
-                {/* Outer border */}
-                <rect x="5" y="5" width="190" height="190" />
-                
-                {/* Main Diagonal cross lines */}
-                <line x1="5" y1="5" x2="195" y2="195" />
-                <line x1="195" y1="5" x2="5" y2="195" />
-                
-                {/* Diamond inner square */}
-                <polygon points="100,5 195,100 100,195 5,100" />
-              </g>
-            </svg>
-            <div className="absolute inset-0 bg-white/20 backdrop-blur-[0.5px]" />
-          </div>
+          {/* Authentic Kundli Chart Component with Sign Numbers (1-12) & Planet Badges */}
+          {loading ? (
+            <div className="w-full aspect-square max-w-[280px] flex flex-col items-center justify-center space-y-2 bg-neutral-50 rounded-2xl border border-neutral-100">
+              <Loader2 size={24} className="animate-spin text-[#FF8A00]" />
+              <span className="text-xs font-bold text-neutral-400">Calculating planetary houses...</span>
+            </div>
+          ) : (
+            <div className="w-full max-w-[290px]">
+              <KundliChart
+                style="NORTH"
+                ascendantSign={ascendantSign}
+                planets={planetsList}
+              />
+            </div>
+          )}
 
-          {/* Professional Overlay Banner */}
           <div className="mt-4 text-center px-4 max-w-[280px]">
-            <p className="text-[13.5px] text-neutral-800 font-bold leading-snug">
-              Kundli chart will be generated after astrology engine integration.
-            </p>
-            <p className="text-[11px] text-neutral-400 font-medium mt-1.5 leading-relaxed">
-              We preserve mathematical integrity. No random or generated mockup houses will be displayed to guarantee absolute chart accuracy.
+            <p className="text-[12px] text-neutral-500 font-medium leading-relaxed">
+              Ascendant: <strong className="text-neutral-900 font-extrabold">{ascendantSign}</strong> • Rashi numbers (1-12) indicate house zodiac signs.
             </p>
           </div>
         </div>
@@ -163,89 +235,94 @@ export default function ViewKundliScreen({ onNavigate }: ViewKundliScreenProps) 
           <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
             <div className="flex items-center space-x-2">
               <Compass size={16} className="text-[#FF8A00]" />
-              <span className="text-[11.5px] font-[800] text-neutral-400 uppercase tracking-wider">Planetary Positions</span>
+              <span className="text-[11.5px] font-[800] text-neutral-400 uppercase tracking-wider">Planetary Positions (9 Grahas)</span>
             </div>
             <span className="text-[10px] font-bold text-neutral-400 uppercase bg-neutral-100 px-2.5 py-0.5 rounded-full">
-              9 Grahas
+              {planetsList.length} Planets
             </span>
           </div>
 
-          <div className="divide-y divide-neutral-100">
-            {PLANETS.map((p, idx) => (
-              <div key={p.name} className={`flex items-center justify-between py-3 ${idx === 0 ? 'pt-1' : ''} ${idx === PLANETS.length - 1 ? 'pb-1' : ''}`}>
-                <div className="flex flex-col">
-                  <span className="text-[14px] font-bold text-neutral-800">{p.name}</span>
-                  <span className="text-[11px] text-neutral-400 font-semibold">{p.sanskrit}</span>
+          {loading ? (
+            <div className="py-6 text-center text-xs font-bold text-neutral-400">Loading planetary data...</div>
+          ) : (
+            <div className="divide-y divide-neutral-100">
+              {planetsList.map((p, idx) => (
+                <div key={p.name} className={`flex items-center justify-between py-3 ${idx === 0 ? 'pt-1' : ''} ${idx === planetsList.length - 1 ? 'pb-1' : ''}`}>
+                  <div className="flex flex-col">
+                    <span className="text-[14px] font-bold text-neutral-800">{p.name}</span>
+                    <span className="text-[11px] text-neutral-400 font-semibold">{p.zodiac} • House {p.house}</span>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[12px] font-bold text-neutral-700 bg-white border border-neutral-200/80 px-2.5 py-1 rounded-lg">
+                      {p.degree ? `${p.degree}°` : 'Direct'}
+                    </span>
+                  </div>
                 </div>
-                
-                {/* Clean, subtle badge matching the prompt mandate */}
-                <div className="flex items-center space-x-1.5 bg-neutral-100 text-neutral-400 border border-neutral-200/50 px-3 py-1 rounded-full text-[11px] font-bold tracking-tight">
-                  <span className="w-1.5 h-1.5 rounded-full bg-neutral-300 animate-pulse" />
-                  <span>Waiting for calculation</span>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* 4. Dasha Section */}
+        {/* 4. Vimshottari Dasha Section */}
         <div className="bg-neutral-50/50 border border-neutral-100/80 rounded-[20px] p-5 space-y-4">
           <div className="flex items-center space-x-2 border-b border-neutral-100 pb-3">
             <Clock size={16} className="text-[#FF8A00]" />
-            <span className="text-[11.5px] font-[800] text-neutral-400 uppercase tracking-wider">Vimshottari Dasha cycles</span>
+            <span className="text-[11.5px] font-[800] text-neutral-400 uppercase tracking-wider">Vimshottari Dasha Status</span>
           </div>
           
-          <div className="py-2.5 text-center flex flex-col items-center justify-center">
-            <div className="w-10 h-10 bg-[#FF8A00]/5 text-[#FF8A00] rounded-full flex items-center justify-center mb-3">
-              <Info size={18} />
+          {loading ? (
+            <div className="py-4 text-center text-xs font-bold text-neutral-400">Calculating Dasha timelines...</div>
+          ) : dashaData ? (
+            <div className="space-y-3">
+              <div className="bg-white border border-neutral-100 rounded-xl p-4 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Current Mahadasha</span>
+                  <span className="text-base font-black text-[#FF8A00]">{dashaData.currentMahadasha.planet}</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Ends On</span>
+                  <span className="text-xs font-bold text-neutral-800">{new Date(dashaData.currentMahadasha.endDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}</span>
+                </div>
+              </div>
+              {dashaData.currentAntardasha && (
+                <div className="bg-white border border-neutral-100 rounded-xl p-4 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Active Antardasha</span>
+                    <span className="text-base font-black text-neutral-800">{dashaData.currentAntardasha.planet}</span>
+                  </div>
+                </div>
+              )}
             </div>
-            <p className="text-[13.5px] text-neutral-700 font-bold max-w-[280px] leading-snug">
-              Dasha analysis will be available after Kundli generation.
-            </p>
-            <p className="text-[11px] text-neutral-400 font-medium mt-1 leading-relaxed max-w-[260px]">
-              Vimshottari Mahadasha, Antardasha, and Pratyantardasha periods will automatically unlock.
-            </p>
-          </div>
+          ) : (
+            <div className="py-2.5 text-center flex flex-col items-center justify-center">
+              <Info size={18} className="text-neutral-400 mb-1" />
+              <p className="text-[12px] text-neutral-500 font-medium">Dasha timeline active in full PDF report.</p>
+            </div>
+          )}
         </div>
 
-        {/* 5. Yog Section */}
+        {/* 5. Dosha & Yogas Section */}
         <div className="bg-neutral-50/50 border border-neutral-100/80 rounded-[20px] p-5 space-y-4">
           <div className="flex items-center space-x-2 border-b border-neutral-100 pb-3">
             <Sparkles size={16} className="text-[#FF8A00]" />
-            <span className="text-[11.5px] font-[800] text-neutral-400 uppercase tracking-wider">Planetary Yogas (Yog)</span>
+            <span className="text-[11.5px] font-[800] text-neutral-400 uppercase tracking-wider">Dosha & Yoga Highlights</span>
           </div>
           
-          <div className="py-2.5 text-center flex flex-col items-center justify-center">
-            <div className="w-10 h-10 bg-neutral-100 text-neutral-400 rounded-full flex items-center justify-center mb-3">
-              <ListFilter size={18} />
+          {loading ? (
+            <div className="py-4 text-center text-xs font-bold text-neutral-400">Analyzing planetary yogas...</div>
+          ) : (
+            <div className="space-y-2">
+              {doshaData?.results.map(d => (
+                <div key={d.name} className="flex items-center justify-between bg-white border border-neutral-100 rounded-xl p-3">
+                  <span className="text-xs font-bold text-neutral-800">{d.name}</span>
+                  <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full ${d.detected ? 'bg-amber-50 text-amber-600 border border-amber-200' : 'bg-emerald-50 text-emerald-600 border border-emerald-200'}`}>
+                    {d.detected ? 'Present' : 'Not Present'}
+                  </span>
+                </div>
+              ))}
             </div>
-            <p className="text-[13.5px] text-neutral-700 font-bold max-w-[280px] leading-snug">
-              Yog analysis is pending calculations.
-            </p>
-            <p className="text-[11px] text-neutral-400 font-medium mt-1 leading-relaxed max-w-[260px]">
-              Auspicious and challenging planetary configurations like Gajakesari, Raj Yoga, and more.
-            </p>
-          </div>
-        </div>
-
-        {/* 6. Remedies Section */}
-        <div className="bg-neutral-50/50 border border-neutral-100/80 rounded-[20px] p-5 space-y-4">
-          <div className="flex items-center space-x-2 border-b border-neutral-100 pb-3">
-            <Shield size={16} className="text-[#FF8A00]" />
-            <span className="text-[11.5px] font-[800] text-neutral-400 uppercase tracking-wider">Vedic Remedies & Guidance</span>
-          </div>
-          
-          <div className="py-2.5 text-center flex flex-col items-center justify-center">
-            <div className="w-10 h-10 bg-neutral-100 text-neutral-400 rounded-full flex items-center justify-center mb-3">
-              <AlertCircle size={18} />
-            </div>
-            <p className="text-[13.5px] text-neutral-700 font-bold max-w-[280px] leading-snug">
-              Remedies will unlock upon engine activation.
-            </p>
-            <p className="text-[11px] text-neutral-400 font-medium mt-1 leading-relaxed max-w-[260px]">
-              Personalized gemstone advice, custom mantra chants, and fast recommendations matching your transit charts.
-            </p>
-          </div>
+          )}
         </div>
 
         {/* Back Button Action */}

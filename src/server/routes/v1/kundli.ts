@@ -4,7 +4,8 @@ import {
   getKundliProfile, 
   createKundliProfile, 
   updateKundliProfile, 
-  deleteKundliProfile 
+  deleteKundliProfile,
+  ensureSelfKundliProfile
 } from '../../controllers/kundli';
 import { requireAuth } from '../../middleware/auth';
 
@@ -14,6 +15,7 @@ router.use(requireAuth);
 
 router.get('/', listKundliProfiles);
 router.post('/', createKundliProfile);
+router.post('/sync-self', ensureSelfKundliProfile); // must be before /:id wildcard
 router.get('/:id', getKundliProfile);
 router.patch('/:id', updateKundliProfile);
 router.delete('/:id', deleteKundliProfile);

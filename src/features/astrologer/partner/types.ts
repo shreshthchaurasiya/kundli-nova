@@ -27,6 +27,10 @@ export interface AstrologerApplication {
   panDocumentPath: string;
   certificatePaths: string[];
   rejectionReason: string;
+  bankAccountHolderName?: string;
+  bankName?: string;
+  bankAccountNumber?: string;
+  bankIfscCode?: string;
   submittedAt?: string;
   reviewedAt?: string;
 }
@@ -47,6 +51,10 @@ export interface AstrologerApplicationDraft {
   profilePhotoUrl: string;
   panDocumentPath: string;
   certificatePaths: string[];
+  bankAccountHolderName?: string;
+  bankName?: string;
+  bankAccountNumber?: string;
+  bankIfscCode?: string;
 }
 
 export interface AstrologerPublicProfileDraft {

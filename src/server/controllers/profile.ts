@@ -1,8 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { supabaseAdmin } from '../config/supabase';
 import type { AuthenticatedRequest } from '../types';
-import { ApiError } from '../errors/ApiError';
-
+import { ApiError } from '../errors/ApiError'; 
 /**
  * Maps frontend field names to DB column names for the profiles table.
  * Frontend sends: state, district, city
@@ -15,6 +14,7 @@ function toDbFields(body: Record<string, any>): Record<string, any> {
     else if (key === 'district') mapped['birth_district'] = value;
     else if (key === 'city') mapped['birth_city'] = value;
     else if (key === 'welcomeChatStartedAt') mapped['welcome_chat_started_at'] = value;
+    else if (key === 'onboardingCompletedAt') mapped['onboarding_completed_at'] = value;
     else mapped[key] = value;
   }
   return mapped;
@@ -26,7 +26,7 @@ function toDbFields(body: Record<string, any>): Record<string, any> {
  * Frontend expects: state, district, city
  */
 function fromDbFields(profile: Record<string, any>): Record<string, any> {
-  const mapped: Record<string, any> = { ...profile };
+  const mapped: Record<string, any> = { ...profile }; 
   if ('birth_state' in profile) {
     mapped['state'] = profile['birth_state'];
     delete mapped['birth_state'];
@@ -42,6 +42,10 @@ function fromDbFields(profile: Record<string, any>): Record<string, any> {
   if ('welcome_chat_started_at' in profile) {
     mapped['welcomeChatStartedAt'] = profile['welcome_chat_started_at'];
     delete mapped['welcome_chat_started_at'];
+  }
+  if ('onboarding_completed_at' in profile) {
+    mapped['onboardingCompletedAt'] = profile['onboarding_completed_at'];
+    delete mapped['onboarding_completed_at'];
   }
   return mapped;
 }
@@ -81,10 +85,23 @@ export const updateProfile = async (
     const userId = req.user!.id;
     const rawUpdates = { ...req.body };
 
+    
     // Security: never allow client to set id
     delete rawUpdates.id;
 
+    // Check if onboarding is complete
+    const { data: existingProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('onboarding_completed_at')
+      .eq('id', userId)
+      .single();
+
+    if (!existingProfile?.onboarding_completed_at && rawUpdates.name && rawUpdates.gender && rawUpdates.dob && rawUpdates.tob && rawUpdates.city && rawUpdates.state && rawUpdates.district) {
+      rawUpdates.onboardingCompletedAt = new Date().toISOString();
+    }
+
     // Map frontend field names → DB column names
+
     const updates = toDbFields(rawUpdates);
 
     const { data: profile, error } = await supabaseAdmin
@@ -96,6 +113,28 @@ export const updateProfile = async (
     if (error) {
       console.error('Supabase upsert error details:', JSON.stringify(error, null, 2));
       throw new ApiError(500, `Failed to update profile: ${error.message || 'Unknown error'}`);
+    }
+
+    // Sync to self kundli_profile
+    if (Object.keys(updates).some(k => ['name', 'gender', 'dob', 'tob', 'birth_state', 'birth_district', 'birth_city'].includes(k))) {
+      const kundliUpdates: Record<string, any> = {};
+      if (updates.name !== undefined) kundliUpdates.name = updates.name;
+      if (updates.gender !== undefined) kundliUpdates.gender = updates.gender;
+      if (updates.dob !== undefined) kundliUpdates.dob = updates.dob;
+      if (updates.tob !== undefined) kundliUpdates.tob = updates.tob;
+      if (updates.birth_state !== undefined) kundliUpdates.birth_state = updates.birth_state;
+      if (updates.birth_district !== undefined) kundliUpdates.birth_district = updates.birth_district;
+      if (updates.birth_city !== undefined) kundliUpdates.birth_city = updates.birth_city;
+
+      const { error: syncError } = await supabaseAdmin
+        .from('kundli_profiles')
+        .update(kundliUpdates)
+        .eq('owner_id', userId)
+        .eq('relation', 'self');
+      
+      if (syncError) {
+        console.error('Failed to sync self kundli_profile:', syncError);
+      }
     }
 
     res.json({

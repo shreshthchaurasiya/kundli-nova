@@ -1,5 +1,7 @@
 export interface Message {
   id: string;
+  clientMessageId?: string;
+  sessionId?: string;
   text?: string;
   sender: 'astrologer' | 'user' | 'system' | 'nova';
   time: string;
@@ -27,4 +29,5 @@ export interface AiChatThread {
   lastMessage: string;
   timestamp: string;
   messages: Message[];
+  profileId?: string;
 }

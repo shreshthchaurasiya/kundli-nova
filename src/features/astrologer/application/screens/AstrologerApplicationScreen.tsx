@@ -17,13 +17,14 @@ interface AstrologerApplicationScreenProps {
   onNavigate: (screen: Screen) => void;
 }
 
-const STEPS = ['Identity', 'Expertise', 'Public profile', 'Verification'] as const;
+const STEPS = ['Identity', 'Expertise', 'Public profile', 'Verification', 'Bank Details'] as const;
 
 const emptyDraft: AstrologerApplicationDraft = {
   legalName: '', displayName: '', email: '', phone: '', panNumber: '',
   experienceYears: null, languages: [], skills: [], qualification: '',
   consultationModes: [], about: '', requestedPricePerMinute: null,
   profilePhotoUrl: '', panDocumentPath: '', certificatePaths: [],
+  bankAccountHolderName: '', bankName: '', bankAccountNumber: '', bankIfscCode: '',
 };
 
 export default function AstrologerApplicationScreen({ onNavigate }: AstrologerApplicationScreenProps) {
@@ -58,6 +59,10 @@ export default function AstrologerApplicationScreen({ onNavigate }: AstrologerAp
       profilePhotoUrl: application?.profilePhotoUrl || '',
       panDocumentPath: application?.panDocumentPath || '',
       certificatePaths: application?.certificatePaths ?? [],
+      bankAccountHolderName: application?.bankAccountHolderName || '',
+      bankName: application?.bankName || '',
+      bankAccountNumber: application?.bankAccountNumber || '',
+      bankIfscCode: application?.bankIfscCode || '',
     });
   }, [application, onNavigate, profile, user]);
 
@@ -85,6 +90,9 @@ export default function AstrologerApplicationScreen({ onNavigate }: AstrologerAp
     }
     if (step === 3 && (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(draft.panNumber) || !draft.panDocumentPath)) {
       return 'Enter a valid PAN and upload the PAN verification document.';
+    }
+    if (step === 4 && (!draft.bankAccountHolderName?.trim() || !draft.bankName?.trim() || (draft.bankAccountNumber || '').length < 4 || !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(draft.bankIfscCode || ''))) {
+      return 'Enter valid bank details including Account Name, Bank Name, valid Account Number and IFSC Code (e.g. HDFC0001234).';
     }
     return null;
   };
@@ -218,10 +226,25 @@ export default function AstrologerApplicationScreen({ onNavigate }: AstrologerAp
               complete={draft.certificatePaths.length > 0}
               onChange={file => void uploadDocument(file, true)}
             />
+            <div className="rounded-[18px] border border-neutral-100 bg-neutral-50/70 p-4 mt-6">
+              <p className="text-xs font-extrabold text-neutral-900">Before you continue</p>
+              <ul className="mt-2 space-y-2 text-[11px] font-medium leading-relaxed text-neutral-500">
+                <li className="flex gap-2"><Check size={14} className="mt-0.5 shrink-0 text-emerald-500" /> Information and documents are accurate.</li>
+              </ul>
+            </div>
+          </FormSection>
+        )}
+
+        {step === 4 && (
+          <FormSection title="Bank Details" subtitle="Where should we send your earnings? This is kept strictly confidential.">
+            <TextField label="Account Holder Name" value={draft.bankAccountHolderName || ''} onChange={value => update('bankAccountHolderName', value)} />
+            <TextField label="Bank Name" value={draft.bankName || ''} onChange={value => update('bankName', value)} placeholder="Example: HDFC Bank" />
+            <TextField label="Account Number" value={draft.bankAccountNumber || ''} onChange={value => update('bankAccountNumber', value)} type="password" />
+            <TextField label="IFSC Code" value={draft.bankIfscCode || ''} onChange={value => update('bankIfscCode', value.toUpperCase().replace(/\s/g, ''))} placeholder="Example: HDFC0001234" maxLength={11} />
             <div className="rounded-[18px] border border-neutral-100 bg-neutral-50/70 p-4">
               <p className="text-xs font-extrabold text-neutral-900">Before you submit</p>
               <ul className="mt-2 space-y-2 text-[11px] font-medium leading-relaxed text-neutral-500">
-                <li className="flex gap-2"><Check size={14} className="mt-0.5 shrink-0 text-emerald-500" /> Information and documents are accurate.</li>
+                <li className="flex gap-2"><Check size={14} className="mt-0.5 shrink-0 text-emerald-500" /> Double-check your account details for accurate payouts.</li>
                 <li className="flex gap-2"><Check size={14} className="mt-0.5 shrink-0 text-emerald-500" /> Submission cannot be edited while it is under review.</li>
                 <li className="flex gap-2"><Check size={14} className="mt-0.5 shrink-0 text-emerald-500" /> Approval is required before your profile appears to customers.</li>
               </ul>

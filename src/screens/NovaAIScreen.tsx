@@ -18,11 +18,13 @@ import {
   ArrowUp,
   MessageSquare,
   Sparkle,
-  Star
+  Star,
+  Crown
 } from 'lucide-react';
 import { Screen } from '../types';
 import { useProfile } from '../contexts/ProfileContext';
 import { useWallet } from '../contexts/WalletContext';
+import { useRepositories } from '../repositories/repositoryProvider';
 
 interface NovaAIScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
@@ -36,15 +38,35 @@ interface SavedConversation {
   timestamp: string;
 }
 
+const ASTRO_QUOTES = [
+  "Your personal AI Astrologer is ready to guide you.",
+  "The stars align to illuminate your path today.",
+  "Discover what planetary transits reveal for you.",
+  "Unlock deep cosmic guidance tailored to your chart.",
+  "The universe holds answers to your life questions.",
+  "Harmonize your journey with celestial wisdom."
+];
+
 export default function NovaAIScreen({ onNavigate, onOpenDrawer }: NovaAIScreenProps) {
-  const { profile } = useProfile();
+  const { profile, defaultKundliProfile, isLoadingProfile } = useProfile();
   const { wallet } = useWallet();
+  const repositories = useRepositories();
   const walletBalance = wallet.balance;
-  const [userName, setUserName] = useState<string>('Shreshth');
+  const [userName, setUserName] = useState<string>('');
   const [inputVal, setInputVal] = useState<string>('');
+  const [isFocused, setIsFocused] = useState<boolean>(false);
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   const [history, setHistory] = useState<SavedConversation[]>([]);
-  const [showToast, setShowToast] = useState<string | null>(null);
+  const [quoteIndex, setQuoteIndex] = useState<number>(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setQuoteIndex((prev) => (prev + 1) % ASTRO_QUOTES.length);
+    }, 4000);
+    return () => clearInterval(timer);
+  }, []);
+  
+  const profileId = defaultKundliProfile?.id;
 
   // Load wallet balance & user profile
   useEffect(() => {
@@ -69,6 +91,8 @@ export default function NovaAIScreen({ onNavigate, onOpenDrawer }: NovaAIScreenP
     loadHistory();
 
   }, [profile]);
+
+
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -116,6 +140,7 @@ export default function NovaAIScreen({ onNavigate, onOpenDrawer }: NovaAIScreenP
   };
 
   const handleComposeSend = () => {
+    if (isLoadingProfile || !profileId) return;
     if (!inputVal.trim()) return;
 
     // Save this interaction to history
@@ -130,16 +155,18 @@ export default function NovaAIScreen({ onNavigate, onOpenDrawer }: NovaAIScreenP
     setHistory(updatedHistory);
     localStorage.setItem('kundli_nova_ai_history', JSON.stringify(updatedHistory));
 
-    // Navigate to Chat with initialQuery context
-    onNavigate('nova-ai-chat', { initialQuery: inputVal.trim() });
+    // Navigate to Chat with initialQuery context + canonical profileId
+    onNavigate('nova-ai-chat', { initialQuery: inputVal.trim(), profileId });
   };
 
   const handleStartConversation = () => {
-    onNavigate('nova-ai-chat');
+    if (isLoadingProfile || !profileId) return;
+    onNavigate('nova-ai-chat', { profileId });
   };
 
   const handleServiceSelect = (serviceTitle: string) => {
-    onNavigate('nova-ai-chat', { serviceContext: serviceTitle });
+    if (isLoadingProfile || !profileId) return;
+    onNavigate('nova-ai-chat', { serviceContext: serviceTitle, profileId });
   };
 
   const getCategoryIcon = (categoryName: string) => {
@@ -182,7 +209,8 @@ export default function NovaAIScreen({ onNavigate, onOpenDrawer }: NovaAIScreenP
   };
 
   const handleReadMoreGuidance = () => {
-    onNavigate('nova-ai-chat', { serviceContext: 'Daily Guidance' });
+    if (isLoadingProfile || !profileId) return;
+    onNavigate('nova-ai-chat', { serviceContext: 'Daily Guidance', profileId });
   };
 
   function StarRating({ count }: { count: number }) {
@@ -201,446 +229,342 @@ export default function NovaAIScreen({ onNavigate, onOpenDrawer }: NovaAIScreenP
   }
 
   return (
-    <div className="flex-1 relative overflow-hidden bg-[#FAFAFA] flex flex-col h-full select-none">
+    <div className="flex-1 relative overflow-hidden bg-white flex flex-col h-full select-none">
       {/* App Bar */}
-      <div className="flex items-center justify-between px-[20px] py-[16px] bg-[#FFFFFF]/90 backdrop-blur-md sticky top-0 z-30 border-b border-gray-100/60 shadow-[0_2px_12px_rgba(0,0,0,0.015)] min-h-[70px] shrink-0">
+      <div className="flex items-center justify-between px-[20px] py-[16px] bg-white sticky top-0 z-30 min-h-[70px] shrink-0">
         <motion.button 
           whileTap={{ scale: 0.9 }}
           onClick={() => onOpenDrawer?.()} 
           className="p-[8px] -ml-[8px] rounded-full text-[#111827] hover:bg-gray-50 active:bg-gray-100 transition-colors focus:outline-none"
         >
-          <Menu size={22} strokeWidth={2.5} />
+          <Menu size={24} strokeWidth={2.5} />
         </motion.button>
         
         <div className="flex items-center space-x-1">
-          <span className="text-[17px] font-[800] text-[#111827] tracking-tight">Nova AI</span>
-          <Sparkles size={14} className="text-[#FF8A00] fill-[#FF8A00] animate-pulse" />
+          <span className="text-[16px] sm:text-[18px] font-[800] text-[#111827] tracking-tight">Nova AI</span>
+          <Sparkles size={14} className="text-[#FF8A00] fill-[#FF8A00]" />
         </div>
         
         <div className="flex items-center space-x-3">
           <button 
             onClick={() => onNavigate('wallet')}
-            className="flex items-center space-x-1.5 border border-gray-200 rounded-full pl-3 pr-1 py-1 hover:bg-gray-50 transition-colors focus:outline-none"
+            className="flex items-center space-x-1.5 bg-neutral-50 border border-neutral-100 rounded-full pl-3 pr-1 py-1 hover:bg-neutral-100 transition-colors focus:outline-none"
           >
             <span className="text-[13px] font-semibold text-[#111827]">₹{walletBalance}</span>
-            <div className="w-5 h-5 rounded-full bg-gray-800 text-white flex items-center justify-center">
+            <div className="w-5 h-5 rounded-full bg-black text-white flex items-center justify-center">
               <Plus size={14} strokeWidth={3} />
             </div>
           </button>
           
           <button 
-            onClick={() => onNavigate('chat-history')}
-            className="text-gray-500 hover:text-gray-900 transition-colors p-1 rounded-full hover:bg-gray-50 focus:outline-none"
+            onClick={() => onNavigate('subscription')}
+            className="flex items-center space-x-1 text-[#FF8A00] font-bold text-[13px] focus:outline-none"
           >
-            <Bell size={21} strokeWidth={2.2} />
+            <Crown size={18} strokeWidth={2.2} />
+            <span>Premium</span>
+          </button>
+          
+          <button 
+            onClick={() => onNavigate('chat-history')}
+            className="text-gray-500 hover:text-gray-900 transition-colors p-1 rounded-full relative focus:outline-none"
+          >
+            <Bell size={22} strokeWidth={2.2} />
+            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
           </button>
         </div>
       </div>
 
-      {/* Scrollable Container */}
-      <div className="flex-1 overflow-y-auto no-scrollbar pb-[100px]">
+      {/* Profile Required State */}
+      {!isLoadingProfile && !profileId ? (
+        <div className="flex-1 flex flex-col items-center justify-center p-6 bg-white text-center">
+          <div className="w-16 h-16 rounded-full bg-[#FFF9E6] flex items-center justify-center mb-4 text-[#FF8A00] border border-[#FF8A00]/10">
+            <Shield size={32} strokeWidth={2.2} />
+          </div>
+          <h2 className="text-xl font-bold text-neutral-800 mb-2">Profile Required</h2>
+          <p className="text-sm text-neutral-500 mb-6 max-w-[280px]">No Kundli profile selected. Please create or select a profile to use Nova AI.</p>
+          <button 
+            onClick={() => onNavigate('kundli-profile-form')}
+            className="bg-[#FF8A00] text-white text-[13px] font-[800] px-6 py-3 rounded-xl shadow-[0_4px_12px_rgba(255,138,0,0.18)] hover:bg-[#E07A00] transition-all active:scale-95 focus:outline-none"
+          >
+            Create Profile
+          </button>
+        </div>
+      ) : (
+        /* Scrollable Container */
+        <div className="flex-1 overflow-y-auto no-scrollbar pb-[120px] bg-white">
         
         {/* Hero Area */}
-        <div className="relative overflow-hidden bg-[#FDFCF7] border-b border-[#F5F2EB] px-[20px] py-[30px] flex items-center justify-between">
-          {/* Subtle grid lines (1.5% opacity) */}
-          <div className="absolute inset-0 pointer-events-none opacity-[0.015] text-neutral-800">
-            <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-              <line x1="20" y1="0" x2="20" y2="100" stroke="currentColor" strokeWidth="0.2" />
-              <line x1="50" y1="0" x2="50" y2="100" stroke="currentColor" strokeWidth="0.2" />
-              <line x1="80" y1="0" x2="80" y2="100" stroke="currentColor" strokeWidth="0.2" />
-              <line x1="0" y1="35" x2="100" y2="35" stroke="currentColor" strokeWidth="0.2" />
-              <line x1="0" y1="65" x2="100" y2="65" stroke="currentColor" strokeWidth="0.2" />
+        <div className="relative overflow-hidden bg-white px-[20px] pt-[20px] pb-[10px] flex min-h-[280px]">
+          {/* Subtle astrology wheel background */}
+          <div className="absolute top-[-20%] right-[-10%] w-[120%] h-[120%] pointer-events-none opacity-[0.05] text-[#FF8A00] flex items-center justify-center z-0">
+            <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full object-cover">
+              <circle cx="100" cy="100" r="90" stroke="currentColor" strokeWidth="0.5" />
+              <circle cx="100" cy="100" r="70" stroke="currentColor" strokeWidth="0.5" strokeDasharray="2 4" />
+              <circle cx="100" cy="100" r="50" stroke="currentColor" strokeWidth="0.5" />
+              <line x1="10" y1="100" x2="190" y2="100" stroke="currentColor" strokeWidth="0.3" />
+              <line x1="100" y1="10" x2="100" y2="190" stroke="currentColor" strokeWidth="0.3" />
+              <line x1="36" y1="36" x2="164" y2="164" stroke="currentColor" strokeWidth="0.3" />
+              <line x1="36" y1="164" x2="164" y2="36" stroke="currentColor" strokeWidth="0.3" />
             </svg>
           </div>
 
-          {/* Left side text with mathematically balanced spacing */}
-          <div className="flex-1 pr-4 z-10">
-            <span className="text-[12.5px] font-[600] text-neutral-400 tracking-tight block mb-1">
-              {getGreeting()}, {userName}
+          {/* Extremely subtle warm radial glow behind character */}
+          <div className="absolute bottom-0 right-0 w-[60%] h-[100%] bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[#FF8A00]/[0.07] via-[#FF8A00]/[0.01] to-transparent pointer-events-none z-0" />
+
+          {/* Left side text (~48%) */}
+          <div className="w-[48%] relative z-10 pt-[5px] pb-[35px] flex flex-col justify-center">
+            <span className="text-[13px] font-[700] text-[#FF8A00] tracking-tight block mb-1">
+              Good Evening, {userName || 'User'}
             </span>
-            <span className="text-[11.5px] font-[500] text-neutral-400 tracking-tight block mb-3.5 leading-normal">
-              Your personal AI Astrologer is ready to guide you.
-            </span>
-            <h2 className="text-[25px] font-[800] text-neutral-900 tracking-tight leading-[1.22]">
-              How can I<br />guide you today?
+            <div className="h-[38px] mb-3 flex items-center overflow-hidden">
+              <AnimatePresence mode="wait">
+                <motion.span
+                  key={quoteIndex}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.45, ease: "easeOut" }}
+                  className="text-[12px] font-[500] text-neutral-600 tracking-tight block leading-relaxed pr-1"
+                >
+                  {ASTRO_QUOTES[quoteIndex]}
+                </motion.span>
+              </AnimatePresence>
+            </div>
+            
+            <div className="flex items-center space-x-2 mb-4 pr-4">
+              <div className="w-8 h-[1.5px] bg-[#FF8A00]/40 rounded-full" />
+              <Sparkle size={12} className="text-[#FF8A00]/60 shrink-0" />
+              <div className="flex-1 h-[1.5px] bg-gradient-to-r from-[#FF8A00]/40 via-[#FF8A00]/15 to-transparent rounded-full" />
+            </div>
+
+            <h2 className="text-[22px] sm:text-[26px] font-[800] text-neutral-900 tracking-tight leading-[1.15]">
+              How can I<br />
+              <span className="text-[#FF8A00]">guide</span><br />
+              you today?
             </h2>
           </div>
 
-          {/* Right side locked image asset with natural placement and no heavy glow */}
-          <div className="w-[110px] h-[110px] sm:w-[125px] sm:h-[125px] shrink-0 relative z-10 flex items-center justify-center">
-            {/* Elegant Astrological Kundli / Zodiac Chakra behind the crystal ball */}
-            <div className="absolute inset-[-45px] sm:inset-[-60px] pointer-events-none opacity-[0.055] text-neutral-900 z-0 flex items-center justify-center">
-              <svg className="w-full h-full" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
-                {/* Concentric rings representing planetary spheres */}
-                <circle cx="100" cy="100" r="98" stroke="currentColor" strokeWidth="0.65" />
-                <circle cx="100" cy="100" r="93" stroke="currentColor" strokeWidth="0.35" strokeDasharray="1 3" />
-                <circle cx="100" cy="100" r="85" stroke="currentColor" strokeWidth="0.5" strokeDasharray="4 2" />
-                <circle cx="100" cy="100" r="76" stroke="currentColor" strokeWidth="0.6" />
-                <circle cx="100" cy="100" r="62" stroke="currentColor" strokeWidth="0.4" strokeDasharray="2 2" />
-                <circle cx="100" cy="100" r="48" stroke="currentColor" strokeWidth="0.55" />
-                <circle cx="100" cy="100" r="32" stroke="currentColor" strokeWidth="0.4" />
-                <circle cx="100" cy="100" r="16" stroke="currentColor" strokeWidth="0.5" />
-
-                {/* 12 Astrological House Division Spokes (every 30 degrees) */}
-                {/* 0 & 180 deg */}
-                <line x1="2" y1="100" x2="198" y2="100" stroke="currentColor" strokeWidth="0.45" />
-                {/* 90 & 270 deg */}
-                <line x1="100" y1="2" x2="100" y2="198" stroke="currentColor" strokeWidth="0.45" />
-                {/* 30 & 210 deg */}
-                <line x1="15.13" y1="51" x2="184.87" y2="149" stroke="currentColor" strokeWidth="0.45" />
-                {/* 150 & 330 deg */}
-                <line x1="15.13" y1="149" x2="184.87" y2="51" stroke="currentColor" strokeWidth="0.45" />
-                {/* 60 & 240 deg */}
-                <line x1="51" y1="15.13" x2="149" y2="184.87" stroke="currentColor" strokeWidth="0.45" />
-                {/* 120 & 300 deg */}
-                <line x1="51" y1="184.87" x2="149" y2="15.13" stroke="currentColor" strokeWidth="0.45" />
-
-                {/* Vedic Yantra / Sacred Geometry Squares rotated */}
-                <polygon points="100,24 176,100 100,176 24,100" stroke="currentColor" strokeWidth="0.4" />
-                <polygon points="100,38 162,100 100,162 38,100" stroke="currentColor" strokeWidth="0.35" strokeDasharray="3 1" />
-                
-                {/* Outer starburst sparks and constellation indicators */}
-                <path d="M100 2v4M100 194v4M2 100h4M194 100h4" stroke="currentColor" strokeWidth="0.8" strokeLinecap="round" />
-                <circle cx="100" cy="10" r="1.5" fill="currentColor" />
-                <circle cx="100" cy="190" r="1.5" fill="currentColor" />
-                <circle cx="10" cy="100" r="1.5" fill="currentColor" />
-                <circle cx="190" cy="100" r="1.5" fill="currentColor" />
-              </svg>
-            </div>
-            
+          {/* Right side character (~52%) */}
+          <div className="absolute bottom-0 right-0 w-[55%] sm:w-[52%] h-full z-10 pointer-events-none select-none overflow-visible"
+               style={{ WebkitUserSelect: 'none', WebkitUserDrag: 'none' }}>
             <img 
-              src="https://i.ibb.co/W4GLkJFm/image-removebg-preview-5.png" 
-              alt="Celestial Crystal" 
-              referrerPolicy="no-referrer"
-              className="w-full h-full object-contain relative z-10"
+              src="/nova-ai-astrologer.webp" 
+              alt="AI Astrologer" 
+              draggable={false}
+              className="absolute w-auto max-w-none pointer-events-none select-none origin-bottom-right"
+              style={{ 
+                height: '106%', 
+                bottom: '-2%', 
+                right: '8.5%',
+                WebkitUserSelect: 'none', 
+                WebkitUserDrag: 'none' 
+              }}
             />
           </div>
         </div>
 
-        {/* Small Helper Line below the Hero Area */}
-        <div className="px-[20px] pt-[14px] pb-[4px] bg-white">
-          <p className="text-[11.5px] text-neutral-400/90 font-semibold tracking-tight">
-            Choose a topic below or ask your own question.
-          </p>
-        </div>
+        {/* Primary Ask Nova AI Box */}
+        <div className="px-[16px] sm:px-[20px] mt-[-15px] sm:mt-[-25px] relative z-20 max-w-[420px] w-full mx-auto">
+          <motion.div 
+            animate={{ 
+              scale: isFocused ? 1.015 : 1,
+              boxShadow: isFocused 
+                ? '0 12px 36px rgba(255, 138, 0, 0.22), 0 0 0 3.5px rgba(255, 138, 0, 0.18)' 
+                : '0 8px 24px rgba(255, 138, 0, 0.06)'
+            }}
+            transition={{ type: "spring", stiffness: 350, damping: 25 }}
+            className={`bg-white rounded-[20px] p-[8px] flex items-center relative overflow-hidden transition-colors duration-300 border ${
+              isFocused ? 'border-[#FF8A00]' : 'border-[#FF8A00]/30'
+            }`}
+          >
+            {/* Animated Cosmic Shimmer Light Beam on Focus */}
+            <AnimatePresence>
+              {isFocused && (
+                <motion.div
+                  initial={{ opacity: 0, x: '-100%' }}
+                  animate={{ opacity: 1, x: '100%' }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
+                  className="absolute inset-0 bg-gradient-to-r from-transparent via-[#FF8A00]/15 to-transparent pointer-events-none z-0"
+                />
+              )}
+            </AnimatePresence>
 
-        {/* Premium Large Input Container (AI Composer) */}
-        <div className="px-[20px] pb-[18px] bg-white border-b border-gray-100/80">
-          <div className="relative bg-white border border-neutral-200/90 focus-within:border-[#FF8A00] focus-within:ring-1 focus-within:ring-[#FF8A00]/10 rounded-2xl shadow-[0_4px_16px_rgba(0,0,0,0.012)] transition-all duration-300 p-[15px] flex items-start space-x-3.5">
-            <div className="mt-1 shrink-0 text-neutral-400">
-              <Sparkle size={18} strokeWidth={2.2} className="text-[#FF8A00]/70" />
+            {/* Sparkle Icon with Rotation & Glow */}
+            <div className="shrink-0 px-3 z-10 relative">
+              <motion.div
+                animate={{ 
+                  rotate: isFocused ? [0, 15, -15, 0] : 0,
+                  scale: isFocused ? 1.2 : 1
+                }}
+                transition={{ duration: 0.6, repeat: isFocused ? Infinity : 0, repeatDelay: 2 }}
+                className={isFocused ? 'text-[#FF8A00] drop-shadow-[0_0_8px_rgba(255,138,0,0.6)]' : 'text-[#FF8A00]'}
+              >
+                <Sparkle size={24} strokeWidth={1.8} />
+              </motion.div>
             </div>
             
             <textarea
               value={inputVal}
               onChange={(e) => setInputVal(e.target.value)}
+              onFocus={() => setIsFocused(true)}
+              onBlur={() => setIsFocused(false)}
               placeholder="Ask anything about your career, love, marriage, business or future..."
               rows={2}
-              className="w-full bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-[13.5px] font-medium text-neutral-800 placeholder:text-neutral-400/80 resize-none pr-10 leading-relaxed py-0.5"
+              className="w-full bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-[12px] sm:text-[13px] font-medium text-neutral-800 placeholder:text-neutral-400 resize-none py-2 pr-2 z-10"
             />
             
-            <button 
+            <motion.button 
+              whileTap={{ scale: 0.9 }}
+              animate={{ scale: inputVal.trim() ? [1, 1.08, 1] : 1 }}
+              transition={{ duration: 0.3 }}
               onClick={handleComposeSend}
               disabled={!inputVal.trim()}
-              className={`absolute right-3.5 bottom-3.5 p-2.5 rounded-xl transition-all duration-300 ${
+              className={`p-3 rounded-full shrink-0 transition-all z-10 ${
                 inputVal.trim() 
-                  ? 'bg-[#FF8A00] text-white shadow-[0_4px_12px_rgba(255,138,0,0.22)] active:scale-95' 
-                  : 'bg-neutral-50 text-neutral-400 cursor-not-allowed'
+                  ? 'bg-[#FF8A00] text-white shadow-md active:scale-95 shadow-[#FF8A00]/30' 
+                  : 'bg-neutral-100 text-neutral-400'
               }`}
             >
-              <ArrowUp size={16} strokeWidth={3} />
+              <ArrowUp size={20} strokeWidth={2.5} />
+            </motion.button>
+          </motion.div>
+        </div>
+
+        {/* Topic Chips */}
+        <div className="px-[20px] py-[24px] flex items-center space-x-3 overflow-x-auto no-scrollbar">
+          {topics.slice(0, 5).map((topic) => (
+            <button
+              key={topic.id}
+              onClick={() => handleTopicSelect(topic.id, topic.prompt)}
+              className="flex items-center space-x-2 px-4 py-2 bg-white border border-neutral-200 rounded-full shrink-0 shadow-sm"
+            >
+              <span className={topic.id === 'career' ? 'text-[#FF8A00]' : topic.id === 'love' ? 'text-red-500' : topic.id === 'marriage' ? 'text-purple-500' : topic.id === 'money' ? 'text-green-500' : 'text-neutral-500'}>
+                {topic.icon}
+              </span>
+              <span className="text-[13px] font-[700] text-neutral-800">{topic.label}</span>
             </button>
-          </div>
+          ))}
         </div>
 
-        {/* Horizontal scrollable quick-topic chips */}
-        <div className="bg-white px-4 py-3.5 border-b border-gray-100 flex items-center space-x-2.5 overflow-x-auto no-scrollbar">
-          {topics.map((topic) => {
-            const isSelected = selectedTopic === topic.id;
-            return (
-              <button
-                key={topic.id}
-                onClick={() => handleTopicSelect(topic.id, topic.prompt)}
-                className={`flex items-center space-x-1.5 px-3.5 py-2 border rounded-full shrink-0 transition-all text-xs font-semibold ${
-                  isSelected 
-                    ? 'border-[#FF8A00] bg-[#FFF9E6] text-[#FF8A00]' 
-                    : 'border-neutral-200/85 bg-white text-neutral-700 hover:bg-neutral-50'
-                }`}
-              >
-                <span className={isSelected ? 'text-[#FF8A00]' : 'text-neutral-500'}>
-                  {topic.icon}
-                </span>
-                <span>{topic.label}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* AI Services Section (With Featured Card at Top & 2-Column Grid Below) */}
-        <div className="px-[20px] pt-6 pb-2">
+        {/* AI Services */}
+        <div className="px-[20px] pb-6">
           <div className="mb-4">
-            <h3 className="text-[15px] font-[800] text-neutral-900 tracking-tight">AI Services</h3>
+            <h3 className="text-[16px] font-[800] text-neutral-900">AI Services</h3>
           </div>
 
-          {/* Featured Service: AI Kundli Reading */}
+          {/* Featured Kundli */}
           <motion.div
             whileTap={{ scale: 0.99 }}
             onClick={() => handleServiceSelect('AI Kundli Reading')}
-            className="mb-4 bg-white border border-[#FF8A00]/25 rounded-2xl p-5 shadow-[0_4px_16px_rgba(255,138,0,0.02)] hover:border-[#FF8A00]/45 cursor-pointer transition-all relative overflow-hidden flex items-center justify-between"
+            className="mb-4 bg-[#FFFBF5] border border-[#FF8A00]/20 rounded-[20px] p-4 shadow-sm flex items-center justify-between relative overflow-hidden"
           >
-            <div className="flex items-start space-x-4">
-              <div className="bg-[#FFF9E6] p-3.5 rounded-2xl border border-[#FF8A00]/15 shrink-0">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="w-[30px] h-[30px] text-[#FF8A00]">
-                  <circle cx="12" cy="10" r="7" />
-                  <path d="M5 19h14M8 19l2-4h4l2 4" />
-                </svg>
+            <div className="flex items-center space-x-3 z-10 flex-1">
+              <div className="relative shrink-0">
+                <div className="w-[46px] h-[46px] bg-gradient-to-br from-[#FF8A00] to-[#FF6B00] rounded-[14px] flex items-center justify-center text-white shadow-md shadow-[#FF8A00]/20">
+                  <svg viewBox="0 0 24 24" className="w-[22px] h-[22px] text-white" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="2.5" y="2.5" width="19" height="19" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+                    <polygon points="12,2.5 21.5,12 12,21.5 2.5,12" stroke="currentColor" strokeWidth="1.2" opacity="0.9" />
+                    <line x1="2.5" y1="2.5" x2="21.5" y2="21.5" stroke="currentColor" strokeWidth="1.2" opacity="0.9" />
+                    <line x1="21.5" y1="2.5" x2="2.5" y2="21.5" stroke="currentColor" strokeWidth="1.2" opacity="0.9" />
+                    <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+                  </svg>
+                  <div className="absolute -top-1 -right-1 text-[#FF8A00]">
+                    <Sparkle size={14} className="fill-[#FF8A00] bg-white rounded-full p-0.5 shadow-sm" />
+                  </div>
+                </div>
               </div>
               <div className="flex-1">
-                <div className="flex flex-col items-start mb-1">
-                  <h4 className="text-[15px] font-[850] text-neutral-900 tracking-tight leading-tight">
-                    AI Kundli Reading
-                  </h4>
-                  <span className="bg-[#FFF9E6] text-[#FF8A00] text-[9.5px] font-[800] px-2 py-0.5 rounded-full tracking-wide mt-1 inline-block">
-                    Most Popular
-                  </span>
+                <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                  <h4 className="text-[14px] sm:text-[15px] font-[800] text-neutral-900 leading-tight">AI Kundli Reading</h4>
+                  <span className="bg-[#FF8A00]/10 text-[#FF8A00] text-[10px] font-[800] px-1.5 py-0.5 rounded-md">Most Popular</span>
                 </div>
-                <p className="text-[11.5px] text-neutral-500 font-medium leading-relaxed mt-1">
+                <p className="text-[11px] sm:text-[12px] text-neutral-500 font-medium leading-tight pr-2">
                   Receive complete AI guidance using your birth details and planetary positions.
                 </p>
               </div>
             </div>
-            
-            <div className="text-neutral-400 shrink-0 ml-3">
-              <ChevronRight size={18} strokeWidth={2.5} />
+            <div className="text-[#FF8A00] shrink-0 z-10">
+              <ChevronRight size={20} strokeWidth={2.5} />
             </div>
           </motion.div>
 
-          {/* Remaining 5 services in a perfectly balanced 2-column grid */}
-          <div className="grid grid-cols-2 gap-3.5">
+          {/* Grid Services (Horizontal Scroll) */}
+          <div className="flex space-x-4 overflow-x-auto no-scrollbar pb-2 pt-1">
             {[
-              { 
-                id: 'love-guidance', 
-                title: 'Love Guidance', 
-                desc: 'Understand relationship patterns and emotional compatibility.',
-                icon: (
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="w-[28px] h-[28px] text-[#FF8A00]">
-                    <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
-                  </svg>
-                )
-              },
-              { 
-                id: 'career-prediction', 
-                title: 'Career Prediction', 
-                desc: 'Explore career direction, opportunities and timing.',
-                icon: (
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="w-[28px] h-[28px] text-[#FF8A00]">
-                    <path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-                    <rect width="20" height="14" x="2" y="6" rx="2" />
-                  </svg>
-                )
-              },
-              { 
-                id: 'wealth-insights', 
-                title: 'Wealth Insights', 
-                desc: 'Understand financial patterns and growth periods.',
-                icon: (
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="w-[28px] h-[28px] text-[#FF8A00]">
-                    <path d="M6 3h12M6 8h12M6 13h8.5a4.5 4.5 0 0 1 0 9M6 13l7.5 8" />
-                  </svg>
-                )
-              },
-              { 
-                id: 'numerology', 
-                title: 'Numerology', 
-                desc: 'Decode your numbers, Moolank and Bhagyank.',
-                icon: (
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="w-[28px] h-[28px] text-[#FF8A00]">
-                    <circle cx="12" cy="9" r="4" />
-                    <path d="M16 9v6a4 4 0 0 1-4 4" />
-                  </svg>
-                )
-              },
-              { 
-                id: 'daily-remedies', 
-                title: 'Daily Remedies', 
-                desc: 'Receive simple personalized daily remedies.',
-                icon: (
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="w-[28px] h-[28px] text-[#FF8A00]">
-                    <path d="M2 12c3-5.5 7-9 10-9s7 3.5 10 9c-3 5.5-7 9-10 9s-7-3.5-10-9z" />
-                    <circle cx="12" cy="12" r="5" />
-                    <circle cx="12" cy="12" r="2.5" fill="currentColor" />
-                  </svg>
-                )
-              }
-            ].map((service) => (
+              { id: 'love', title: 'Love Guidance', desc: 'Get clarity in love, relationships and compatibility.', icon: <Heart size={24} className="text-red-500" strokeWidth={1.5} />, borderColor: 'border-red-100', iconBg: 'bg-red-50' },
+              { id: 'life', title: 'Life Prediction', desc: 'Discover what your future holds for you.', icon: <Activity size={24} className="text-blue-500" strokeWidth={1.5} />, borderColor: 'border-blue-100', iconBg: 'bg-blue-50' },
+              { id: 'growth', title: 'Personal Growth', desc: 'Find inner peace and grow spiritually.', icon: <Shield size={24} className="text-green-500" strokeWidth={1.5} />, borderColor: 'border-green-100', iconBg: 'bg-green-50' }
+            ].map(svc => (
               <motion.div
-                key={service.id}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => handleServiceSelect(service.title)}
-                className="bg-white border border-neutral-100/90 rounded-2xl p-4.5 flex flex-col justify-between shadow-[0_2px_8px_rgba(0,0,0,0.01)] hover:border-neutral-200/80 cursor-pointer min-h-[152px] transition-all"
+                key={svc.id}
+                whileTap={{ scale: 0.97 }}
+                onClick={() => handleServiceSelect(svc.title)}
+                className="w-[150px] shrink-0 bg-white border border-neutral-100 rounded-[20px] p-4 shadow-sm flex flex-col justify-between"
               >
-                <div className="mb-3.5 bg-neutral-50 w-12 h-12 rounded-xl flex items-center justify-center border border-neutral-100/50 shrink-0">
-                  {service.icon}
+                <div className={`w-12 h-12 rounded-[14px] ${svc.iconBg} flex items-center justify-center mb-3 ${svc.borderColor} border`}>
+                  {svc.icon}
                 </div>
                 <div>
-                  <h4 className="text-[12.5px] font-[800] text-neutral-900 tracking-tight mb-1 leading-snug">
-                    {service.title}
-                  </h4>
-                  <p className="text-[10.5px] text-neutral-500 leading-normal font-medium">
-                    {service.desc}
-                  </p>
+                  <h4 className="text-[13px] font-[800] text-neutral-900 mb-1">{svc.title}</h4>
+                  <p className="text-[11px] text-neutral-500 font-medium leading-snug mb-3">{svc.desc}</p>
+                </div>
+                <div className="flex justify-end text-[#FF8A00]">
+                  <ChevronRight size={16} strokeWidth={2.5} />
                 </div>
               </motion.div>
             ))}
           </div>
         </div>
 
-        {/* Today's AI Guidance Card (With small celestial accent vector inside) */}
-        <div className="px-[20px] py-3">
-          <div className="bg-[#FCFBF7] border border-[#F0EDE6] rounded-2xl p-5 flex items-start space-x-4 shadow-[0_2px_12px_rgba(0,0,0,0.01)] relative overflow-hidden">
-            {/* Subtle celestial accent illustration (opacity 4%) */}
-            <div className="absolute right-0 bottom-0 top-0 w-24 opacity-[0.04] text-[#FF8A00] pointer-events-none">
-              <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-                <polygon points="50,15 63,38 90,38 68,54 77,80 50,62 23,80 32,54 10,38 37,38" fill="currentColor" />
-              </svg>
-            </div>
-
-            <div className="bg-white border border-neutral-200/50 p-2.5 rounded-xl shrink-0 z-10">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 text-[#FF8A00]">
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-              </svg>
-            </div>
-            
-            <div className="flex-1 z-10">
-              <h4 className="text-[13px] font-[800] text-neutral-900 tracking-tight mb-1">
-                Today's AI Guidance
-              </h4>
-              <p className="text-[11.5px] text-neutral-600 font-medium leading-relaxed mb-3 max-w-[90%]">
-                Aaj ki planetary energy career decisions ke liye supportive hai. Apne focus ko stable rakhein aur dhyan se aage badhein.
-              </p>
-              <button 
-                onClick={handleReadMoreGuidance}
-                className="text-[11.5px] font-[700] text-[#FF8A00] flex items-center space-x-1 hover:underline focus:outline-none"
+        {/* Suggested Questions */}
+        <div className="px-[20px] pb-6">
+          <h3 className="text-[14px] font-[800] text-neutral-900 mb-3">You can also ask about</h3>
+          <div className="flex space-x-3 overflow-x-auto no-scrollbar pb-2">
+            {[
+              { id: 'q1', text: 'Will I get a job this year?', icon: <Briefcase size={14} className="text-neutral-500" /> },
+              { id: 'q2', text: 'Is marriage in my destiny?', icon: <Heart size={14} className="text-neutral-500" /> },
+              { id: 'q3', text: 'Financial growth?', icon: <span className="font-bold text-neutral-500 text-[14px]">₹</span> }
+            ].map(q => (
+              <button
+                key={q.id}
+                onClick={() => handleTopicSelect('custom', q.text)}
+                className="flex items-center space-x-2 px-4 py-2.5 bg-white border border-neutral-200 rounded-xl shrink-0 text-[12px] font-[600] text-neutral-700 shadow-sm"
               >
-                <span>Read Guidance</span>
-                <ChevronRight size={12} strokeWidth={3} />
+                {q.icon}
+                <span>{q.text}</span>
               </button>
-            </div>
+            ))}
           </div>
         </div>
 
-        {/* Continue Conversation Section (Compact, hide empty state box by 40% height) */}
-        <div className="px-[20px] py-3.5">
-          <h3 className="text-[15px] font-[800] text-neutral-900 tracking-tight mb-3">Continue Conversation</h3>
-          
-          {history.length > 0 ? (
-            <div className="flex flex-col space-y-2.5">
-              {history.map((conv) => (
-                <div 
-                  key={conv.id}
-                  className="bg-white border border-neutral-100 rounded-xl p-3 flex items-center justify-between shadow-[0_2px_8px_rgba(0,0,0,0.005)]"
-                >
-                  <div className="flex items-center space-x-3 flex-1 min-w-0">
-                    <div className="w-9 h-9 rounded-full bg-neutral-50 border border-neutral-200/60 flex items-center justify-center shrink-0">
-                      {getCategoryIcon(conv.topic)}
+        {/* Preserved functionality (Continue Chat & Focus) kept at bottom for completeness */}
+        <div className="px-[20px] pb-6">
+          {history.length > 0 && (
+            <>
+              <h3 className="text-[14px] font-[800] text-neutral-900 mb-3">Recent Conversations</h3>
+              <div className="flex flex-col space-y-2">
+                {history.map((conv) => (
+                  <div key={conv.id} className="bg-white border border-neutral-100 rounded-xl p-3 flex items-center justify-between shadow-sm">
+                    <div className="flex flex-col">
+                      <span className="text-[12px] font-[700] text-neutral-900">{conv.topic}</span>
+                      <span className="text-[11px] text-neutral-500 truncate max-w-[200px]">{conv.lastMessage}</span>
                     </div>
-                    <div className="flex-1 min-w-0 pr-2">
-                      <div className="flex items-center justify-between mb-0.5">
-                        <h4 className="text-[12.5px] font-[700] text-neutral-900 truncate tracking-tight">
-                          {conv.topic}
-                        </h4>
-                        <span className="text-[10px] text-neutral-400 font-medium">
-                          {conv.timestamp}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-neutral-500 truncate leading-tight font-medium">
-                        {conv.lastMessage}
-                      </p>
-                    </div>
+                    <button 
+                      onClick={() => !isLoadingProfile && profileId && onNavigate('nova-ai-chat', { conversationId: conv.id, profileId })}
+                      className="text-[#FF8A00] text-[11px] font-[700]"
+                    >
+                      Continue
+                    </button>
                   </div>
-                  <button 
-                    onClick={() => onNavigate('nova-ai-chat', { conversationId: conv.id })}
-                    className="px-3 py-1.5 bg-[#FFF9E6] hover:bg-[#FFF2CC] text-[#FF8A00] rounded-lg text-[11px] font-[700] transition-colors shrink-0 flex items-center space-x-0.5 focus:outline-none"
-                  >
-                    <span>Continue</span>
-                    <ArrowRight size={11} strokeWidth={2.5} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="bg-white border border-neutral-100/90 rounded-2xl py-5 px-4 flex flex-col items-center justify-center text-center shadow-[0_2px_12px_rgba(0,0,0,0.005)] min-h-[140px]">
-              {/* Clean abstract illustration, smaller and more compact box */}
-              <div className="w-10 h-10 rounded-full bg-[#FFF9E6] flex items-center justify-center mb-2 text-[#FF8A00] border border-[#FF8A00]/10">
-                <MessageSquare size={16} strokeWidth={2.2} />
+                ))}
               </div>
-              <h4 className="text-[13px] font-[800] text-neutral-800 mb-0.5">
-                Start your first AI conversation.
-              </h4>
-              <p className="text-[11px] text-neutral-400 font-medium max-w-xs mb-3">
-                Select a topic above or tap below to start.
-              </p>
-              <button
-                onClick={handleStartConversation}
-                className="bg-[#FF8A00] text-white text-[11.5px] font-[700] px-4 py-2 rounded-xl shadow-[0_4px_12px_rgba(255,138,0,0.18)] hover:bg-[#E07A00] transition-all active:scale-95 focus:outline-none"
-              >
-                Start Conversation
-              </button>
-            </div>
+            </>
           )}
         </div>
 
-        {/* Today's Focus Dashboard Section */}
-        <div className="px-[20px] py-3.5">
-          <div className="bg-[#FCFBF7] border border-[#EBE8DF] rounded-2xl p-5 relative overflow-hidden">
-            {/* Elegant minimal line vector in 3% opacity */}
-            <div className="absolute right-0 bottom-0 top-0 w-1/3 opacity-[0.05] pointer-events-none text-[#FF8A00]">
-              <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-                <circle cx="100" cy="50" r="40" stroke="currentColor" strokeWidth="0.8" fill="none" />
-                <circle cx="100" cy="50" r="25" stroke="currentColor" strokeWidth="0.8" fill="none" strokeDasharray="3 3" />
-                <line x1="60" y1="50" x2="100" y2="50" stroke="currentColor" strokeWidth="0.5" />
-              </svg>
-            </div>
-
-            <div className="relative z-10">
-              <div className="flex items-center space-x-1.5 mb-3">
-                <span className="w-2 h-2 rounded-full bg-[#FF8A00] animate-pulse" />
-                <h4 className="text-[14px] font-[850] text-neutral-900 tracking-tight">
-                  Today's Focus
-                </h4>
-              </div>
-
-              {/* Three Compact Insight Rows */}
-              <div className="space-y-2 mb-4 max-w-[75%]">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11.5px] text-neutral-500 font-semibold">Career</span>
-                  <StarRating count={4} />
-                </div>
-                <div className="flex items-center justify-between border-t border-dashed border-neutral-200/60 pt-2">
-                  <span className="text-[11.5px] text-neutral-500 font-semibold">Love</span>
-                  <StarRating count={3} />
-                </div>
-                <div className="flex items-center justify-between border-t border-dashed border-neutral-200/60 pt-2">
-                  <span className="text-[11.5px] text-neutral-500 font-semibold">Money</span>
-                  <StarRating count={5} />
-                </div>
-              </div>
-
-              <p className="text-[11px] text-neutral-400 font-semibold leading-relaxed mb-3 max-w-[85%]">
-                Aaj communication aur career related decisions aapke liye zyada favourable rahenge.
-              </p>
-
-              <button 
-                onClick={() => onNavigate('nova-ai-chat', { serviceContext: "Today's Focus" })}
-                className="bg-white border border-neutral-200 text-neutral-800 text-[11px] font-[700] px-3.5 py-1.5 rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.02)] hover:bg-neutral-50 transition-colors focus:outline-none"
-              >
-                View Full Guidance
-              </button>
-            </div>
-          </div>
-        </div>
-
       </div>
+      )}
     </div>
   );
 }

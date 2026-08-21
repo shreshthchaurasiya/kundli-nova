@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
+import { X, Trash2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { ChevronRight, MessageCircle, Search, Sparkles, UserRound } from 'lucide-react';
 import { Screen } from '../types';
 import { ApiConsultationRepository } from '../repositories/api/apiConsultationRepository';
 import { chatStorage } from '../services/storage/chatStorage';
-import { chatService } from '../services/astrologyServices';
+import { ApiChatRepository } from '../repositories/api/apiChatRepository';
 import { useAstrologerPartner } from '../features/astrologer';
 
 
@@ -23,9 +24,11 @@ interface HistoryItem {
   astrologerId?: string;
   image?: string;
   active?: boolean;
+  profileId?: string;
 }
 
 const consultationRepository = new ApiConsultationRepository();
+const chatRepository = new ApiChatRepository();
 const OPEN_STATUSES = new Set(['CHECKING_WALLET', 'PREPARING_KUNDLI', 'WAITING_FOR_ASTROLOGER', 'ACTIVE', 'LOW_BALANCE', 'RECHARGING']);
 
 const timestampValue = (value: string) => {
@@ -51,6 +54,37 @@ export default function ChatHistoryScreen({ onNavigate }: ChatHistoryScreenProps
   const [filter, setFilter] = useState<'all' | ChatKind>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [deletePrompt, setDeletePrompt] = useState<HistoryItem | null>(null);
+  
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const isLongPress = useRef(false);
+
+  const handlePressStart = (item: HistoryItem) => {
+    isLongPress.current = false;
+    timerRef.current = setTimeout(() => {
+      isLongPress.current = true;
+      setDeletePrompt(item);
+    }, 600);
+  };
+
+  const handlePressEnd = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  const confirmDelete = () => {
+    if (!deletePrompt) return;
+    if (deletePrompt.kind === 'nova' || deletePrompt.kind === 'free') {
+      const historyList = chatStorage.getAiHistory();
+      const updated = historyList.filter(c => c.id !== deletePrompt.id);
+      chatStorage.saveAiHistory(updated);
+      setItems(prev => prev.filter(i => i.id !== deletePrompt.id));
+    }
+    setDeletePrompt(null);
+  };
+
 
   useEffect(() => {
     let active = true;
@@ -65,14 +99,25 @@ export default function ChatHistoryScreen({ onNavigate }: ChatHistoryScreenProps
 
         const paidItems: HistoryItem[] = await Promise.all((sessions || []).map(async session => {
           const astrologer = astrologers.find(item => item.id === session.astrologerId);
-          const rawMessages = await chatService.getMessages(session.id);
-          const messages = Array.isArray(rawMessages) ? rawMessages.filter(message => message?.sender !== 'system') : [];
-          const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+          let previewText = OPEN_STATUSES.has(session.status) ? 'Consultation in progress' : 'Consultation completed';
+          
+          if (OPEN_STATUSES.has(session.status)) {
+            try {
+              const rawMessages = await chatRepository.getMessages(session.id);
+              const messages = Array.isArray(rawMessages) ? rawMessages.filter(message => message?.sender !== 'system') : [];
+              if (messages.length > 0) {
+                previewText = messages[messages.length - 1].text || previewText;
+              }
+            } catch (e) {
+              // Ignore fetch error to prevent 429 spam breaking the UI
+            }
+          }
+
           return {
             id: session.id,
             kind: 'paid',
             title: astrologer?.name || 'Astrologer',
-            preview: lastMessage?.text || (OPEN_STATUSES.has(session.status) ? 'Consultation in progress' : 'Consultation completed'),
+            preview: previewText,
             timestamp: session.endedAt || session.startedAt || session.requestedAt,
             astrologerId: session.astrologerId,
             image: astrologer?.image,
@@ -88,6 +133,7 @@ export default function ChatHistoryScreen({ onNavigate }: ChatHistoryScreenProps
             title: thread.kind === 'free' ? 'Free Astrology Chat' : thread.topic || 'Nova AI',
             preview: thread.lastMessage || 'Open conversation',
             timestamp: thread.timestamp,
+            profileId: thread.profileId,
           }));
 
         if (active) {
@@ -116,7 +162,7 @@ export default function ChatHistoryScreen({ onNavigate }: ChatHistoryScreenProps
 
   const openChat = (item: HistoryItem) => {
     if (item.kind === 'nova') {
-      onNavigate('nova-ai-chat', { conversationId: item.id });
+      onNavigate('nova-ai-chat', { conversationId: item.id, profileId: item.profileId });
       return;
     }
     if (item.kind === 'free') {
@@ -219,6 +265,35 @@ export default function ChatHistoryScreen({ onNavigate }: ChatHistoryScreenProps
           </div>
         )}
       </main>
+
+      {/* Delete Confirmation Modal */}
+      {deletePrompt && (
+        <div className="absolute inset-0 z-[300] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-[320px] shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-4">
+              <Trash2 size={28} strokeWidth={2} />
+            </div>
+            <h3 className="text-[19px] font-[850] text-neutral-900 mb-2 leading-tight tracking-tight">Delete Chat?</h3>
+            <p className="text-sm font-semibold text-neutral-500 mb-6 px-2">
+              Are you sure you want to delete this conversation? This action cannot be undone.
+            </p>
+            <div className="w-full flex space-x-3">
+              <button
+                onClick={() => setDeletePrompt(null)}
+                className="flex-1 py-3.5 bg-neutral-100 text-neutral-700 font-[800] rounded-2xl active:bg-neutral-200 transition-colors focus:outline-none"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="flex-1 py-3.5 bg-red-500 text-white font-[800] rounded-2xl active:bg-red-600 shadow-[0_4px_12px_rgba(239,68,68,0.25)] transition-all focus:outline-none"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

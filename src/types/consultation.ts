@@ -1,10 +1,12 @@
 export type ConsultationState =
+  | 'SELECTING_KUNDLI'
   | 'CHECKING_WALLET'
   | 'INSUFFICIENT_BALANCE'
   | 'PREPARING_KUNDLI'
   | 'WAITING_FOR_ASTROLOGER'
   | 'REJECTED'
   | 'EXPIRED'
+  | 'CANCELLED'
   | 'ACTIVE'
   | 'LOW_BALANCE'
   | 'RECHARGING'
@@ -14,6 +16,7 @@ export interface ConsultationSession {
   id: string;
   astrologerId: string;
   userId: string;
+  customerDisplayName?: string;
   status: ConsultationState;
   ratePerMinute: number;
   ratePerMin?: number; // legacy compatibility

@@ -3,15 +3,20 @@ import rateLimit from 'express-rate-limit';
 import { GoogleGenAI } from '@google/genai';
 import { createClient } from '@supabase/supabase-js';
 
+import { NavamshaProvider } from '../providers/navamshaProvider';
+import { KundliCalculationService } from '../services/kundliCalculationService';
+import { NovaAIContextService } from '../services/ai/NovaAIContextService';
+import { NovaAIPromptBuilder } from '../services/ai/NovaAIPromptBuilder';
+import { NovaAIToolRegistry } from '../services/ai/NovaAIToolRegistry';
+import { NovaAIConversationMemory } from '../types/novaAiContext';
+import { AIUsageService } from '../services/aiUsageService';
+import { supabaseAdmin } from '../config/supabase';
+
 export interface AiRouterConfig {
   geminiApiKey?: string;
   supabaseUrl?: string;
   supabaseAnonKey?: string;
 }
-
-const CHAT_SYSTEM_INSTRUCTION = `You are a professional, calm, respectful Vedic astrologer named Acharya Dev Sharma working in the Kundli Nova app.
-Use simple, supportive Hinglish. Keep each message short and practical. Do not make medical, legal, or guaranteed financial claims.
-Respond only with a JSON array containing 2 to 4 short strings. Each string is a separate chat bubble. End with one relevant follow-up question.`;
 
 export function createAiRouter(config: AiRouterConfig) {
   const router = express.Router();
@@ -22,12 +27,16 @@ export function createAiRouter(config: AiRouterConfig) {
       })
     : null;
 
-  // The router is mounted at the Vite/Express app root, so middleware must
-  // only run for Nova AI endpoints. Otherwise it intercepts the React SPA
-  // (including "/") and returns UNAUTHORIZED before Vite can serve index.html.
+  // AI Services
+  const provider = new NavamshaProvider({ timeoutMs: 15000 });
+  const kundliService = new KundliCalculationService(provider);
+  const contextService = new NovaAIContextService(kundliService);
+  const promptBuilder = new NovaAIPromptBuilder();
+  const toolRegistry = new NovaAIToolRegistry(kundliService);
+
   const protectedAiPaths = ['/api/ai', '/api/chat', '/api/explain'];
 
-  router.use(protectedAiPaths, express.json({ limit: '256kb' }));
+  router.use(protectedAiPaths, express.json({ limit: '5mb' }));
   router.use(protectedAiPaths, rateLimit({
     windowMs: 60 * 1000,
     max: 20,
@@ -65,51 +74,224 @@ export function createAiRouter(config: AiRouterConfig) {
     }
 
     const messages = Array.isArray(req.body?.messages) ? req.body.messages : [];
-    const userProfile = req.body?.userProfile ?? {};
+    const profileId = req.body?.profileId || req.body?.userProfile?.id;
+    const profileBId = req.body?.profileBId;
+    const userId = res.locals.user.id;
+    
+    try {
+      await AIUsageService.checkAndIncrementUsage(userId);
+    } catch (err: any) {
+      if (err.statusCode === 403) {
+        return res.status(403).json({ code: 'USAGE_LIMIT_EXCEEDED', error: err.message });
+      }
+      return res.status(500).json({ code: 'INTERNAL_ERROR', error: 'Error checking AI usage limits.' });
+    }
+    
     const safeMessages = messages
-      .filter((message: any) => typeof message?.text === 'string' && ['user', 'nova'].includes(message?.sender))
-      .map((message: any) => ({ sender: message.sender, text: message.text.trim().slice(0, 2000) }))
-      .filter((message: any) => message.text)
+      .filter((message: any) => ['user', 'nova'].includes(message?.sender) && (typeof message?.text === 'string' || message?.attachmentUrl))
+      .map((message: any) => ({
+        sender: message.sender,
+        text: (message.text || '').trim().slice(0, 2000),
+        attachmentUrl: message.attachmentUrl || null
+      }))
+      .filter((message: any) => message.text || message.attachmentUrl)
       .slice(-20);
+      
     const firstUserMessage = safeMessages.findIndex((message: any) => message.sender === 'user');
 
     if (firstUserMessage === -1) {
       return res.status(400).json({ code: 'INVALID_REQUEST', error: 'Please enter a message for Nova AI.' });
     }
 
-    const conversation = safeMessages.slice(firstUserMessage).map((message: any) => ({
-      role: message.sender === 'user' ? 'user' : 'model',
-      parts: [{ text: message.text }],
+    // Fetch active profile details for dynamic context
+    let activeProfileContext = null;
+    console.log(`[Nova AI] /api/chat called by userId: ${userId}, profileId: ${profileId}`);
+    if (profileId) {
+      try {
+        const { data: profileData, error } = await supabaseAdmin
+          .from('kundli_profiles')
+          .select('*')
+          .eq('id', profileId)
+          .eq('owner_id', userId)
+          .single();
+        console.log(`[Nova AI] Fetched profileData for ${profileId}:`, profileData ? profileData.name : 'null', 'Error:', error);
+        if (profileData) {
+          activeProfileContext = profileData;
+        }
+      } catch (e) {
+        console.error('[Nova AI] Failed to fetch active profile context:', e);
+      }
+    } else {
+      console.log(`[Nova AI] No profileId provided in request body!`);
+    }
+
+    const baseSystemInstruction = promptBuilder.buildSystemInstruction(activeProfileContext);
+    
+    // Fetch Long-Term Memory
+    let memoryContext = '';
+    try {
+      const { data: pastSessions } = await supabaseAdmin
+        .from('ai_chat_sessions')
+        .select('summary, created_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(3);
+        
+      if (pastSessions && pastSessions.length > 0) {
+        memoryContext = '\n\nPAST CONVERSATION MEMORY (Use this to remember user details):\n' + 
+          pastSessions.map(s => `- ${s.summary}`).join('\n');
+      }
+    } catch (e) {
+      console.error('[Nova AI] Failed to fetch memory', e);
+    }
+    
+    const systemInstruction = baseSystemInstruction + memoryContext;
+
+    const conversation: any[] = await Promise.all(safeMessages.slice(firstUserMessage).map(async (message: any) => {
+      const parts: any[] = [];
+      if (message.attachmentUrl) {
+        try {
+          const imgRes = await fetch(message.attachmentUrl);
+          if (imgRes.ok) {
+            const arrayBuffer = await imgRes.arrayBuffer();
+            const base64 = Buffer.from(arrayBuffer).toString('base64');
+            const mimeType = imgRes.headers.get('content-type') || 'image/jpeg';
+            parts.push({
+              inlineData: { data: base64, mimeType }
+            });
+          }
+        } catch (e) {
+          console.error('[Nova AI] Failed to fetch attachment:', e);
+        }
+      }
+      
+      parts.push({ text: message.text || "Please analyze this image." });
+
+      return {
+        role: message.sender === 'user' ? 'user' : 'model',
+        parts,
+      };
     }));
-    const profileContext = [
-      userProfile?.name && `Name: ${String(userProfile.name).slice(0, 100)}`,
-      userProfile?.gender && `Gender: ${String(userProfile.gender).slice(0, 30)}`,
-      userProfile?.dob && `DOB: ${String(userProfile.dob).slice(0, 20)}`,
-      userProfile?.tob && `TOB: ${String(userProfile.tob).slice(0, 20)}`,
-      userProfile?.city && `Birth place: ${String(userProfile.city).slice(0, 100)}`,
-    ].filter(Boolean).join('\n');
 
     try {
-      const response = await ai.models.generateContent({
-        model: 'gemini-flash-lite-latest',
-        contents: conversation,
+      // Try primary model first, fallback to lite if quota exhausted
+      const PRIMARY_MODEL = 'gemini-2.5-flash';
+      const FALLBACK_MODEL = 'gemini-flash-lite-latest';
+      
+      const createChat = (model: string) => ai.chats.create({
+        model,
         config: {
-          systemInstruction: `${CHAT_SYSTEM_INSTRUCTION}\n\nUser profile:\n${profileContext || 'Profile unavailable'}`,
+          systemInstruction,
           temperature: 0.7,
-          responseMimeType: 'application/json',
+          tools: [{ functionDeclarations: toolRegistry.getToolDeclarations() }],
         },
+        history: conversation.slice(0, -1),
       });
 
-      let texts: string[];
+      let chat = createChat(PRIMARY_MODEL);
+
+
+      const lastUserMessage = conversation[conversation.length - 1];
+      let response: any;
       try {
-        const parsed = JSON.parse(response.text || '[]');
-        texts = Array.isArray(parsed) ? parsed.map(String).filter(Boolean).slice(0, 4) : [String(parsed)];
+        response = await chat.sendMessage({ message: lastUserMessage.parts });
+      } catch (quotaErr: any) {
+        if (quotaErr?.status === 429) {
+          console.warn('[Nova AI] Primary model quota exhausted, falling back to lite model');
+          chat = createChat(FALLBACK_MODEL);
+          response = await chat.sendMessage({ message: lastUserMessage.parts });
+        } else {
+          throw quotaErr;
+        }
+      }
+
+      // Function Calling Loop (max 3 calls to prevent infinite loops)
+      let callsCount = 0;
+      while (response.functionCalls && response.functionCalls.length > 0 && callsCount < 3) {
+        callsCount++;
+        const functionResponses = await Promise.all(response.functionCalls.map(async (call) => {
+          const result = await toolRegistry.executeTool(call.name, call.args, userId);
+          return {
+            functionResponse: {
+              name: call.name,
+              response: typeof result === 'object' ? result : { result },
+            },
+          };
+        }));
+        
+        response = await chat.sendMessage({ message: functionResponses });
+      }
+
+      let texts: string[];
+      let suggestions: string[] = [];
+      let rawText = response.text || '';
+      
+      // Extract SUGGESTED_QUESTIONS if present
+      const suggestionsMatch = rawText.match(/SUGGESTED_QUESTIONS:\s*(\[[^\]]+\])/);
+      if (suggestionsMatch && suggestionsMatch[1]) {
+        try {
+          suggestions = JSON.parse(suggestionsMatch[1]);
+          rawText = rawText.replace(suggestionsMatch[0], '').trim();
+        } catch (e) {
+          console.error('[Nova AI] Failed to parse suggested questions:', e);
+        }
+      }
+
+      const jsonMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      if (jsonMatch && jsonMatch[1]) {
+        rawText = jsonMatch[1];
+      }
+
+      try {
+        const parsed = JSON.parse(rawText);
+        if (Array.isArray(parsed)) {
+          texts = parsed
+            .filter(item => item !== null && item !== undefined)
+            .map(item => String(item).trim())
+            .filter(Boolean)
+            .map(item => item.slice(0, 2000))
+            .slice(0, 4);
+        } else {
+          texts = [String(parsed).trim().slice(0, 2000)];
+        }
       } catch {
-        texts = response.text ? [response.text] : [];
+        const cleanText = rawText.replace(/```(?:json)?|```/g, '').trim();
+        texts = cleanText ? [cleanText.slice(0, 2000)] : [];
       }
 
       if (!texts.length) throw new Error('Gemini returned an empty response');
-      return res.json({ texts });
+      
+      // Fire-and-forget background memory save
+      const sessionId = req.body?.sessionId || `session-${userId}`;
+      const memoryPrompt = `Summarize this conversation in 1-2 short sentences. Focus only on the user's current situation, goals, or problems. \nUser: ${lastUserMessage.parts[0].text}\nNova: ${texts.join(' ')}`;
+      
+      ai.models.generateContent({
+        model: 'gemini-flash-lite-latest',
+        contents: memoryPrompt,
+        config: { systemInstruction: 'You are a summarizer. Keep it extremely brief.' }
+      }).then(async (summaryRes) => {
+        const summary = summaryRes.text?.trim();
+        if (summary) {
+          try {
+            const { data: existing } = await supabaseAdmin
+              .from('ai_chat_sessions')
+              .select('id')
+              .eq('session_id', sessionId)
+              .eq('user_id', userId)
+              .maybeSingle();
+              
+            if (existing) {
+              await supabaseAdmin.from('ai_chat_sessions').update({ summary, updated_at: new Date().toISOString() }).eq('id', existing.id);
+            } else {
+              await supabaseAdmin.from('ai_chat_sessions').insert({ user_id: userId, session_id: sessionId, summary });
+            }
+          } catch (dbErr) {
+            console.error('[Nova AI] Failed to save memory summary:', dbErr);
+          }
+        }
+      }).catch(err => console.error('[Nova AI] Failed to save memory summary:', err));
+
+      return res.json({ texts, suggestions });
     } catch (error: any) {
       console.error('[Nova AI] Gemini request failed:', error?.message || 'Unknown provider error');
       return res.status(502).json({ code: 'AI_PROVIDER_ERROR', error: 'Nova AI is temporarily unavailable. Please try again.' });
@@ -124,6 +306,16 @@ export function createAiRouter(config: AiRouterConfig) {
     const { section, data, userProfile } = req.body ?? {};
     if (!['charts', 'planets', 'dasha'].includes(section)) {
       return res.status(400).json({ code: 'INVALID_REQUEST', error: 'Unknown Kundli section.' });
+    }
+    
+    const userId = res.locals.user.id;
+    try {
+      await AIUsageService.checkAndIncrementUsage(userId);
+    } catch (err: any) {
+      if (err.statusCode === 403) {
+        return res.status(403).json({ code: 'USAGE_LIMIT_EXCEEDED', error: err.message });
+      }
+      return res.status(500).json({ code: 'INTERNAL_ERROR', error: 'Error checking AI usage limits.' });
     }
 
     let sectionDescription = '';

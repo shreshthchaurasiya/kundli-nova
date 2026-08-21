@@ -29,23 +29,28 @@ app.use(cors({
 
 // Rate limiting (basic anti-abuse)
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  windowMs: env.RATE_LIMIT_GLOBAL_WINDOW_MS,
+  max: env.RATE_LIMIT_GLOBAL_MAX,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { ip: false, xForwardedForHeader: false },
+  skip: (req) => {
+    if (env.NODE_ENV === 'test') return true;
+    return /^\/v1\/consultations\/[^\/]+\/heartbeat\/?$/.test(req.path);
+  },
 });
 app.use('/api', limiter);
 
 // Request parsing & Logging
-app.use(express.json({ limit: '1mb' }));
-app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 app.use(morgan('combined'));
 
 // API Routes
 app.use('/api/v1', routesV1);
 
-// 404 & Error Handling
-app.use(notFoundHandler);
-app.use(errorHandler);
+// 404 & Error Handling for API only
+app.use('/api', notFoundHandler);
+app.use('/api', errorHandler);
 
 export default app;

@@ -10,22 +10,29 @@ import {
   Sparkle,
   CheckCircle2,
   ExternalLink,
-  Share2
+  Share2,
+  Shield,
+Heart,
+  ChevronDown,
+  Plus,
+  X,
+  Trash2,
+  Paperclip
 } from 'lucide-react';
+import { useProfile } from '../contexts/ProfileContext';
+import { KundliProfile } from '../types/kundli';
 import { Screen } from '../types';
-import { 
-  getSavedKundli, 
-  saveKundliData, 
-  KundliData 
-} from '../services/kundliStorage';
 import { useRepositories } from '../repositories/repositoryProvider';
 import { UserProfile } from '../types/profile';
-import { generateKundli } from '../services/kundliService';
-import { generateKundliPdf } from '../services/kundliPdfService';
+import { AstrologyApi } from '../services/api/astrologyApi';
+import { generateKundliPdf, KundliPdfPayload } from '../services/kundliPdfService';
 import KundliPreviewMessage from '../components/KundliPreviewMessage';
 import { postAiRequest } from '../services/aiClient';
 import CelestialChatBackground from '../components/chat/CelestialChatBackground';
 import { chatStorage } from '../services/storage/chatStorage';
+import { Message, AiChatThread } from '../types/chat';
+import { NormalizedCompatibilityContext } from '../types/matchingAiContext';
+import { supabase } from '../lib/supabase';
 
 interface NovaAIChatScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
@@ -33,57 +40,106 @@ interface NovaAIChatScreenProps {
     conversationId?: string;
     initialQuery?: string;
     serviceContext?: string;
+    profileId?: string;
+    profileBId?: string;
+    initialIntent?: 'explain-compatibility' | string;
+    compatibilityContext?: NormalizedCompatibilityContext;
+    mode?: string;
+    forceNew?: boolean;
   };
 }
 
-interface Message {
-  id: string;
-  text?: string;
-  sender: 'nova' | 'user';
-  time: string;
-  type?: 'text' | 'kundli-loading' | 'kundli-card';
-  kundliLoadingStep?: number; // 1, 2, 3
-  kundliData?: KundliData;
-}
-
-interface SavedConversation {
-  id: string;
-  kind?: 'nova';
-  topic: string;
-  lastMessage: string;
-  timestamp: string;
-  messages: Message[];
-}
+const getProfileBirthDetails = (p: any) => {
+  if (!p) return { gender: 'unknown', dob: '', tob: '', city: 'Unknown', state: 'Unknown' };
+  const bd = p.birthDetails || {};
+  return {
+    gender: bd.gender || p.gender || 'unknown',
+    dob: bd.dob || p.dob || '',
+    tob: bd.tob || p.tob || '',
+    city: bd.city || p.birth_city || p.city || 'Unknown',
+    state: bd.state || p.birth_state || p.state || 'Unknown'
+  };
+};
 
 export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChatScreenProps) {
   const repositories = useRepositories();
+  const { defaultKundliProfile } = useProfile();
+  
+  const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
+  const [profiles, setProfiles] = useState<KundliProfile[]>([]);
+  const [isProfileSwitcherOpen, setIsProfileSwitcherOpen] = useState(false);
+  
   const [profileData, setProfileData] = useState<UserProfile | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [currentConvId, setCurrentConvId] = useState<string>('');
   const [currentTopic, setCurrentTopic] = useState<string>('General Guidance');
+  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const autoAnalysisTriggeredRef = useRef(false);
+
+  // Image attachment state
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5242880) {
+        alert('File size exceeds the 5MB limit.');
+        return;
+      }
+      setSelectedImage(file);
+      setImagePreviewUrl(URL.createObjectURL(file));
+    }
+    if (e.target) e.target.value = '';
+  };
+
+  const clearImageSelection = () => {
+    setSelectedImage(null);
+    if (imagePreviewUrl) {
+      URL.revokeObjectURL(imagePreviewUrl);
+      setImagePreviewUrl(null);
+    }
+  };
 
   // PDF modal state for progress
   const [pdfModalState, setPdfModalState] = useState<'idle' | 'generating' | 'ready'>('idle');
   const [pdfUrls, setPdfUrls] = useState<{ blobUrl: string; base64: string } | null>(null);
 
+  const [loadingError, setLoadingError] = useState<string | null>(null);
+
   const handleDownloadPdf = async () => {
-    // Look for active generated Kundli
     const profile = profileData as any;
-    const activeKundli = getSavedKundli(profile?.name || 'Shreshth') || generateKundli(profile || {
-      name: 'Shreshth',
-      gender: 'male',
-      dob: '1995-10-15',
-      tob: '10:30',
-      state: 'Uttar Pradesh',
-      district: 'Varanasi',
-      city: 'Varanasi'
-    });
+    if (!profile?.id) return;
     
     setPdfModalState('generating');
     try {
+      const [chart, dasha] = await Promise.all([
+        AstrologyApi.getKundli(profile.id),
+        AstrologyApi.getDasha(profile.id).catch(() => null)
+      ]);
+      const dosha = null;
+      const yoga = null;
+      const detailedReport = null;
+
+      const bd = getProfileBirthDetails(profile);
+      const activeKundli: KundliPdfPayload = {
+        birthDetails: {
+          name: profile.name || 'Kundli Report',
+          ...bd
+        },
+        chart,
+        dasha,
+        dosha,
+        yoga,
+        detailedReport,
+        generatedAt: new Date().toLocaleDateString()
+      };
+
       const result = await generateKundliPdf(activeKundli);
       setPdfUrls({
         blobUrl: result.pdfBlobUrl,
@@ -98,61 +154,119 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
     }
   };
 
-  // Load profile data and initialize chat
+  // Fetch profiles for switcher
   useEffect(() => {
-    const loadAndInit = async () => {
-      // 1. Get user first name
-      const profile = await repositories.profile.getProfile();
-      setProfileData(profile);
-      // 2. Determine if loading existing conversation or creating new
-    const historyList = chatStorage.getAiHistory() as SavedConversation[];
+    repositories.kundliProfile.getAllProfiles()
+      .then(setProfiles)
+      .catch(console.error);
+  }, [repositories.kundliProfile]);
 
-    const { conversationId, initialQuery, serviceContext } = routeParams || {};
-
-    const getFormattedTime = () => {
-      return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    };
-
-    if (conversationId) {
-      // Load existing conversation
-      const existing = historyList.find(c => c.id === conversationId);
-      if (existing) {
-        setMessages(existing.messages || []);
-        setCurrentConvId(existing.id);
-        setCurrentTopic(existing.topic);
-        return;
-      }
+  // Set active profile ID once on mount
+  useEffect(() => {
+    if (!activeProfileId) {
+      const initialId = routeParams?.profileId || defaultKundliProfile?.id;
+      if (initialId) setActiveProfileId(initialId);
     }
+  }, [routeParams?.profileId, defaultKundliProfile?.id, activeProfileId]);
 
-    // Otherwise, create a new conversation
-    const newId = `nova-session-${Date.now()}`;
-    const topic = serviceContext || (initialQuery ? 'Custom Query' : 'General Guidance');
-    setCurrentConvId(newId);
-    setCurrentTopic(topic);
+  const isChatInitialized = useRef(false);
+
+  // 1. Fetch Profile Data when activeProfileId changes
+  useEffect(() => {
+    if (!activeProfileId) return;
+    repositories.kundliProfile.getProfileById(activeProfileId)
+      .then(profile => {
+        if (profile && profile.name) {
+          setProfileData(profile as any);
+        } else if (!isChatInitialized.current) {
+          setLoadingError('The selected profile is unavailable, incomplete, or unauthorized.');
+        }
+      })
+      .catch(() => {
+        if (!isChatInitialized.current) setLoadingError('Failed to load profile.');
+      });
+  }, [activeProfileId, repositories.kundliProfile]);
+
+  // 2. Initialize chat (only once per mount)
+  useEffect(() => {
+    if (!activeProfileId) return;
+    if (isChatInitialized.current) return;
+
+    const loadAndInit = async () => {
+      isChatInitialized.current = true;
+      const { conversationId, initialQuery, serviceContext, profileBId, initialIntent, forceNew } = routeParams || {};
+
+      const profile = await repositories.kundliProfile.getProfileById(activeProfileId).catch(() => null);
+      if (!profile || !profile.name) return;
+
+      const profileName = profile.name.trim();
+
+      // Determine topic early to fix TDZ bug
+      const topic = serviceContext || (initialQuery ? 'Custom Query' : initialIntent === 'explain-compatibility' ? 'Kundli Matching Analysis' : 'General Guidance');
+
+      // 2. Determine if loading existing conversation or creating new
+      const historyList = chatStorage.getAiHistory();
+
+      const getFormattedTime = () => {
+        return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      };
+
+      if (conversationId) {
+        // Load existing conversation, ensuring it belongs to the active profile.
+        // Match by conversationId first; if profile differs, still load but tagged to profile.
+        const existing = historyList.find(c => c.id === conversationId);
+        if (existing) {
+          setMessages(existing.messages || []);
+          setCurrentConvId(existing.id);
+          setCurrentTopic(existing.topic);
+          // Do NOT trigger auto-analysis when loading an existing conversation.
+          autoAnalysisTriggeredRef.current = true;
+          return;
+        }
+      } else if (!forceNew) {
+        // Find if this profile already has an active Nova session for this topic
+        const existingForProfile = historyList.find(c => c.profileId === profile.id && c.kind === 'nova' && c.topic === topic);
+        if (existingForProfile) {
+          setMessages(existingForProfile.messages || []);
+          setCurrentConvId(existingForProfile.id);
+          setCurrentTopic(existingForProfile.topic);
+          // Do NOT trigger auto-analysis when resuming an existing session.
+          autoAnalysisTriggeredRef.current = true;
+          return;
+        }
+      }
+
+      // Otherwise, create a new conversation
+      const newId = `nova-session-${Date.now()}`;
+      setCurrentConvId(newId);
+      setCurrentTopic(topic);
 
     const initializeNewChat = async () => {
       let initialMsgs: Message[] = [];
 
-      if (initialQuery) {
-        // User came with a search question
+      // Handle matching-analysis auto-analysis
+      if (initialIntent === 'explain-compatibility' && profileBId && !autoAnalysisTriggeredRef.current) {
+        autoAnalysisTriggeredRef.current = true;
+        const autoQuery = 'Explain this calculated Kundli matching result.';
         const userMsg: Message = {
-          id: `user-first-${Date.now()}`,
-          text: initialQuery,
+          id: `user-auto-${Date.now()}`,
+          text: autoQuery,
           sender: 'user',
-          time: getFormattedTime()
+          time: getFormattedTime(),
+          type: 'text'
         };
         initialMsgs = [userMsg];
         setMessages(initialMsgs);
-        
-        // Request a real Gemini response through the authenticated server API.
+
         setIsTyping(true);
         try {
-          const responseTexts = await requestNovaResponse(initialMsgs, profile);
+          const responseTexts = await requestNovaResponse(initialMsgs, profile.id, profileBId, routeParams?.compatibilityContext);
           const aiMessages = responseTexts.map((text, index): Message => ({
-            id: `nova-resp-${Date.now()}-${index}`,
+            id: `nova-matching-${Date.now()}-${index}`,
             text,
             sender: 'nova',
             time: getFormattedTime(),
+            type: 'text'
           }));
           const finalMsgs = [...initialMsgs, ...aiMessages];
           setMessages(finalMsgs);
@@ -161,101 +275,125 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
           const errorMessage: Message = {
             id: `nova-error-${Date.now()}`,
             text: error instanceof Error ? error.message : 'Nova AI se connection nahi ho paaya.',
+            sender: 'system',
+            time: getFormattedTime(),
+            type: 'system'
+          };
+          setMessages([...initialMsgs, errorMessage]);
+        } finally {
+          setIsTyping(false);
+        }
+        return;
+      }
+
+      if (initialQuery) {
+        // User came with a search question
+        const userMsg: Message = {
+          id: `user-first-${Date.now()}`,
+          text: initialQuery,
+          sender: 'user',
+          time: getFormattedTime(),
+          type: 'text'
+        };
+        initialMsgs = [userMsg];
+        setMessages(initialMsgs);
+        
+        // Request a real Gemini response through the authenticated server API.
+        setIsTyping(true);
+        try {
+          const responseTexts = await requestNovaResponse(initialMsgs, profile.id);
+          const aiMessages = responseTexts.map((text, index): Message => ({
+            id: `nova-resp-${Date.now()}-${index}`,
+            text,
             sender: 'nova',
             time: getFormattedTime(),
+            type: 'text'
+          }));
+          const finalMsgs = [...initialMsgs, ...aiMessages];
+          setMessages(finalMsgs);
+          saveToHistory(newId, topic, finalMsgs);
+        } catch (error) {
+          const errorMessage: Message = {
+            id: `nova-error-${Date.now()}`,
+            text: error instanceof Error ? error.message : 'Nova AI se connection nahi ho paaya.',
+            sender: 'system',
+            time: getFormattedTime(),
+            type: 'system'
           };
           setMessages([...initialMsgs, errorMessage]);
         } finally {
           setIsTyping(false);
         }
       } else {
-        // Get actual profile data (already fetched)
-        const activeProfileData = profile;
-        const profileName = activeProfileData?.name || 'Shreshth';
-
         setIsTyping(true);
         await new Promise(resolve => setTimeout(resolve, 800));
 
-        // Check if Kundli is already cached/saved
-        const savedKundli = getSavedKundli(profileName);
+        // Fresh loading flow with real backend:
+        const greetMsg: Message = {
+          id: `greet-${Date.now()}`,
+          text: `Radhe Radhe, ${profileName} Ji. Main aapki janam kundli taiyar kar raha hoon.`,
+          sender: 'nova',
+          time: getFormattedTime(),
+          type: 'text'
+        };
 
-        if (savedKundli) {
-          // Cached flow: Send direct message & show card immediately without loading process
-          const greetMsg: Message = {
-            id: `greet-${Date.now()}`,
-            text: `Radhe Radhe, ${profileName} Ji. Aapki Kundli pehle se taiyar hai.`,
-            sender: 'nova',
-            time: getFormattedTime(),
-            type: 'text'
-          };
-          
-          setMessages([greetMsg]);
-          setIsTyping(true);
-          await new Promise(resolve => setTimeout(resolve, 800));
+        setMessages([greetMsg]);
+        
+        // Wait and then show the loading message card
+        setIsTyping(true);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        setIsTyping(false);
 
-          const cardMsg: Message = {
-            id: `kundli-card-${Date.now()}`,
-            sender: 'nova',
-            time: getFormattedTime(),
-            type: 'kundli-card',
-            kundliData: savedKundli
-          };
+        const loadingMsgId = `loading-${Date.now()}`;
+        const loadingMsg: Message = {
+          id: loadingMsgId,
+          sender: 'nova',
+          time: getFormattedTime(),
+          type: 'kundli-loading',
+          kundliLoadingStep: 1
+        };
 
-          const finalMsgs = [greetMsg, cardMsg];
-          setMessages(finalMsgs);
-          saveToHistory(newId, topic, finalMsgs);
-          setIsTyping(false);
-        } else {
-          // Fresh loading flow:
-          const greetMsg: Message = {
-            id: `greet-${Date.now()}`,
-            text: `Radhe Radhe, ${profileName} Ji. Main aapki janam kundli taiyar kar raha hoon.`,
-            sender: 'nova',
-            time: getFormattedTime(),
-            type: 'text'
-          };
+        setMessages(prev => [...prev, loadingMsg]);
 
-          setMessages([greetMsg]);
-          
-          // Wait and then show the loading message card
-          setIsTyping(true);
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          setIsTyping(false);
+        try {
+          if (!profile?.id) throw new Error("No profile selected");
 
-          const loadingMsgId = `loading-${Date.now()}`;
-          const loadingMsg: Message = {
-            id: loadingMsgId,
-            sender: 'nova',
-            time: getFormattedTime(),
-            type: 'kundli-loading',
-            kundliLoadingStep: 1
-          };
-
-          setMessages(prev => [...prev, loadingMsg]);
+          // Start fetching from real backend API
+          const fetchPromise = Promise.all([
+            AstrologyApi.getKundli(profile.id),
+            AstrologyApi.getDasha(profile.id).catch(() => null)
+          ]);
 
           // Step 1: Reading birth details…
-          await new Promise(resolve => setTimeout(resolve, 800));
+          await new Promise(resolve => setTimeout(resolve, 300));
           setMessages(prev => prev.map(m => m.id === loadingMsgId ? { ...m, kundliLoadingStep: 2 } : m));
 
-          // Step 2: Calculating planetary positions…
-          await new Promise(resolve => setTimeout(resolve, 800));
+          // Wait for API calls to complete to simulate step 2
+          const [chart, dasha] = await fetchPromise;
+          const dosha = null;
+          const yoga = null;
+          const detailedReport = null;
+
+          // Step 2 -> 3 Transition: Preparing your Kundli chart…
           setMessages(prev => prev.map(m => m.id === loadingMsgId ? { ...m, kundliLoadingStep: 3 } : m));
+          await new Promise(resolve => setTimeout(resolve, 300));
 
-          // Step 3: Preparing your Kundli chart…
-          await new Promise(resolve => setTimeout(resolve, 800));
-
-          // Generate real Kundli using saved profile
-          const activeProfile = activeProfileData || {
-            name: 'Shreshth',
-            gender: 'male',
-            dob: '1995-10-15',
-            tob: '10:30',
-            state: 'Uttar Pradesh',
-            district: 'Varanasi',
-            city: 'Varanasi'
+          const bd = getProfileBirthDetails(profile);
+          const freshKundli: KundliPdfPayload = {
+            birthDetails: {
+              name: profile.name,
+              ...bd
+            },
+            chart,
+            dasha,
+            dosha,
+            yoga,
+            detailedReport,
+            generatedAt: new Date().toLocaleDateString()
           };
-          const freshKundli = generateKundli(activeProfile);
-          saveKundliData(freshKundli);
+
+          // UI transition delay
+          await new Promise(resolve => setTimeout(resolve, 200));
 
           // Replace loading message with rich card attachment
           setMessages(prev => {
@@ -271,24 +409,38 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
             saveToHistory(newId, topic, updated);
             return updated;
           });
-
-          setIsTyping(false);
+        } catch (error) {
+           console.error("Kundli generation failed", error);
+           setMessages(prev => {
+              const listWithoutLoading = prev.filter(m => m.id !== loadingMsgId);
+              return [...listWithoutLoading, {
+                id: `error-${Date.now()}`,
+                text: "Kshama karein, aapki kundli banate samay kuch dikkat aayi. Kripya thodi der baad prayas karein.",
+                sender: 'system',
+                time: getFormattedTime(),
+                type: 'system'
+              }];
+           });
         }
+
+        setIsTyping(false);
       }
     };
 
     initializeNewChat();
     };
+
+    setLoadingError(null);
     loadAndInit();
-  }, [routeParams, repositories.profile]);
+  }, [activeProfileId, routeParams?.conversationId, routeParams?.initialQuery, routeParams?.serviceContext, routeParams?.initialIntent, repositories.kundliProfile]);
 
   // Scroll to bottom whenever messages list updates
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView?.({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
   const saveToHistory = (id: string, topic: string, currentMsgs: Message[]) => {
-    let historyList = chatStorage.getAiHistory() as SavedConversation[];
+    let historyList = chatStorage.getAiHistory();
 
     const shortTimestamp = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
     const lastMsg = currentMsgs[currentMsgs.length - 1];
@@ -300,49 +452,56 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
         ...historyList[existingIndex],
         lastMessage: lastMsgText,
         timestamp: shortTimestamp,
-        messages: currentMsgs
+        messages: currentMsgs,
+        profileId: profileData?.id
       };
     } else {
-      const newConv: SavedConversation = {
+      const newConv: AiChatThread = {
         id,
         kind: 'nova',
         topic,
         lastMessage: lastMsgText,
         timestamp: shortTimestamp,
-        messages: currentMsgs
+        messages: currentMsgs,
+        profileId: profileData?.id
       };
       historyList = [newConv, ...historyList];
     }
 
-    chatStorage.saveAiHistory(historyList as import('../types/chat').AiChatThread[]);
+    chatStorage.saveAiHistory(historyList);
   };
 
   const getFormattedTime = () => {
     return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  const requestNovaResponse = async (conversation: Message[], profile: UserProfile | null) => {
-    const result = await postAiRequest<{ texts: string[] }>('/api/chat', {
+  const requestNovaResponse = async (conversation: Message[], profileId: string, profileBId?: string, compatibilityContext?: NormalizedCompatibilityContext) => {
+    const result = await postAiRequest<{ texts: string[], suggestions?: string[] }>('/api/chat', {
       messages: conversation
-        .filter(message => message.type === 'text' || !message.type)
-        .filter(message => Boolean(message.text))
-        .map(message => ({ sender: message.sender, text: message.text })),
-      userProfile: profile,
+        .filter(message => message.text || message.attachmentUrl)
+        .map(message => ({ sender: message.sender, text: message.text || '', attachmentUrl: message.attachmentUrl })),
+      profileId: profileId,
+      profileBId: profileBId || routeParams?.profileBId,
+      sessionId: currentConvId,
+      compatibilityContext: compatibilityContext || routeParams?.compatibilityContext,
     });
     if (!Array.isArray(result.texts) || result.texts.length === 0) {
       throw new Error('Nova AI ne empty response diya. Kripya dobara try karein.');
     }
+    setAiSuggestions(result.suggestions || []);
     return result.texts;
   };
 
   const handleSelectChip = async (chipText: string) => {
     if (isTyping) return;
+    setAiSuggestions([]);
 
     const userMsg: Message = {
       id: `msg-${Date.now()}`,
       text: chipText,
       sender: 'user',
-      time: getFormattedTime()
+      time: getFormattedTime(),
+      type: 'text'
     };
 
     const newMsgsList = [...messages, userMsg];
@@ -352,12 +511,13 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
     // Request a real Gemini response.
     setIsTyping(true);
     try {
-      const responseTexts = await requestNovaResponse(newMsgsList, profileData);
+      const responseTexts = await requestNovaResponse(newMsgsList, profileData?.id || '');
       const aiMessages = responseTexts.map((text, index): Message => ({
         id: `ai-${Date.now()}-${index}`,
         text,
         sender: 'nova',
         time: getFormattedTime(),
+        type: 'text'
       }));
       const finalMsgs = [...newMsgsList, ...aiMessages];
       setMessages(finalMsgs);
@@ -366,12 +526,14 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
       const errorMessage: Message = {
         id: `ai-error-${Date.now()}`,
         text: error instanceof Error ? error.message : 'Nova AI se connection nahi ho paaya.',
-        sender: 'nova',
+        sender: 'system',
         time: getFormattedTime(),
+        type: 'system'
       };
+      // For system errors, append them but don't persist them to backend history so users can naturally retry
       const finalMsgs = [...newMsgsList, errorMessage];
       setMessages(finalMsgs);
-      saveToHistory(currentConvId, currentTopic, finalMsgs);
+      // We explicitly DO NOT call saveToHistory for error messages so that the retry context remains clean
     } finally {
       setIsTyping(false);
     }
@@ -379,16 +541,71 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputText.trim() || isTyping) return;
+    if ((!inputText.trim() && !selectedImage) || isTyping || isUploading) return;
+    setAiSuggestions([]);
+
+    let attachmentUrl: string | undefined = undefined;
+
+    if (selectedImage) {
+      setIsUploading(true);
+      try {
+        const compressImage = (file: File): Promise<string> => {
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = (event) => {
+              const img = new Image();
+              img.src = event.target?.result as string;
+              img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const MAX_WIDTH = 1024;
+                const MAX_HEIGHT = 1024;
+                let width = img.width;
+                let height = img.height;
+
+                if (width > height) {
+                  if (width > MAX_WIDTH) {
+                    height *= MAX_WIDTH / width;
+                    width = MAX_WIDTH;
+                  }
+                } else {
+                  if (height > MAX_HEIGHT) {
+                    width *= MAX_HEIGHT / height;
+                    height = MAX_HEIGHT;
+                  }
+                }
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx?.drawImage(img, 0, 0, width, height);
+                resolve(canvas.toDataURL('image/jpeg', 0.8));
+              };
+              img.onerror = (e) => reject(e);
+            };
+            reader.onerror = (e) => reject(e);
+          });
+        };
+        attachmentUrl = await compressImage(selectedImage);
+      } catch (err) {
+        console.error('Image compression failed', err);
+        alert('Image processing failed. Please try a different image.');
+        setIsUploading(false);
+        return;
+      }
+      setIsUploading(false);
+    }
 
     const userText = inputText.trim();
     setInputText('');
+    clearImageSelection();
 
     const userMsg: Message = {
       id: `msg-${Date.now()}`,
       text: userText,
       sender: 'user',
-      time: getFormattedTime()
+      time: getFormattedTime(),
+      type: attachmentUrl ? 'image' : 'text',
+      attachmentUrl
     };
 
     const newMsgsList = [...messages, userMsg];
@@ -398,12 +615,13 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
     // Request a real Gemini response.
     setIsTyping(true);
     try {
-      const responseTexts = await requestNovaResponse(newMsgsList, profileData);
+      const responseTexts = await requestNovaResponse(newMsgsList, profileData?.id || '');
       const aiMessages = responseTexts.map((text, index): Message => ({
         id: `ai-${Date.now()}-${index}`,
         text,
         sender: 'nova',
         time: getFormattedTime(),
+        type: 'text'
       }));
       const finalMsgs = [...newMsgsList, ...aiMessages];
       setMessages(finalMsgs);
@@ -412,12 +630,14 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
       const errorMessage: Message = {
         id: `ai-error-${Date.now()}`,
         text: error instanceof Error ? error.message : 'Nova AI se connection nahi ho paaya.',
-        sender: 'nova',
+        sender: 'system',
         time: getFormattedTime(),
+        type: 'system'
       };
+      // For system errors, append them but don't persist them to backend history so users can naturally retry
       const finalMsgs = [...newMsgsList, errorMessage];
       setMessages(finalMsgs);
-      saveToHistory(currentConvId, currentTopic, finalMsgs);
+      // We explicitly DO NOT call saveToHistory for error messages so that the retry context remains clean
     } finally {
       setIsTyping(false);
     }
@@ -440,61 +660,110 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
       <CelestialChatBackground />
 
       {/* Top Header */}
-      <div className="bg-[#FFFFFF]/85 backdrop-blur-md px-[16px] sm:px-[20px] pt-[max(16px,env(safe-area-inset-top))] sm:pt-[24px] pb-[16px] shadow-[0_2px_12px_rgba(0,0,0,0.02)] z-20 flex items-center justify-between border-b border-[#F3F4F6] relative">
+      <div className="bg-[#FFFFFF] px-[16px] sm:px-[20px] pt-[max(16px,env(safe-area-inset-top))] pb-[12px] z-20 flex items-center justify-between border-b border-[#F1F1F1] relative shrink-0">
         <div className="flex items-center">
           <button 
-            onClick={() => onNavigate('nova-ai')}
-            className="p-[8px] -ml-[8px] mr-[6px] rounded-full hover:bg-gray-50 active:bg-gray-100 transition-colors text-[#111827]"
+            onClick={() => {
+              if (routeParams?.mode === 'matching') {
+                onNavigate('nova-kundli', { mode: 'matching', returnTo: 'home' });
+              } else {
+                onNavigate('nova-ai');
+              }
+            }}
+            className="p-[8px] -ml-[8px] mr-[8px] sm:mr-[12px] rounded-full hover:bg-neutral-50 active:bg-neutral-100 transition-colors text-[#111827]"
           >
             <ArrowLeft size={22} strokeWidth={2.5} />
           </button>
 
-          <div className="flex items-center space-x-[12px]">
-            <div className="relative">
-              {/* Premium Crystal Orb Icon representing the AI Astrologer */}
-              <div className="w-[42px] h-[42px] rounded-full bg-gradient-to-tr from-[#FF8A00] to-[#FFA733] text-white flex items-center justify-center shadow-[0_3px_12px_rgba(255,138,0,0.2)]">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="w-[20px] h-[20px]">
-                  <circle cx="12" cy="12" r="5.2" fill="currentColor" fillOpacity="0.25" stroke="currentColor" strokeWidth="1.8" />
-                  <ellipse cx="12" cy="12" rx="9" ry="2.8" stroke="currentColor" strokeWidth="1.5" transform="rotate(-30 12 12)" />
-                  <circle cx="12" cy="4.5" r="0.8" fill="currentColor" />
-                  <circle cx="12" cy="19.5" r="0.8" fill="currentColor" />
-                </svg>
+          <div className="flex items-center space-x-[10px]">
+            <div className="relative flex-shrink-0">
+              <div className="w-[44px] h-[44px] sm:w-[48px] sm:h-[48px] rounded-full overflow-hidden border-[1.5px] border-[#FF8A00] flex items-center justify-center bg-neutral-50">
+                <img 
+                  src="/nova-ai-avatar.png" 
+                  alt="Nova AI" 
+                  className="w-full h-full object-cover object-center"
+                />
               </div>
-              <div className="absolute bottom-[0px] right-[0px] w-[9px] h-[9px] bg-[#10B981] border-2 border-[#FFFFFF] rounded-full" />
+              <div className="absolute bottom-[0px] right-[2px] w-[10px] h-[10px] bg-[#10B981] border-2 border-[#FFFFFF] rounded-full" />
             </div>
             
-            <div className="flex flex-col">
+            <div className="flex flex-col justify-center">
               <div className="flex items-center space-x-1">
-                <h2 className="text-[15.5px] font-[850] text-[#111827] leading-[1.2] tracking-tight">Nova AI</h2>
-                <Sparkles size={11.5} className="text-[#FF8A00] fill-[#FF8A00]" />
+                <h2 className="text-[16px] sm:text-[17px] font-semibold text-[#111827] leading-tight truncate">Nova AI ✨</h2>
               </div>
-              <div className="text-[11.5px] text-[#6B7280] font-semibold leading-[1.3] mt-[1.5px]">Personal AI Astrologer</div>
+              <div 
+                className="flex items-center space-x-1 mt-[2px] cursor-pointer"
+                onClick={() => setIsProfileSwitcherOpen(true)}
+              >
+                <div className="text-[12px] sm:text-[13px] text-[#6B7280] leading-tight truncate max-w-[140px]">
+                  Kundli • {profileData?.name ? profileData.name : 'Shreshth GPT'}
+                </div>
+                <ChevronDown size={11} className="text-[#6B7280]" />
+              </div>
             </div>
           </div>
         </div>
 
         {/* Right Header Controls (Compact) */}
-        <div className="flex items-center space-x-[12px] text-neutral-400">
+        <div className="flex items-center text-neutral-400 pl-[8px]">
           <button 
             onClick={() => onNavigate('chat-history')}
-            className="p-2 rounded-full hover:bg-neutral-50 active:bg-neutral-100 transition-colors focus:outline-none"
+            className="p-[8px] -mr-[8px] rounded-full hover:bg-neutral-50 active:bg-neutral-100 transition-colors focus:outline-none"
           >
-            <History size={19} strokeWidth={2.2} />
-          </button>
-          <button className="p-2 rounded-full hover:bg-neutral-50 active:bg-neutral-100 transition-colors focus:outline-none opacity-80">
-            <MoreVertical size={19} strokeWidth={2.2} />
+            <History size={20} strokeWidth={2.2} />
           </button>
         </div>
       </div>
 
       {/* Chat Messages Scrolling Area */}
       <div className="flex-1 overflow-y-auto px-[20px] pt-4 pb-[24px] z-10 flex flex-col no-scrollbar">
-        {/* Today Header Marker */}
-        <div className="flex items-center w-full justify-center space-x-[12px] mb-6 pt-1">
-          <div className="w-[18px] h-[1px] bg-neutral-200/60" />
-          <span className="text-[10.5px] font-[700] text-neutral-400 uppercase tracking-widest">Personal consultation</span>
-          <div className="w-[18px] h-[1px] bg-neutral-200/60" />
-        </div>
+        {loadingError ? (
+          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-4">
+            <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center text-red-500 mb-2">
+              <Shield size={32} />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900">Profile Required</h3>
+            <p className="text-sm text-gray-500">{loadingError}</p>
+            <button 
+              onClick={() => onNavigate('nova-ai')}
+              className="mt-6 px-6 py-2.5 bg-[#FF8A00] text-white rounded-xl text-sm font-bold hover:bg-[#E97700] transition-colors"
+            >
+              Select Profile
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* Today Header Marker */}
+            <div className="flex items-center w-full justify-center space-x-[12px] mb-6 pt-1">
+              <div className="w-[18px] h-[1px] bg-neutral-200/60" />
+              <span className="text-[10.5px] font-[700] text-neutral-400 uppercase tracking-widest">Personal consultation</span>
+              <div className="w-[18px] h-[1px] bg-neutral-200/60" />
+            </div>
+
+            {routeParams?.initialIntent === 'explain-compatibility' && routeParams?.compatibilityContext && (
+              <div className="mb-6 bg-white border border-[#FF8A00]/20 rounded-[20px] p-4 shadow-[0_4px_20px_rgba(255,138,0,0.05)]">
+                <div className="flex items-center justify-between mb-3 border-b border-[#F1EFE9] pb-3">
+                  <div className="flex items-center space-x-2 text-[#FF8A00]">
+                    <Heart size={16} className="fill-[#FF8A00]/20" />
+                    <span className="text-[13px] font-[800] uppercase tracking-wide">Kundli Matching</span>
+                  </div>
+                  <div className="text-[15px] font-[850] text-[#111827]">
+                    {routeParams.compatibilityContext.totalScore.toFixed(1)} <span className="text-neutral-400 text-[12px]">/ {routeParams.compatibilityContext.maximumScore}</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-center space-x-4">
+                  <div className="flex-1 text-center font-bold text-[#111827] truncate">
+                    {profileData?.name || 'Profile A'}
+                  </div>
+                  <div className="w-8 h-8 rounded-full bg-neutral-50 flex items-center justify-center text-neutral-300">
+                    <Heart size={14} className="fill-neutral-200" />
+                  </div>
+                  <div className="flex-1 text-center font-bold text-[#111827] truncate">
+                    Partner
+                  </div>
+                </div>
+              </div>
+            )}
 
         <div className="flex flex-col space-y-[16px] flex-1">
           <AnimatePresence initial={false}>
@@ -556,7 +825,7 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
                   >
                     <KundliPreviewMessage 
                       data={msg.kundliData} 
-                      onViewComplete={() => onNavigate('nova-kundli', { kundliData: msg.kundliData })}
+                      onViewComplete={() => onNavigate('nova-kundli', { mode: 'kundli', profileId: msg.profileId, kundliData: msg.kundliData, returnTo: 'nova-ai-chat' })}
                       onDownloadPdf={handleDownloadPdf}
                     />
                   </motion.div>
@@ -575,12 +844,21 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
                     className={`max-w-[85%] sm:max-w-[75%] rounded-[20px] px-[16px] py-[12px] shadow-[0_1px_4px_rgba(0,0,0,0.015)] flex flex-col ${
                       msg.sender === 'user' 
                         ? 'bg-[#FF8A00] text-[#FFFFFF] rounded-tr-[4px]' 
-                        : 'bg-[#FFFFFF] border border-[#F1EFE9] text-[#111827] rounded-tl-[4px]'
+                        : msg.sender === 'system'
+                          ? 'bg-[#FEF2F2] border border-[#FCA5A5] text-[#991B1B] rounded-tl-[4px]'
+                          : 'bg-[#FFFFFF] border border-[#F1EFE9] text-[#111827] rounded-tl-[4px]'
                     }`}
                   >
-                    <div className="text-[13.5px] sm:text-[14px] leading-[1.6] whitespace-pre-wrap font-medium">
-                      {msg.text}
-                    </div>
+                    {msg.attachmentUrl && (
+                      <div className="mb-2 rounded-xl overflow-hidden border border-[#F3F4F6]/20 bg-black/5">
+                        <img src={msg.attachmentUrl} alt="Attachment" className="max-w-full h-auto object-cover max-h-[300px]" />
+                      </div>
+                    )}
+                    {msg.text && (
+                      <div className="text-[13.5px] sm:text-[14px] leading-[1.6] whitespace-pre-wrap font-medium">
+                        {msg.text}
+                      </div>
+                    )}
                     <span className={`text-[9.5px] font-bold mt-[6px] self-end tracking-wide ${
                       msg.sender === 'user' ? 'text-[#FFFFFF]/75' : 'text-[#9CA3AF]'
                     }`}>
@@ -608,10 +886,26 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
           </AnimatePresence>
           <div ref={messagesEndRef} className="h-[2px]" />
         </div>
+        </>
+        )}
       </div>
 
 
-      {showChips && (
+      {aiSuggestions.length > 0 ? (
+        <div className="bg-[#FFFFFF]/85 backdrop-blur-md border-t border-[#F3F4F6]/50 px-[20px] py-[10px] z-20 flex space-x-[8px] overflow-x-auto no-scrollbar scroll-smooth">
+          {aiSuggestions.map((suggestion, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => handleSelectChip(suggestion)}
+              disabled={isTyping}
+              className="bg-[#FFFFFF] text-neutral-700 border border-[#EBE8E0] px-3.5 py-1.5 rounded-full text-[12px] font-[750] shadow-[0_2px_4px_rgba(0,0,0,0.02)] whitespace-nowrap flex items-center space-x-1.5 transition-all hover:border-[#FF8A00]/40 active:scale-95 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span>{suggestion}</span>
+            </button>
+          ))}
+        </div>
+      ) : showChips && (
         <div className="bg-[#FFFFFF]/85 backdrop-blur-md border-t border-[#F3F4F6]/50 px-[20px] py-[10px] z-20 flex space-x-[8px] overflow-x-auto no-scrollbar scroll-smooth">
           {[
             { label: '❤️ Love', text: '❤️ Tell me about my Love & Relationships compatibility according to my Kundli.' },
@@ -634,31 +928,75 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
       )}
 
       {/* Message Input Bar (Fixed bottom layout) */}
-      <div className="bg-[#FFFFFF] px-[20px] py-[12px] pb-[max(20px,env(safe-area-inset-bottom))] border-t border-[#F3F4F6] z-20 flex items-center space-x-[12px] shadow-[0_-4px_20px_rgba(0,0,0,0.01)] shrink-0">
-        <form onSubmit={handleSendMessage} className="flex-1 flex items-center bg-[#F9FAFB] border border-[#F3F4F6] rounded-[24px] pr-[6px] pl-[16px]">
-          <div className="text-neutral-400 mr-2.5 shrink-0">
-            <Sparkle size={16} strokeWidth={2.2} className="text-[#FF8A00]/80" />
+      <div className="relative bg-[#FFFFFF] px-[12px] sm:px-[16px] py-[12px] pb-[max(12px,env(safe-area-inset-bottom))] z-20 flex flex-col shrink-0">
+        <input 
+          type="file" 
+          ref={fileInputRef} 
+          onChange={handleImageSelect} 
+          accept="image/jpeg, image/png, image/webp" 
+          className="hidden" 
+        />
+        
+        {imagePreviewUrl && (
+          <div className="mb-3 flex items-start gap-3 rounded-xl border border-neutral-100 bg-neutral-50 p-2 mx-[4px]">
+            <div className="relative h-16 w-16 shrink-0 rounded-lg overflow-hidden border border-neutral-200">
+              <img src={imagePreviewUrl} alt="Preview" className="h-full w-full object-cover" />
+              <button
+                type="button"
+                onClick={clearImageSelection}
+                className="absolute -right-1 -top-1 bg-white rounded-full p-0.5 shadow-sm border border-neutral-200 text-neutral-500 hover:text-red-500 cursor-pointer"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="flex flex-1 flex-col justify-center h-16 text-xs text-neutral-500">
+              <span className="font-semibold text-neutral-700 truncate max-w-[200px]">{selectedImage?.name}</span>
+              <span>{(selectedImage?.size ? (selectedImage.size / 1024 / 1024).toFixed(2) : '0')} MB</span>
+            </div>
           </div>
-          <input 
-            type="text" 
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            placeholder="Ask Nova AI..." 
-            className="flex-1 bg-transparent border-none focus:outline-none text-[13.5px] sm:text-[14px] font-medium text-[#111827] placeholder:text-[#9CA3AF] h-[48px]"
-          />
-          
-          <button 
-            type="submit"
-            disabled={!inputText.trim() || isTyping}
-            className={`w-[36px] h-[36px] rounded-full flex items-center justify-center shrink-0 transition-all ${
-              inputText.trim() && !isTyping
-                ? 'bg-[#FF8A00] text-[#FFFFFF] shadow-[0_2px_8px_rgba(255,138,0,0.3)] active:scale-[0.96]' 
-                : 'bg-[#F3F4F6] text-[#9CA3AF]'
-            }`}
+        )}
+
+        <div className="flex items-center w-full">
+          <form 
+            onSubmit={handleSendMessage} 
+            className="flex-1 flex items-center bg-[#FFFFFF] border border-[#FF8A00]/30 focus-within:border-[#FF8A00]/60 rounded-[26px] pl-[16px] pr-[6px] min-h-[54px] shadow-[0_2px_12px_rgba(0,0,0,0.03)] transition-colors"
           >
-            <Send size={15} strokeWidth={2.5} className="ml-[2.5px]" />
-          </button>
-        </form>
+            <div className="text-[#FF8A00] mr-[10px] shrink-0">
+              <Sparkles size={18} strokeWidth={2} className="fill-[#FF8A00]/20" />
+            </div>
+            
+            <input 
+              type="text" 
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              placeholder="Ask Nova AI anything..." 
+              className="flex-1 bg-transparent border-none focus:outline-none text-[14px] sm:text-[15px] font-medium text-[#111827] placeholder:text-[#9CA3AF] h-[54px]"
+            />
+            
+            <div className="flex items-center shrink-0 space-x-[4px] ml-[4px]">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isTyping || isUploading}
+                className="text-neutral-400 p-[8px] hover:text-[#FF8A00] hover:bg-[#FF8A00]/10 rounded-full transition-colors disabled:opacity-50"
+              >
+                <Paperclip size={20} strokeWidth={2} />
+              </button>
+              
+              <button 
+                type="submit"
+                disabled={(!inputText.trim() && !selectedImage) || isTyping || isUploading}
+                className={`w-[42px] h-[42px] rounded-full flex items-center justify-center transition-all ${
+                  (inputText.trim() || selectedImage) && !isTyping && !isUploading
+                    ? 'bg-[#FF8A00] text-[#FFFFFF] shadow-[0_2px_8px_rgba(255,138,0,0.3)] active:scale-[0.96]' 
+                    : 'bg-[#F3F4F6] text-[#9CA3AF]'
+                }`}
+              >
+                <Send size={18} strokeWidth={2.5} className="ml-[2px]" />
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
 
       {/* PDF Generation Overlay Sheet */}
@@ -718,6 +1056,117 @@ export default function NovaAIChatScreen({ onNavigate, routeParams }: NovaAIChat
             </motion.div>
           </motion.div>
         )}
+
+      {/* Profile Switcher Sheet */}
+      <AnimatePresence>
+        {isProfileSwitcherOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-[#000000]/20 backdrop-blur-sm z-[200]"
+              onClick={() => setIsProfileSwitcherOpen(false)}
+            />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 220 }}
+              className="absolute bottom-0 left-0 right-0 bg-white rounded-t-[28px] pt-6 pb-8 px-5 z-[210] shadow-[0_-10px_40px_rgba(0,0,0,0.1)] flex flex-col max-h-[85vh]"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h3 className="text-xl font-[850] text-neutral-900 tracking-tight">Select Profile</h3>
+                  <p className="text-xs font-semibold text-neutral-500 mt-0.5">Switch Kundli context for AI Chat</p>
+                </div>
+                <button
+                  onClick={() => setIsProfileSwitcherOpen(false)}
+                  className="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-600 hover:bg-neutral-200 transition-colors focus:outline-none"
+                >
+                  <X size={18} strokeWidth={2.5} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto no-scrollbar space-y-3 pb-4">
+                {profiles.map((p) => {
+                  const isSelected = activeProfileId === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        if (activeProfileId !== p.id) {
+                          // Reset chat state completely for the new profile
+                          isChatInitialized.current = false;
+                          autoAnalysisTriggeredRef.current = false;
+                          setMessages([]);
+                          setAiSuggestions([]);
+                          setCurrentConvId('');
+                          setCurrentTopic('General Guidance');
+                          // Then switch profile — the useEffect will reinitialize
+                          setActiveProfileId(p.id);
+                        }
+                        setIsProfileSwitcherOpen(false);
+                      }}
+                      className={`w-full flex items-center p-4 rounded-2xl border transition-all ${
+                        isSelected 
+                          ? 'border-[#FF8A00] bg-[#FFF9E6] shadow-[0_2px_12px_rgba(255,138,0,0.1)]' 
+                          : 'border-neutral-200 bg-white hover:border-[#FF8A00]/40'
+                      } focus:outline-none text-left`}
+                    >
+                      <div className={`w-12 h-12 rounded-full flex items-center justify-center font-[850] text-lg mr-4 shrink-0 ${
+                        isSelected ? 'bg-[#FF8A00] text-white' : 'bg-neutral-100 text-neutral-500'
+                      }`}>
+                        {p.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center space-x-2">
+                          <h4 className={`text-base font-[800] truncate tracking-tight ${isSelected ? 'text-[#FF8A00]' : 'text-neutral-900'}`}>
+                            {p.name}
+                          </h4>
+                          {p.relation === 'self' && (
+                            <span className="px-2 py-0.5 rounded-md bg-[#10B981]/10 text-[#10B981] text-[10px] font-bold uppercase tracking-wider">
+                              Primary
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs font-semibold text-neutral-500 mt-1 truncate">
+                          {(() => {
+                            const bd = getProfileBirthDetails(p);
+                            const formattedDob = bd.dob 
+                              ? new Date(bd.dob).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+                              : 'Unknown DOB';
+                            return `${formattedDob} • ${bd.city || 'Unknown City'}`;
+                          })()}
+                        </p>
+                      </div>
+                      {isSelected && (
+                        <div className="shrink-0 ml-3">
+                          <CheckCircle2 size={20} className="text-[#FF8A00] fill-[#FF8A00]/20" strokeWidth={2.5} />
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="pt-4 mt-2 border-t border-neutral-100">
+                <button
+                  onClick={() => {
+                    setIsProfileSwitcherOpen(false);
+                    onNavigate('kundli-profile-form', { mode: 'create', fromScreen: 'nova-ai-chat' });
+                  }}
+                  className="w-full flex items-center justify-center p-4 rounded-2xl border-2 border-dashed border-neutral-300 bg-neutral-50 hover:bg-neutral-100 transition-colors focus:outline-none text-neutral-600"
+                >
+                  <Plus size={20} strokeWidth={2.5} className="mr-2" />
+                  <span className="font-[800] text-sm">Add New Profile</span>
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
       </AnimatePresence>
     </div>
   );

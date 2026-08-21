@@ -3,7 +3,10 @@ import walletRoutes from './wallet';
 import consultationRoutes from './consultation';
 import profileRoutes from './profile';
 import kundliRoutes from './kundli';
-
+import astrologerWorkspaceRoutes from './astrologer_workspace';
+import astrologyRoutes from './astrology';
+import homeRoutes from './home';
+import subscriptionRoutes from './subscriptions';
 
 const router = Router();
 
@@ -12,10 +15,13 @@ router.get('/health', (req, res) => {
   res.status(200).json({ status: 'success', message: 'API is healthy' });
 });
 
-
 router.use('/wallet', walletRoutes);
 router.use('/consultations', consultationRoutes);
 router.use('/profile', profileRoutes);
 router.use('/kundli-profiles', kundliRoutes);
+router.use('/astrologer-workspace', astrologerWorkspaceRoutes);
+router.use('/astrology', astrologyRoutes);
+router.use('/home', homeRoutes);
+router.use('/subscriptions', subscriptionRoutes);
 
 export default router;

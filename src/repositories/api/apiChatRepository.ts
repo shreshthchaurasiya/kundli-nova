@@ -8,9 +8,26 @@ export class ApiChatRepository implements IChatRepository {
     return await ApiClient.get<Message[]>(ENDPOINTS.CHAT.GET_MESSAGES(sessionId));
   }
 
-  async sendMessage(sessionId: string, text: string, clientMessageId: string): Promise<Message> {
+  async sendMessage(
+    sessionId: string,
+    text: string,
+    clientMessageId: string,
+    messageType: 'text' | 'image' = 'text',
+    attachmentUrl?: string
+  ): Promise<Message> {
     return await ApiClient.post<Message>(ENDPOINTS.CHAT.SEND_MESSAGE(sessionId), {
-      body: { text, client_message_id: clientMessageId },
+      body: { 
+        text, 
+        client_message_id: clientMessageId,
+        message_type: messageType,
+        attachment_url: attachmentUrl
+      },
+    });
+  }
+
+  async getUploadUrl(sessionId: string, mimeType: string, sizeBytes: number): Promise<{ signedUrl: string; token: string; path: string }> {
+    return await ApiClient.post<{ signedUrl: string; token: string; path: string }>(ENDPOINTS.CHAT.GET_UPLOAD_URL(sessionId), {
+      body: { mimeType, sizeBytes },
     });
   }
 }

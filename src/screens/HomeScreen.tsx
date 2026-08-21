@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Wallet, Search, Menu, X, ChevronRight, Phone, MessageCircle, Star, Sparkles, BookHeart, BookOpen, Compass, Sun, Map, ShieldCheck, HelpCircle, FileText, Share2, LogOut, Heart, Clock, SlidersHorizontal, SunMoon, LayoutGrid, Hash, Grid3x3, Languages, Plus, Zap, Briefcase, Palette, TrendingUp, Quote, History } from 'lucide-react';
+import { Search, Compass, Hash, Palette, ShieldAlert, Activity,  Menu, ChevronRight, Star, Sparkles, ShieldCheck, Heart, Clock, SlidersHorizontal, SunMoon, Plus, Zap, Briefcase, TrendingUp, Quote, History, Sun, RefreshCw, AlertCircle, AlertTriangle, User, Lock } from 'lucide-react';
 import { Screen, Astrologer } from '../types';
 import { useProfile } from '../contexts/ProfileContext';
 import { useWallet } from '../contexts/WalletContext';
 import { useAstrologerPartner } from '../features/astrologer';
+import { usePersonalizedHome } from '../hooks/usePersonalizedHome';
 
 interface HomeScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
@@ -19,21 +20,21 @@ const BANNERS = [
   },
   {
     id: 2,
-    image: 'https://i.ibb.co/SXjvqx2X/Gemini-Generated-Image-jorej9jorej9jore.png',
+    image: 'https://i.ibb.co/DPD1jY37/unnamed.png',
     isImageOnly: true
   }
 ];
 
 export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps) {
-  const { profile } = useProfile();
+  const { profile, activeProfileId } = useProfile();
   const { wallet } = useWallet();
   const { directory: astrologers, isLoadingDirectory } = useAstrologerPartner();
   const [currentBanner, setCurrentBanner] = useState(0);
-  // profileData removed
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const walletBalance = wallet.balance;
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [onlineCount, setOnlineCount] = useState<number>(327);
+  const { status: homeStatus, data: homeData, errorMessage, isProfileError, retry } = usePersonalizedHome();
 
   useEffect(() => {
     // profile is accessed from useProfile
@@ -94,8 +95,11 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
     ].join(':');
   };
 
-  const userName = profile?.name || 'Guest User';
+  const userName = homeData?.profile?.firstName || profile?.name?.split(' ')[0] || 'Guest User';
   const userPhone = profile?.phone || '+91 - Not provided';
+  const todayDate = homeData?.today?.formattedDate || '';
+  const todayWeekday = homeData?.today?.weekday || '';
+  const isHomeLoading = homeStatus === 'loading' || homeStatus === 'idle';
 
   // Stagger animation container
   const containerVariants = {
@@ -232,26 +236,6 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
             </div>
           </motion.div>
 
-          {/* Offer Countdown Strip */}
-          <motion.div
-            variants={itemVariants}
-            className="bg-[#FFFFFF] rounded-[16px] border border-[#F4A300]/20 shadow-[0_2px_10px_rgba(0,0,0,0.015)] px-4 py-2.5 flex items-center justify-between relative overflow-hidden"
-          >
-            {/* Soft decorative light gold gradient overlay */}
-            <div className="absolute inset-y-0 right-0 w-32 bg-gradient-to-l from-[#F4A300]/5 to-transparent pointer-events-none"></div>
-
-            <div className="flex items-center gap-2 relative z-10">
-              <Zap size={14} className="text-[#FF8A00] fill-[#FF8A00]/10" />
-              <span className="text-[12px] font-extrabold text-gray-900 tracking-wide">Special Welcome Offer Active</span>
-            </div>
-
-            <div className="flex items-center gap-1.5 shrink-0 bg-[#FFF9E6] border border-[#F4A300]/15 px-2.5 py-1 rounded-full relative z-10">
-              <span className="text-[9.5px] font-[800] text-[#D68B00] uppercase tracking-wider">Offer Ends In</span>
-              <span className="text-[12.5px] font-black text-gray-900 font-mono tracking-wider min-w-[64px] text-center">
-                {timeLeft === null ? '02:15:45' : timeLeft === 0 ? 'Offer Expired' : formatTime(timeLeft)}
-              </span>
-            </div>
-          </motion.div>
 
           {/* Quick Services Grid */}
           <motion.div
@@ -259,14 +243,15 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
             className="grid grid-cols-4 gap-[8px]"
           >
             {[
-              { icon: <img src="https://i.ibb.co/B5sjrYXW/image-removebg-preview-1.png" alt="Daily Horoscope" loading="eager" fetchPriority="high" draggable={false} onContextMenu={(e) => e.preventDefault()} className="w-full h-full object-cover scale-[1.3] select-none pointer-events-none transition-transform duration-300 group-hover:scale-[1.38]" />, bg: 'bg-gradient-to-br from-[#FFFBEB] to-[#F7E7C4]', borderColor: 'border-[#F7E7C4]/40', label: 'DAILY\nHOROSCOPE' },
-              { icon: <img src="https://i.ibb.co/N2z5f8Gh/image-removebg-preview-2.png" alt="Free Kundli" loading="eager" fetchPriority="high" draggable={false} onContextMenu={(e) => e.preventDefault()} className="w-full h-full object-cover scale-[1.3] select-none pointer-events-none transition-transform duration-300 group-hover:scale-[1.38]" />, bg: 'bg-gradient-to-br from-[#EFF6FF] to-[#D3E2F2]', borderColor: 'border-[#D3E2F2]/40', label: 'FREE\nKUNDLI' },
-              { icon: <img src="https://i.ibb.co/4nKbYhZw/image-removebg-preview-3.png" alt="Kundli Matching" loading="eager" fetchPriority="high" draggable={false} onContextMenu={(e) => e.preventDefault()} className="w-full h-full object-cover scale-[1.3] select-none pointer-events-none transition-transform duration-300 group-hover:scale-[1.38]" />, bg: 'bg-gradient-to-br from-[#FEF2FE] to-[#F5D6D6]', borderColor: 'border-[#F5D6D6]/40', label: 'KUNDLI\nMATCHING' },
-              { icon: <img src="https://i.ibb.co/sJRdZrtC/image-removebg-preview-4.png" alt="Numerology" loading="eager" fetchPriority="high" draggable={false} onContextMenu={(e) => e.preventDefault()} className="w-full h-full object-cover scale-[1.3] select-none pointer-events-none transition-transform duration-300 group-hover:scale-[1.38]" />, bg: 'bg-gradient-to-br from-[#FAF5FF] to-[#E2D6F5]', borderColor: 'border-[#E2D6F5]/40', label: 'NUMEROLOGY' },
+              { icon: <img src="https://i.ibb.co/B5sjrYXW/image-removebg-preview-1.png" alt="Daily Horoscope" loading="eager" fetchPriority="high" draggable={false} onContextMenu={(e) => e.preventDefault()} className="w-full h-full object-cover scale-[1.3] select-none pointer-events-none transition-transform duration-300 group-hover:scale-[1.38]" />, bg: 'bg-gradient-to-br from-[#FFFBEB] to-[#F7E7C4]', borderColor: 'border-[#F7E7C4]/40', label: 'DAILY\nHOROSCOPE', action: () => onNavigate('horoscope') },
+              { icon: <img src="https://i.ibb.co/N2z5f8Gh/image-removebg-preview-2.png" alt="Free Kundli" loading="eager" fetchPriority="high" draggable={false} onContextMenu={(e) => e.preventDefault()} className="w-full h-full object-cover scale-[1.3] select-none pointer-events-none transition-transform duration-300 group-hover:scale-[1.38]" />, bg: 'bg-gradient-to-br from-[#EFF6FF] to-[#D3E2F2]', borderColor: 'border-[#D3E2F2]/40', label: 'FREE\nKUNDLI', action: () => onNavigate('nova-kundli', { mode: 'kundli', returnTo: 'home' }) },
+              { icon: <img src="https://i.ibb.co/4nKbYhZw/image-removebg-preview-3.png" alt="Kundli Matching" loading="eager" fetchPriority="high" draggable={false} onContextMenu={(e) => e.preventDefault()} className="w-full h-full object-cover scale-[1.3] select-none pointer-events-none transition-transform duration-300 group-hover:scale-[1.38]" />, bg: 'bg-gradient-to-br from-[#FEF2FE] to-[#F5D6D6]', borderColor: 'border-[#F5D6D6]/40', label: 'KUNDLI\nMATCHING', action: () => onNavigate('nova-kundli', { mode: 'matching', returnTo: 'home' }) },
+              { icon: <img src="https://i.ibb.co/sJRdZrtC/image-removebg-preview-4.png" alt="Numerology" loading="eager" fetchPriority="high" draggable={false} onContextMenu={(e) => e.preventDefault()} className="w-full h-full object-cover scale-[1.3] select-none pointer-events-none transition-transform duration-300 group-hover:scale-[1.38]" />, bg: 'bg-gradient-to-br from-[#FAF5FF] to-[#E2D6F5]', borderColor: 'border-[#E2D6F5]/40', label: 'NUMEROLOGY', action: () => onNavigate('numerology') },
             ].map((item, i) => (
               <motion.div
                 key={i}
                 whileTap={{ scale: 0.95 }}
+                onClick={() => item.action?.()}
                 className={`flex flex-col items-center justify-start pt-[14px] pb-[10px] px-[2px] rounded-[20px] bg-[#FFFFFF] border ${item.borderColor} shadow-[0_4px_16px_rgba(0,0,0,0.015)] active:shadow-[0_2px_8px_rgba(0,0,0,0.01)] transition-all h-[118px] cursor-pointer group hover:border-[#FF8A00]/20`}
               >
                 <div className={`w-[54px] h-[54px] rounded-full ${item.bg} flex items-center justify-center overflow-hidden mb-[8px] shrink-0 shadow-inner`}>
@@ -419,149 +404,218 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
               {/* Header */}
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Good Morning, {userName} ✨</h3>
-                  <h2 className="text-[16px] font-extrabold text-gray-900">Today's Vedic Insights</h2>
+                  <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">
+                    {todayWeekday ? `${todayWeekday}, ` : ''}{todayDate || 'Today'} ✨
+                  </h3>
+                  <h2 className="text-[16px] font-extrabold text-gray-900">Good Morning, {userName}</h2>
                 </div>
                 <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#FFF4D6] to-[#FFF9E6] border border-[#F4A300]/20 flex items-center justify-center shrink-0 shadow-sm">
                   <Sparkles size={14} className="text-[#D68B00]" strokeWidth={1.5} />
                 </div>
               </div>
 
-              {/* Energy Summary Card (Top Highlight) */}
-              <div className="bg-gradient-to-br from-[#FFFDF9] to-[#FAFAFA] border border-[#F4A300]/15 rounded-[18px] p-3 shadow-[0_2px_12px_rgba(0,0,0,0.015)] mb-3 flex items-center justify-between gap-3">
-                <div className="flex-1">
-                  <span className="text-[10px] font-bold text-[#D68B00]/80 uppercase tracking-wider block mb-0.5">Cosmic Energy</span>
-                  <h4 className="text-[16px] font-extrabold text-gray-900 leading-tight">Highly Auspicious</h4>
-                  <p className="text-[11.5px] text-gray-500 mt-1 leading-relaxed">
-                    Your stars are aligning for a powerful, productive day.
-                  </p>
+              {/* Loading Skeleton */}
+              {isHomeLoading && (
+                <div className="space-y-3 animate-pulse">
+                  <div className="h-[80px] bg-gray-100 rounded-[18px]" />
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="h-[70px] bg-gray-100 rounded-[16px]" />
+                    <div className="h-[70px] bg-gray-100 rounded-[16px]" />
+                    <div className="h-[70px] bg-gray-100 rounded-[16px]" />
+                  </div>
+                  <div className="h-[44px] bg-gray-100 rounded-[14px]" />
                 </div>
+              )}
 
-                {/* Elegant Gauge Ring */}
-                <div className="relative w-[60px] h-[60px] flex items-center justify-center shrink-0">
-                  <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-                    <path
-                      className="text-[#FFF9E6]"
-                      strokeWidth="3.2"
-                      stroke="currentColor"
-                      fill="none"
-                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                    />
-                    <path
-                      className="text-[#F4A300]"
-                      strokeWidth="3.5"
-                      strokeDasharray="85, 100"
-                      strokeLinecap="round"
-                      stroke="currentColor"
-                      fill="none"
-                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                    />
-                  </svg>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className="text-[12.5px] font-black text-gray-900 leading-none">85%</span>
-                  </div>
-                  {/* Tiny sun badge on top-right of ring */}
-                  <div className="absolute top-[1px] right-[1px] bg-white rounded-full p-[2px] shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 flex items-center justify-center">
-                    <Sun size={8} className="text-[#F4A300] fill-[#F4A300]" strokeWidth={2.5} />
-                  </div>
+              {/* Error State */}
+              {(homeStatus === 'error') && (
+                <div className="bg-rose-50 border border-rose-100/80 rounded-[16px] p-4 flex flex-col items-center text-center gap-3">
+                  <AlertCircle size={22} className="text-rose-400" />
+                  <p className="text-[12px] font-semibold text-gray-600 leading-relaxed">{errorMessage}</p>
+                  <button
+                    onClick={() => retry()}
+                    className="flex items-center gap-1.5 text-[11px] font-bold text-[#FF8A00] uppercase tracking-wider"
+                  >
+                    <RefreshCw size={11} strokeWidth={2.5} />
+                    Try Again
+                  </button>
                 </div>
-              </div>
+              )}
 
-              {/* Three Insight Cards */}
-              <div className="grid grid-cols-3 gap-2 mb-3">
-                {/* Love Card */}
-                <div className="bg-white rounded-[16px] p-2.5 border border-gray-100/80 shadow-[0_3px_12px_rgba(0,0,0,0.01)] flex flex-col items-center text-center">
-                  <div className="w-7 h-7 rounded-full bg-rose-50 border border-rose-100/30 flex items-center justify-center mb-1">
-                    <Heart size={13} className="text-rose-500 fill-rose-500/10" strokeWidth={2} />
-                  </div>
-                  <span className="text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Love</span>
-                  <div className="mb-0.5">
-                    <span className="text-[14px] font-extrabold text-gray-900">82</span>
-                    <span className="text-[9px] text-gray-400 font-semibold">/100</span>
-                  </div>
-                  <span className="text-[9px] font-semibold text-gray-500 leading-tight">Harmonious</span>
+              {/* Empty Profile State */}
+              {homeStatus === 'empty-profile' && (
+                <div className="bg-amber-50 border border-amber-100/80 rounded-[16px] p-4 flex flex-col items-center text-center gap-3">
+                  <User size={22} className="text-amber-400" />
+                  <p className="text-[12px] font-semibold text-gray-600 leading-relaxed">{errorMessage}</p>
+                  <button
+                    onClick={() => onNavigate('kundli-profile-form')}
+                    className="px-4 py-2 bg-[#FF8A00] text-white text-[12px] font-bold rounded-[10px]"
+                  >
+                    Complete Profile
+                  </button>
                 </div>
+              )}
 
-                {/* Career Card */}
-                <div className="bg-white rounded-[16px] p-2.5 border border-gray-100/80 shadow-[0_3px_12px_rgba(0,0,0,0.01)] flex flex-col items-center text-center">
-                  <div className="w-7 h-7 rounded-full bg-amber-50 border border-amber-100/30 flex items-center justify-center mb-1">
-                    <Briefcase size={13} className="text-amber-500" strokeWidth={2} />
-                  </div>
-                  <span className="text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Career</span>
-                  <div className="mb-0.5">
-                    <span className="text-[14px] font-extrabold text-gray-900">95</span>
-                    <span className="text-[9px] text-gray-400 font-semibold">/100</span>
-                  </div>
-                  <span className="text-[9px] font-semibold text-gray-500 leading-tight">Excellent</span>
-                </div>
 
-                {/* Wealth Card */}
-                <div className="bg-white rounded-[16px] p-2.5 border border-gray-100/80 shadow-[0_3px_12px_rgba(0,0,0,0.01)] flex flex-col items-center text-center">
-                  <div className="w-7 h-7 rounded-full bg-emerald-50 border border-emerald-100/30 flex items-center justify-center mb-1">
-                    <TrendingUp size={13} className="text-emerald-500" strokeWidth={2} />
-                  </div>
-                  <span className="text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Wealth</span>
-                  <div className="mb-0.5">
-                    <span className="text-[14px] font-extrabold text-gray-900">88</span>
-                    <span className="text-[9px] text-gray-400 font-semibold">/100</span>
-                  </div>
-                  <span className="text-[9px] font-semibold text-gray-500 leading-tight">Stable</span>
-                </div>
-              </div>
+              {/* Real Data — shown only when we have a successful or partial response */}
+              {(homeStatus === 'success' || homeStatus === 'partial') && homeData && (() => {
+                const insights = homeData.dailyInsights;
+                const scoringAvailable = insights?.scoringAvailable === true;
+                const cosmicScore = scoringAvailable ? Math.max(0, Math.min(100, insights.cosmicEnergy.score)) : null;
+                const loveScore = scoringAvailable ? Math.max(0, Math.min(100, insights.love.score)) : null;
+                const careerScore = scoringAvailable ? Math.max(0, Math.min(100, insights.career.score)) : null;
+                const wealthScore = scoringAvailable ? Math.max(0, Math.min(100, insights.wealth.score)) : null;
+                const dasharray = cosmicScore !== null ? `${cosmicScore}, 100` : '0, 100';
 
-              {/* Quick Info Row */}
-              <div className="grid grid-cols-3 gap-2 mb-3">
-                {/* Lucky Color */}
-                <div className="bg-white rounded-[14px] p-2 border border-gray-100/80 shadow-[0_2px_8px_rgba(0,0,0,0.01)] flex flex-col items-center justify-center text-center min-h-[58px]">
-                  <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Lucky Color</span>
-                  <div className="flex items-center gap-1">
-                    <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-sm border border-black/5 shrink-0"></div>
-                    <span className="text-[11px] font-bold text-gray-800">Emerald</span>
-                  </div>
-                </div>
+                return (
+                  <>
+                    {/* Energy Summary Card */}
+                    <div className="relative bg-gradient-to-br from-[#FFFDF9] to-[#FAFAFA] border border-[#F4A300]/15 rounded-[18px] p-3 shadow-[0_2px_12px_rgba(0,0,0,0.015)] mb-3 overflow-hidden">
+                      {/* Original Content - Blurred for free plan */}
+                      <div className={`flex items-center justify-between gap-3 transition-all duration-300 ${homeData.subscriptionPlan === 'free' ? 'blur-[4px] opacity-30 select-none pointer-events-none' : ''}`}>
+                        <div className="flex-1">
+                          <span className="text-[10px] font-bold text-[#D68B00]/80 uppercase tracking-wider block mb-0.5">Cosmic Energy</span>
+                          {scoringAvailable && cosmicScore !== null ? (
+                            <h4 className="text-[20px] font-extrabold text-gray-900 leading-tight">{cosmicScore}<span className="text-[12px] text-gray-400 font-semibold">/100</span></h4>
+                          ) : (
+                            <h4 className="text-[13px] font-semibold text-gray-400 leading-tight">Score unavailable</h4>
+                          )}
+                          <p className="text-[10.5px] text-gray-500 mt-1">
+                            {homeData.dasha.mahadasha ? `Mahadasha: ${homeData.dasha.mahadasha}` : 'Based on your Kundli'}
+                            {homeData.dasha.antardasha ? ` · ${homeData.dasha.antardasha}` : ''}
+                          </p>
+                        </div>
+                        <div className="relative w-[60px] h-[60px] flex items-center justify-center shrink-0">
+                          <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                            <path className="text-[#FFF9E6]" strokeWidth="3.2" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                            <path className="text-[#F4A300]" strokeWidth="3.5" strokeDasharray={dasharray} strokeLinecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                          </svg>
+                          <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            {scoringAvailable && cosmicScore !== null ? (
+                              <span className="text-[12.5px] font-black text-gray-900 leading-none">{cosmicScore}%</span>
+                            ) : (
+                              <span className="text-[9px] text-gray-400 font-semibold text-center leading-tight">N/A</span>
+                            )}
+                          </div>
+                          <div className="absolute top-[1px] right-[1px] bg-white rounded-full p-[2px] shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-gray-100 flex items-center justify-center">
+                            <Sun size={8} className="text-[#F4A300] fill-[#F4A300]" strokeWidth={2.5} />
+                          </div>
+                        </div>
+                      </div>
 
-                {/* Lucky Number */}
-                <div className="bg-white rounded-[14px] p-2 border border-gray-100/80 shadow-[0_2px_8px_rgba(0,0,0,0.01)] flex flex-col items-center justify-center text-center min-h-[58px]">
-                  <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Lucky Number</span>
-                  <div className="w-5 h-5 rounded-full border border-dashed border-[#F4A300]/55 flex items-center justify-center">
-                    <span className="text-[11.5px] font-extrabold text-[#D68B00]">7</span>
-                  </div>
-                </div>
+                      {/* FOMO Overlay for Free Plan */}
+                      {homeData.subscriptionPlan === 'free' && (
+                        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/20 p-2 cursor-pointer" onClick={() => onNavigate('subscription')}>
+                          <div className="bg-red-50/95 backdrop-blur-md border border-red-200/60 rounded-[14px] px-3 py-2.5 shadow-sm w-full h-full flex flex-col justify-center">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <AlertTriangle size={13} className="text-red-500" strokeWidth={2.5} />
+                              <span className="text-[10px] font-bold text-red-600 uppercase tracking-wider">Critical Astrological Shift</span>
+                            </div>
+                            <p className="text-[11px] font-semibold text-red-900/90 leading-snug line-clamp-2">
+                              {[
+                                "Ek mahatvapurna grah yog aapke agle 21 dino ki yatra ko prabhavit kar sakta hai.",
+                                "Aapke career mein ek achanak badlav aane ke sanket hain. Samay rahte savdhaan rahein.",
+                                "Agle 48 ghanto mein ek badi opportunity aa sakti hai, ise miss na karein.",
+                                "Aapki kundli mein ek gupt dhan yog ban raha hai, lekin ek choti si rukawat bhi hai.",
+                                "Ek purana rishta wapas aa sakta hai ya naye rishte mein utaar-chadhaav aane wala hai.",
+                                "Aapke swasthya ya mansik shanti par asar padne ke sanket hain. Kundli check karein.",
+                                "Agla hafta aapke arthik faislon ke liye behad mahatvapurna hone wala hai.",
+                                "Aapke grah gochar ek nayi disha dikha rahe hain, jise samajhna abhi zaroori hai."
+                              ][Math.floor(Date.now() / (1000 * 60 * 60 * 34)) % 8]}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
 
-                {/* Best Time Today */}
-                <div className="bg-white rounded-[14px] p-2 border border-gray-100/80 shadow-[0_2px_8px_rgba(0,0,0,0.01)] flex flex-col items-center justify-center text-center min-h-[58px] px-1">
-                  <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Best Time</span>
-                  <span className="text-[10.5px] font-bold text-gray-800 leading-none">04-06 PM</span>
-                </div>
-              </div>
+                    {/* Three Insight Cards */}
+                    <div className="grid grid-cols-3 gap-2 mb-3">
+                      {/* Love */}
+                      <div className="bg-white rounded-[16px] p-2.5 border border-gray-100/80 shadow-[0_3px_12px_rgba(0,0,0,0.01)] flex flex-col items-center text-center">
+                        <div className="w-7 h-7 rounded-full bg-rose-50 border border-rose-100/30 flex items-center justify-center mb-1">
+                          <Heart size={13} className="text-rose-500 fill-rose-500/10" strokeWidth={2} />
+                        </div>
+                        <span className="text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Love</span>
+                        {homeData.subscriptionPlan === 'free' ? (
+                          <div className="mb-0.5 mt-0.5"><Lock size={14} className="text-gray-300" strokeWidth={2.5} /></div>
+                        ) : loveScore !== null ? (
+                          <div className="mb-0.5"><span className="text-[14px] font-extrabold text-gray-900">{loveScore}</span><span className="text-[9px] text-gray-400 font-semibold">/100</span></div>
+                        ) : (
+                          <span className="text-[9px] font-semibold text-gray-400 leading-tight">—</span>
+                        )}
+                        <span className="text-[9px] font-semibold text-gray-500 leading-tight">
+                          {homeData.subscriptionPlan === 'free' ? 'Locked' : (insights.love.confidence === 'high' ? 'Strong' : insights.love.confidence === 'medium' ? 'Moderate' : '—')}
+                        </span>
+                      </div>
 
-              {/* Daily Insight Quote */}
-              <div className="bg-gradient-to-r from-[#FFFDF9] to-[#FFFBF0] border border-[#F4A300]/15 rounded-[14px] p-3 shadow-[0_2px_10px_rgba(244,163,0,0.02)] mb-3 flex items-start gap-2 relative">
-                <Quote size={13} className="text-[#D68B00]/40 shrink-0 mt-0.5 fill-[#D68B00]/5" />
-                <p className="text-[11.5px] text-gray-700 font-medium leading-normal flex-1">
-                  Today is favorable for meaningful conversations and important financial decisions.
-                </p>
-                <Sparkles size={10} className="text-[#F4A300]/30 shrink-0 self-end" />
-              </div>
+                      {/* Career */}
+                      <div className="bg-white rounded-[16px] p-2.5 border border-gray-100/80 shadow-[0_3px_12px_rgba(0,0,0,0.01)] flex flex-col items-center text-center">
+                        <div className="w-7 h-7 rounded-full bg-amber-50 border border-amber-100/30 flex items-center justify-center mb-1">
+                          <Briefcase size={13} className="text-amber-500" strokeWidth={2} />
+                        </div>
+                        <span className="text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Career</span>
+                        {homeData.subscriptionPlan === 'free' ? (
+                          <div className="mb-0.5 mt-0.5"><Lock size={14} className="text-gray-300" strokeWidth={2.5} /></div>
+                        ) : careerScore !== null ? (
+                          <div className="mb-0.5"><span className="text-[14px] font-extrabold text-gray-900">{careerScore}</span><span className="text-[9px] text-gray-400 font-semibold">/100</span></div>
+                        ) : (
+                          <span className="text-[9px] font-semibold text-gray-400 leading-tight">—</span>
+                        )}
+                        <span className="text-[9px] font-semibold text-gray-500 leading-tight">
+                          {homeData.subscriptionPlan === 'free' ? 'Locked' : (insights.career.confidence === 'high' ? 'Focused' : insights.career.confidence === 'medium' ? 'Steady' : '—')}
+                        </span>
+                      </div>
 
-              {/* CTA Button */}
-              <button className="w-full py-2.5 bg-[#111827] rounded-[14px] flex items-center justify-between px-4 group active:scale-[0.98] transition-all shadow-[0_3px_12px_rgba(17,24,39,0.12)] hover:bg-[#1f2937]">
-                <div className="flex items-center gap-2.5">
-                  <svg className="w-4 h-4 text-[#F4A300] shrink-0 animate-[spin_40s_linear_infinite]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <circle cx="12" cy="12" r="10" />
-                    <path d="M12 2v20M2 12h20M12 12l7.07-7.07M4.93 19.07l14.14-14.14M4.93 4.93l14.14 14.14" />
-                    <circle cx="12" cy="12" r="4" className="stroke-[#F4A300]/40" />
-                  </svg>
-                  <span className="text-[13px] font-bold text-white tracking-wide">Read Full Prediction</span>
-                </div>
-                <ChevronRight size={14} className="text-[#F4A300] group-hover:translate-x-1 transition-transform" />
-              </button>
+                      {/* Wealth */}
+                      <div className="bg-white rounded-[16px] p-2.5 border border-gray-100/80 shadow-[0_3px_12px_rgba(0,0,0,0.01)] flex flex-col items-center text-center">
+                        <div className="w-7 h-7 rounded-full bg-emerald-50 border border-emerald-100/30 flex items-center justify-center mb-1">
+                          <TrendingUp size={13} className="text-emerald-500" strokeWidth={2} />
+                        </div>
+                        <span className="text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Wealth</span>
+                        {homeData.subscriptionPlan === 'free' ? (
+                          <div className="mb-0.5 mt-0.5"><Lock size={14} className="text-gray-300" strokeWidth={2.5} /></div>
+                        ) : wealthScore !== null ? (
+                          <div className="mb-0.5"><span className="text-[14px] font-extrabold text-gray-900">{wealthScore}</span><span className="text-[9px] text-gray-400 font-semibold">/100</span></div>
+                        ) : (
+                          <span className="text-[9px] font-semibold text-gray-400 leading-tight">—</span>
+                        )}
+                        <span className="text-[9px] font-semibold text-gray-500 leading-tight">
+                          {homeData.subscriptionPlan === 'free' ? 'Locked' : (insights.wealth.confidence === 'high' ? 'Growing' : insights.wealth.confidence === 'medium' ? 'Stable' : '—')}
+                        </span>
+                      </div>
+                    </div>
 
-              {/* Footer Note */}
-              <div className="flex items-center justify-center gap-1 mt-2.5 text-gray-400">
-                <Clock size={11} className="text-[#D68B00]/60" />
-                <span className="text-[9.5px] font-semibold uppercase tracking-wider">Updated daily at 5:00 AM</span>
-              </div>
+
+
+                    {/* CTA Button */}
+                    {homeData.subscriptionPlan === 'free' ? (
+                      <button 
+                        onClick={() => onNavigate('subscription')}
+                        className="w-full py-3 bg-gradient-to-r from-[#111827] to-[#1F2937] active:scale-[0.98] transition-transform rounded-[14px] flex items-center justify-between px-4 shadow-[0_4px_12px_rgba(0,0,0,0.1)] border border-gray-800"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Lock size={14} className="text-[#F4A300]" strokeWidth={2.5} />
+                          <span className="text-[13px] font-bold text-white tracking-wide">Unlock Complete AI Reading</span>
+                        </div>
+                        <span className="text-[11px] font-bold text-[#F4A300] bg-[#F4A300]/10 px-2 py-1 rounded-md">₹199/mo</span>
+                      </button>
+                    ) : (
+                      <button 
+                        onClick={() => onNavigate('nova-ai-chat', { profileId: activeProfileId, forceNew: true, initialQuery: 'Please give me a complete prediction based on my Kundli.' })}
+                        className="w-full py-3 bg-gradient-to-r from-[#FF8A00] to-[#E67A00] active:scale-[0.98] transition-transform rounded-[14px] flex items-center justify-center gap-2 shadow-[0_4px_12px_rgba(255,138,0,0.2)] border border-[#FF8A00]"
+                      >
+                        <Sparkles size={14} className="text-white" strokeWidth={2.5} />
+                        <span className="text-[13px] font-bold text-white tracking-wide">Full Prediction with Nova AI</span>
+                      </button>
+                    )}
+
+                    <div className="flex items-center justify-center gap-1 mt-2.5 text-gray-400">
+                      <Clock size={11} className="text-[#D68B00]/60" />
+                      <span className="text-[9.5px] font-semibold uppercase tracking-wider">Updated daily at 5:00 AM</span>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           </motion.div>
 
@@ -586,50 +640,76 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
                 </div>
               </div>
 
-              {/* 3x2 Grid for 6 Panchang Values */}
-              <div className="grid grid-cols-3 gap-2">
-                {/* Tithi */}
-                <div className="bg-gradient-to-b from-white to-[#FAFAFA] rounded-[14px] border border-gray-100 p-2 flex flex-col items-center text-center justify-between min-h-[66px]">
-                  <SunMoon size={13} className="text-[#D68B00] mb-0.5 shrink-0" strokeWidth={1.5} />
-                  <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Tithi</span>
-                  <span className="text-[11.5px] font-extrabold text-gray-800 leading-tight">Shukla Pratipada</span>
+              {/* 3x2 Grid for 6 Panchang Values — backend-driven */}
+              {isHomeLoading ? (
+                <div className="grid grid-cols-3 gap-2 animate-pulse">
+                  {[...Array(6)].map((_, i) => <div key={i} className="h-[66px] bg-gray-100 rounded-[14px]" />)}
                 </div>
+              ) : homeData ? (
+                <div className="grid grid-cols-3 gap-2">
+                  {/* Tithi */}
+                  <div className="bg-gradient-to-b from-white to-[#FAFAFA] rounded-[14px] border border-gray-100 p-2 flex flex-col items-center text-center justify-between min-h-[66px]">
+                    <SunMoon size={13} className="text-[#D68B00] mb-0.5 shrink-0" strokeWidth={1.5} />
+                    <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Tithi</span>
+                    <span className="text-[11.5px] font-extrabold text-gray-800 leading-tight">{homeData.panchang.tithi || '—'}</span>
+                  </div>
 
-                {/* Nakshatra */}
-                <div className="bg-gradient-to-b from-white to-[#FAFAFA] rounded-[14px] border border-gray-100 p-2 flex flex-col items-center text-center justify-between min-h-[66px]">
-                  <Sparkles size={13} className="text-[#D68B00] mb-0.5 shrink-0" strokeWidth={1.5} />
-                  <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Nakshatra</span>
-                  <span className="text-[11.5px] font-extrabold text-gray-800 leading-tight">Ashwini</span>
-                </div>
+                  {/* Nakshatra */}
+                  <div className="bg-gradient-to-b from-white to-[#FAFAFA] rounded-[14px] border border-gray-100 p-2 flex flex-col items-center text-center justify-between min-h-[66px]">
+                    <Sparkles size={13} className="text-[#D68B00] mb-0.5 shrink-0" strokeWidth={1.5} />
+                    <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Nakshatra</span>
+                    <span className="text-[11.5px] font-extrabold text-gray-800 leading-tight">{homeData.panchang.nakshatra || '—'}</span>
+                  </div>
 
-                {/* Rahu Kaal */}
-                <div className="bg-gradient-to-b from-white to-[#FAFAFA] rounded-[14px] border border-gray-100 p-2 flex flex-col items-center text-center justify-between min-h-[66px]">
-                  <Clock size={13} className="text-rose-500 mb-0.5 shrink-0" strokeWidth={1.5} />
-                  <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Rahu Kaal</span>
-                  <span className="text-[10px] font-bold text-rose-600 leading-tight">09:12 - 10:48 AM</span>
-                </div>
+                  {/* Cell 3: Rahu Kaal or Yoga */}
+                  <div className="bg-gradient-to-b from-white to-[#FAFAFA] rounded-[14px] border border-gray-100 p-2 flex flex-col items-center text-center justify-between min-h-[66px]">
+                    {homeData.panchang.rahuKaal ? (
+                      <>
+                        <Clock size={13} className="text-rose-500 mb-0.5 shrink-0" strokeWidth={1.5} />
+                        <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Rahu Kaal</span>
+                        <span className="text-[10px] font-bold text-rose-600 leading-tight">{homeData.panchang.rahuKaal}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={13} className="text-purple-400 mb-0.5 shrink-0" strokeWidth={1.5} />
+                        <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Yoga</span>
+                        <span className="text-[11.5px] font-extrabold text-gray-800 leading-tight">{homeData.panchang.yoga || '—'}</span>
+                      </>
+                    )}
+                  </div>
 
-                {/* Abhijit Muhurat */}
-                <div className="bg-gradient-to-b from-white to-[#FAFAFA] rounded-[14px] border border-gray-100 p-2 flex flex-col items-center text-center justify-between min-h-[66px]">
-                  <Sun size={13} className="text-emerald-500 mb-0.5 shrink-0" strokeWidth={1.5} />
-                  <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Abhijit</span>
-                  <span className="text-[10px] font-bold text-emerald-600 leading-tight">11:54 AM - 12:46 PM</span>
-                </div>
+                  {/* Cell 4: Abhijit Muhurat or Karana */}
+                  <div className="bg-gradient-to-b from-white to-[#FAFAFA] rounded-[14px] border border-gray-100 p-2 flex flex-col items-center text-center justify-between min-h-[66px]">
+                    {homeData.panchang.abhijitMuhurat ? (
+                      <>
+                        <Sun size={13} className="text-emerald-500 mb-0.5 shrink-0" strokeWidth={1.5} />
+                        <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Abhijit</span>
+                        <span className="text-[10px] font-bold text-emerald-600 leading-tight">{homeData.panchang.abhijitMuhurat}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={13} className="text-blue-400 mb-0.5 shrink-0" strokeWidth={1.5} />
+                        <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Karana</span>
+                        <span className="text-[11.5px] font-extrabold text-gray-800 leading-tight">{homeData.panchang.karana || '—'}</span>
+                      </>
+                    )}
+                  </div>
 
-                {/* Sunrise */}
-                <div className="bg-gradient-to-b from-white to-[#FAFAFA] rounded-[14px] border border-gray-100 p-2 flex flex-col items-center text-center justify-between min-h-[66px]">
-                  <Sun size={13} className="text-amber-500 mb-0.5 shrink-0" strokeWidth={1.5} />
-                  <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Sunrise</span>
-                  <span className="text-[11.5px] font-extrabold text-gray-800 leading-tight">05:46 AM</span>
-                </div>
+                  {/* Cell 5: Sunrise */}
+                  <div className="bg-gradient-to-b from-white to-[#FAFAFA] rounded-[14px] border border-gray-100 p-2 flex flex-col items-center text-center justify-between min-h-[66px]">
+                    <Sun size={13} className="text-amber-500 mb-0.5 shrink-0" strokeWidth={1.5} />
+                    <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Sunrise</span>
+                    <span className="text-[11.5px] font-extrabold text-gray-800 leading-tight">{homeData.panchang.sunrise || '—'}</span>
+                  </div>
 
-                {/* Sunset */}
-                <div className="bg-gradient-to-b from-white to-[#FAFAFA] rounded-[14px] border border-gray-100 p-2 flex flex-col items-center text-center justify-between min-h-[66px]">
-                  <SunMoon size={13} className="text-slate-600 mb-0.5 shrink-0" strokeWidth={1.5} />
-                  <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Sunset</span>
-                  <span className="text-[11.5px] font-extrabold text-gray-800 leading-tight">07:11 PM</span>
+                  {/* Cell 6: Sunset */}
+                  <div className="bg-gradient-to-b from-white to-[#FAFAFA] rounded-[14px] border border-gray-100 p-2 flex flex-col items-center text-center justify-between min-h-[66px]">
+                    <SunMoon size={13} className="text-slate-600 mb-0.5 shrink-0" strokeWidth={1.5} />
+                    <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Sunset</span>
+                    <span className="text-[11.5px] font-extrabold text-gray-800 leading-tight">{homeData.panchang.sunset || '—'}</span>
+                  </div>
                 </div>
-              </div>
+              ) : null}
             </div>
           </motion.div>
 
@@ -638,98 +718,132 @@ export default function HomeScreen({ onNavigate, onOpenDrawer }: HomeScreenProps
             variants={itemVariants}
             className="bg-[#FFFFFF] rounded-[24px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-[#F4A300]/20 relative overflow-hidden"
           >
-            {/* Subtle Celestial Decorative Gradients */}
             <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-b from-[#F4A300]/4 to-transparent rounded-full blur-2xl pointer-events-none"></div>
-
-            <div className="p-4 relative z-10">
-              {/* Header */}
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Your Lucky Elements</h3>
-                  <h2 className="text-[16px] font-extrabold text-gray-900">Daily Lucky Insights</h2>
-                </div>
-                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#FFF4D6] to-[#FFF9E6] border border-[#F4A300]/20 flex items-center justify-center shrink-0 shadow-sm">
+            
+            <div className="p-5 relative z-10">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#FFF4D6] to-[#FFF9E6] border border-[#F4A300]/20 flex items-center justify-center shadow-sm">
                   <Star size={14} className="text-[#D68B00]" strokeWidth={1.5} />
                 </div>
+                <h2 className="text-[15px] font-extrabold text-gray-900">Daily Lucky Insights</h2>
               </div>
+              
+              {homeStatus === 'loading' ? (
+                <div className="grid grid-cols-2 sm:grid-cols-2 gap-3 animate-pulse">
+                  {[1,2,3,4].map(i => <div key={i} className="h-16 bg-gray-50 rounded-[14px] border border-gray-100"></div>)}
+                </div>
+              ) : homeData && (!homeData.luckyInsights || Object.keys(homeData.luckyInsights).length <= 5) ? (
+                <div className="py-5 text-center flex flex-col items-center justify-center border border-dashed border-gray-200 rounded-[14px] bg-gray-50/50">
+                  <p className="text-[12px] text-gray-500 font-medium">Lucky insights are temporarily unavailable.</p>
+                </div>
+              ) : homeData && homeData.luckyInsights ? (
+                <div className="flex flex-col gap-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    {homeData.luckyInsights.luckyColor && (
+                      <div className="bg-gradient-to-b from-white to-[#FAFAFA] rounded-[14px] border border-gray-100 p-3 flex flex-col min-h-[70px]">
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <Palette size={12} className="text-[#F4A300]" />
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Color</span>
+                        </div>
+                        <div className="text-[13px] font-extrabold text-gray-800 leading-tight flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full border border-gray-200/50 shadow-sm" style={{ backgroundColor: homeData.luckyInsights.luckyColor.value.toLowerCase().replace(' ', '') }}></span>
+                          {homeData.luckyInsights.luckyColor.value}
+                        </div>
+                        {homeData.luckyInsights.luckyColor.confidence && (
+                          <div className="text-[9px] text-gray-400 font-medium mt-1">
+                            {homeData.luckyInsights.luckyColor.confidence === 'high' ? 'High confidence' : homeData.luckyInsights.luckyColor.confidence === 'medium' ? 'Moderate confidence' : 'Limited confidence'}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
+                    {homeData.luckyInsights.luckyNumber && (
+                      <div className="bg-gradient-to-b from-white to-[#FAFAFA] rounded-[14px] border border-gray-100 p-3 flex flex-col min-h-[70px]">
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <Hash size={12} className="text-[#F4A300]" />
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Number</span>
+                        </div>
+                        <div className="text-[16px] font-extrabold text-[#F4A300] leading-tight">
+                          {homeData.luckyInsights.luckyNumber.value}
+                        </div>
+                        {homeData.luckyInsights.luckyNumber.confidence && (
+                          <div className="text-[9px] text-gray-400 font-medium mt-0.5">
+                            {homeData.luckyInsights.luckyNumber.confidence === 'high' ? 'High confidence' : homeData.luckyInsights.luckyNumber.confidence === 'medium' ? 'Moderate confidence' : 'Limited confidence'}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
+                    {homeData.luckyInsights.luckyDirection && (
+                      <div className="bg-gradient-to-b from-white to-[#FAFAFA] rounded-[14px] border border-gray-100 p-3 flex flex-col min-h-[70px]">
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <Compass size={12} className="text-[#F4A300]" />
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Direction</span>
+                        </div>
+                        <div className="text-[13px] font-extrabold text-gray-800 leading-tight">
+                          {homeData.luckyInsights.luckyDirection.value}
+                        </div>
+                        {homeData.luckyInsights.luckyDirection.confidence && (
+                          <div className="text-[9px] text-gray-400 font-medium mt-1">
+                            {homeData.luckyInsights.luckyDirection.confidence === 'high' ? 'High confidence' : homeData.luckyInsights.luckyDirection.confidence === 'medium' ? 'Moderate confidence' : 'Limited confidence'}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
+                    {homeData.luckyInsights.bestActivity && (
+                      <div className="bg-gradient-to-b from-white to-[#FAFAFA] rounded-[14px] border border-gray-100 p-3 flex flex-col min-h-[70px]">
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <Activity size={12} className="text-[#F4A300]" />
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Best For</span>
+                        </div>
+                        <div className="text-[12px] font-extrabold text-gray-800 leading-tight break-words">
+                          {homeData.luckyInsights.bestActivity.value}
+                        </div>
+                        {homeData.luckyInsights.bestActivity.confidence && (
+                          <div className="text-[9px] text-gray-400 font-medium mt-1">
+                            {homeData.luckyInsights.bestActivity.confidence === 'high' ? 'High confidence' : homeData.luckyInsights.bestActivity.confidence === 'medium' ? 'Moderate confidence' : 'Limited confidence'}
+                          </div>
+                        )}
+                      </div>
+                    )}
 
-              {/* Airy 2x2 Grid for 4 elements */}
-              <div className="grid grid-cols-2 gap-2.5">
-                {/* Lucky Number */}
-                <div className="bg-[#FAFAFA] rounded-[14px] p-2.5 border border-gray-100 flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-full border border-dashed border-[#F4A300]/40 bg-white flex items-center justify-center font-mono font-black text-[#D68B00] text-[13px] shrink-0">
-                    7
-                  </div>
-                  <div>
-                    <span className="text-[9.5px] text-gray-400 font-bold uppercase tracking-wider block mb-0.5">Lucky Number</span>
-                    <span className="text-[12.5px] font-bold text-gray-800">Number 7</span>
+                    {homeData.luckyInsights.bestTime && (
+                      <div className="bg-gradient-to-b from-white to-[#FAFAFA] rounded-[14px] border border-gray-100 p-3 flex flex-col min-h-[70px] col-span-2 sm:col-span-1">
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <Clock size={12} className="text-[#16A34A]" />
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Best Time</span>
+                        </div>
+                        <div className="text-[12px] font-extrabold text-gray-800 leading-tight">
+                          {new Date(homeData.luckyInsights.bestTime.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – {new Date(homeData.luckyInsights.bestTime.end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                        <div className="text-[9px] text-gray-400 font-medium mt-1">
+                          {homeData.luckyInsights.bestTime.label}
+                        </div>
+                      </div>
+                    )}
+
+                    {homeData.luckyInsights.cautionWindow && (
+                      <div className="bg-gradient-to-b from-white to-[#FAFAFA] rounded-[14px] border border-gray-100 p-3 flex flex-col min-h-[70px] col-span-2 sm:col-span-1">
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <ShieldAlert size={12} className="text-rose-500" />
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Caution Window</span>
+                        </div>
+                        <div className="text-[12px] font-extrabold text-gray-800 leading-tight">
+                          {new Date(homeData.luckyInsights.cautionWindow.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – {new Date(homeData.luckyInsights.cautionWindow.end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                        <div className="text-[9px] text-gray-400 font-medium mt-1">
+                          {homeData.luckyInsights.cautionWindow.label}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-
-                {/* Lucky Color */}
-                <div className="bg-[#FAFAFA] rounded-[14px] p-2.5 border border-gray-100 flex items-center gap-2.5">
-                  <div className="w-6 h-6 rounded-full bg-emerald-500 border border-white flex items-center justify-center shrink-0 shadow-[0_1.5px_5px_rgba(16,185,129,0.2)] ring-1 ring-black/5 ml-0.5" />
-                  <div>
-                    <span className="text-[9.5px] text-gray-400 font-bold uppercase tracking-wider block mb-0.5">Lucky Color</span>
-                    <span className="text-[12.5px] font-bold text-gray-800">Emerald Green</span>
-                  </div>
-                </div>
-
-                {/* Lucky Direction */}
-                <div className="bg-[#FAFAFA] rounded-[14px] p-2.5 border border-gray-100 flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-full bg-white border border-gray-100 flex items-center justify-center shrink-0 shadow-sm">
-                    <Compass size={13} className="text-blue-500" strokeWidth={1.5} />
-                  </div>
-                  <div>
-                    <span className="text-[9.5px] text-gray-400 font-bold uppercase tracking-wider block mb-0.5">Lucky Direction</span>
-                    <span className="text-[12.5px] font-bold text-gray-800">North-East</span>
-                  </div>
-                </div>
-
-                {/* Lucky Gemstone */}
-                <div className="bg-[#FAFAFA] rounded-[14px] p-2.5 border border-gray-100 flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-full bg-white border border-gray-100 flex items-center justify-center shrink-0 shadow-sm">
-                    <Sparkles size={13} className="text-purple-500 fill-purple-500/5" strokeWidth={1.5} />
-                  </div>
-                  <div>
-                    <span className="text-[9.5px] text-gray-400 font-bold uppercase tracking-wider block mb-0.5">Lucky Gemstone</span>
-                    <span className="text-[12.5px] font-bold text-gray-800">Emerald (Panna)</span>
-                  </div>
-                </div>
-              </div>
+              ) : null}
             </div>
           </motion.div>
 
-          {/* Live Astrologers Status Row */}
-          <motion.div
-            variants={itemVariants}
-            onClick={() => {
-              const targetEl = document.getElementById('astrologer-section');
-              if (targetEl) {
-                targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              }
-            }}
-            className="flex items-center justify-between px-4 py-3 bg-[#FFFFFF] rounded-[16px] border border-gray-100/80 shadow-[0_2px_12px_rgba(0,0,0,0.01)] cursor-pointer active:scale-[0.99] transition-all"
-          >
-            <div className="flex items-center gap-2.5">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#16A34A]"></span>
-              </span>
-              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Connect with Experts</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="bg-emerald-50/50 border border-emerald-100/30 px-2.5 py-0.5 rounded-full">
-                <span className="text-[12px] font-extrabold text-[#16A34A] font-mono">
-                  {onlineCount} Online
-                </span>
-              </div>
-              <div className="flex items-center gap-0.5 text-gray-400 hover:text-gray-600 transition-colors">
-                <span className="text-[10px] font-extrabold uppercase tracking-widest pl-1">View All</span>
-                <ChevronRight size={12} className="text-gray-400 shrink-0" strokeWidth={2.5} />
-              </div>
-            </div>
-          </motion.div>
+
 
         </motion.div>
       </div>
@@ -756,6 +870,14 @@ export const TopAstrologerCard: React.FC<{ astro: Astrologer, onClick: () => voi
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-104"
           loading="lazy"
         /> : <div className="flex h-full w-full items-center justify-center bg-neutral-100 text-3xl font-black text-neutral-400">{astro.name.charAt(0)}</div>}
+        
+        {/* Instagram-style online green dot indicator */}
+        {astro.isOnline && (
+          <span className="absolute bottom-[6px] right-[6px] flex h-[14px] w-[14px] z-20">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-[14px] w-[14px] bg-[#16A34A] border-2 border-[#FFFFFF] shadow-[0_1px_3px_rgba(0,0,0,0.15)]"></span>
+          </span>
+        )}
       </div>
 
       {/* Right Details Section */}

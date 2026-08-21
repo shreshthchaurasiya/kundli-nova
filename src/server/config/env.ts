@@ -11,6 +11,14 @@ const envSchema = z.object({
   ALLOWED_ORIGINS: z.string().default('*'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   VITE_AUTH_MODE: z.string().optional(),
+  RATE_LIMIT_GLOBAL_MAX: z.coerce.number().int().positive().default(process.env.NODE_ENV === 'test' ? 10000 : 100),
+  RATE_LIMIT_GLOBAL_WINDOW_MS: z.coerce.number().int().positive().default(900000), // 15 mins
+  RATE_LIMIT_HEARTBEAT_MAX: z.coerce.number().int().positive().default(process.env.NODE_ENV === 'test' ? 10000 : 50),
+  RATE_LIMIT_HEARTBEAT_WINDOW_MS: z.coerce.number().int().positive().default(900000), // 15 mins
+  RATE_LIMIT_PREAUTH_MAX: z.coerce.number().int().positive().default(process.env.NODE_ENV === 'test' ? 10000 : 20),
+  RATE_LIMIT_PREAUTH_WINDOW_MS: z.coerce.number().int().positive().default(60000), // 1 min
+  NAVAMSHA_API_KEY: z.string().optional(),
+  API_NINJAS_API_KEY: z.string().optional(),
 });
 
 const _env = envSchema.safeParse(process.env);

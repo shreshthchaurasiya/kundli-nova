@@ -2,6 +2,7 @@ import { IConsultationRepository } from '../interfaces/consultation';
 import { ConsultationHeartbeatResult, ConsultationRequestResult, ConsultationSession } from '../../types/consultation';
 import { ApiClient } from '../../services/api/apiClient';
 import { ENDPOINTS } from '../../services/api/endpoints';
+import { supabase } from '../../lib/supabase';
 
 export class ApiConsultationRepository implements IConsultationRepository {
   private activeSubscriptions = new Set<(session: ConsultationSession | null) => void>();
@@ -19,10 +20,25 @@ export class ApiConsultationRepository implements IConsultationRepository {
     }
   }
 
-  async createSession(astrologerId: string): Promise<ConsultationRequestResult> {
+  async createSession(astrologerId: string, kundliProfileId?: string): Promise<ConsultationRequestResult> {
     return await ApiClient.post<ConsultationRequestResult>(ENDPOINTS.CONSULTATION.CREATE, {
-      body: { astrologerId },
+      body: { astrologerId, kundliProfileId },
     });
+  }
+
+  async submitReview(astrologerId: string, consultationId: string, rating: number, reviewText: string): Promise<void> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Authentication required');
+
+    const { error } = await supabase.from('astrologer_reviews').insert({
+      astrologer_id: astrologerId,
+      customer_id: user.id,
+      consultation_id: consultationId,
+      rating: rating,
+      review_text: reviewText
+    });
+
+    if (error) throw error;
   }
 
   async getSession(id: string): Promise<ConsultationSession> {
@@ -37,15 +53,32 @@ export class ApiConsultationRepository implements IConsultationRepository {
     return await ApiClient.post<ConsultationHeartbeatResult>(ENDPOINTS.CONSULTATION.END(id));
   }
 
+  async endAssignedSession(id: string): Promise<ConsultationHeartbeatResult> {
+    return await ApiClient.post<ConsultationHeartbeatResult>(ENDPOINTS.CONSULTATION.ASTROLOGER_END(id));
+  }
+
   async expireSession(id: string): Promise<ConsultationHeartbeatResult> {
     return await ApiClient.post<ConsultationHeartbeatResult>(ENDPOINTS.CONSULTATION.EXPIRE(id));
   }
 
-  async transitionForDevelopment(id: string, targetStatus: 'ACTIVE' | 'REJECTED' | 'EXPIRED'): Promise<ConsultationHeartbeatResult> {
-    return await ApiClient.post<ConsultationHeartbeatResult>(ENDPOINTS.CONSULTATION.DEV_TRANSITION(id), {
-      body: { targetStatus },
+  async acceptSession(id: string): Promise<ConsultationHeartbeatResult> {
+    return await ApiClient.post<ConsultationHeartbeatResult>(ENDPOINTS.CONSULTATION.ACCEPT(id));
+  }
+
+  async rejectSession(id: string): Promise<ConsultationHeartbeatResult> {
+    return await ApiClient.post<ConsultationHeartbeatResult>(ENDPOINTS.CONSULTATION.REJECT(id));
+  }
+
+  async cancelSession(id: string): Promise<ConsultationHeartbeatResult> {
+    return await ApiClient.post<ConsultationHeartbeatResult>(ENDPOINTS.CONSULTATION.CANCEL(id));
+  }
+
+  async updateKundliProfile(id: string, kundliProfileId: string): Promise<ConsultationSession> {
+    return await ApiClient.patch<ConsultationSession>(ENDPOINTS.CONSULTATION.UPDATE_KUNDLI_PROFILE(id), {
+      body: { kundliProfileId },
     });
   }
+
 
   subscribe(callback: (session: ConsultationSession | null) => void): () => void {
     // In a full realtime system, this would subscribe to Supabase Postgres changes for the session.

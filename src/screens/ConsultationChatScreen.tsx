@@ -1,22 +1,17 @@
+import { BUSINESS_RULES } from '../config/businessRules';
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  ArrowLeft, 
-  Phone, 
-  Video, 
-  Paperclip, 
-  Send, 
-  Clock, 
-  BadgeCheck, 
-  Star, 
-  ShieldCheck, 
-  Check, 
-  CheckCheck, 
-  FileText, 
-  Play, 
-  Volume2, 
-  Image as ImageIcon, 
-  Sparkles, 
+import {
+  ArrowLeft,
+  Phone,
+  Video,
+  Send,
+  Clock,
+  BadgeCheck,
+  Star,
+  ShieldCheck,
+  Check,
+  Sparkles,
   ChevronRight,
   Info,
   RefreshCw,
@@ -34,54 +29,30 @@ import {
   Heart,
   ChevronDown,
   ChevronUp,
-  Image
+  Image,
+  ImagePlus,
+  Loader2
 } from 'lucide-react';
-import { Screen, Astrologer, Message, ConsultationState, KundliData } from '../types';
-import { ASTROLOGERS } from '../data';
-import { 
-  walletService, 
-  consultationService, 
-  kundliService, 
-  chatService, 
-  astrologerService, 
-  retrieveImageFromIndexedDB
-} from '../services/astrologyServices';
+import { Screen, Message, ConsultationState, KundliData } from '../types';
+import { walletBalanceService } from '../services/wallet/walletBalanceService';
 import { chatStorage } from '../services/storage/chatStorage';
 import { ApiConsultationRepository } from '../repositories/api/apiConsultationRepository';
+import { ApiKundliProfileRepository } from '../repositories/api/apiKundliProfileRepository';
 import { ApiError, NetworkError, TimeoutError } from '../services/api/apiErrors';
 import CelestialChatBackground from '../components/chat/CelestialChatBackground';
+import { useAstrologerPartner } from '../features/astrologer';
+import { ApiChatRepository } from '../repositories/api/apiChatRepository';
+import { supabase } from '../lib/supabase';
+import { useProfile } from '../contexts/ProfileContext';
+import { ConsultationMessageBubble, useRealtimeConsultationChat } from '../features/consultation-chat';
+import ConsultationProfileSheet from '../features/consultation-chat/components/ConsultationProfileSheet';
+import KundliProfileSelector from '../features/consultation-chat/components/KundliProfileSelector';
 
 const consultationRepository = new ApiConsultationRepository();
+const kundliProfileRepository = new ApiKundliProfileRepository();
+const chatRepository = new ApiChatRepository();
 
-// Custom lazy-loaded image component for IndexedDB images to prevent UI flicker
-function IndexedDBImage({ url, className, alt }: { url: string; className?: string; alt?: string }) {
-  const [src, setSrc] = useState<string>('');
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let active = true;
-    if (url.startsWith('idb://')) {
-      retrieveImageFromIndexedDB(url).then(data => {
-        if (active) {
-          setSrc(data);
-          setLoading(false);
-        }
-      });
-    } else {
-      setSrc(url);
-      setLoading(false);
-    }
-    return () => {
-      active = false;
-    };
-  }, [url]);
-
-  if (loading) {
-    return <div className={`bg-neutral-100 animate-pulse ${className}`} />;
-  }
-
-  return <img src={src || 'https://images.unsplash.com/photo-1515942400420-2b98fed1f515?w=500'} alt={alt} className={className} />;
-}
+const inflightSessionRequests = new Set<string>();
 
 interface ConsultationChatScreenProps {
   astrologerId?: string;
@@ -89,30 +60,66 @@ interface ConsultationChatScreenProps {
   onNavigate: (screen: Screen, params?: any) => void;
 }
 
-export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1111-1111-111111111111', readOnlySessionId, onNavigate }: ConsultationChatScreenProps) {
-  const [astro, setAstro] = useState<Astrologer>(() => {
-    return ASTROLOGERS.find(a => a.id === astrologerId) || ASTROLOGERS[0];
-  });
+export default function ConsultationChatScreen({ astrologerId, readOnlySessionId, onNavigate }: ConsultationChatScreenProps) {
+  const { directory } = useAstrologerPartner();
+  const { profile: authenticatedProfile } = useProfile();
+  const [resolvedAstrologerId, setResolvedAstrologerId] = useState(astrologerId ?? '');
+  const astro = directory.find(item => item.id === resolvedAstrologerId) ?? null;
 
   // --- Central Consultation State Machine ---
-  const [currentState, setCurrentState] = useState<ConsultationState>('CHECKING_WALLET');
-  
+  // For new sessions we start at SELECTING_KUNDLI; readOnly sessions skip to ACTIVE.
+  const [currentState, setCurrentState] = useState<ConsultationState>(
+    readOnlySessionId ? 'CHECKING_WALLET' : 'SELECTING_KUNDLI'
+  );
+
+  // The Kundli profile ID chosen by the customer. Persisted across retries and
+  // recharge flows so it is never lost during state transitions.
+  const [selectedKundliProfileId, setSelectedKundliProfileId] = useState<string | null>(null);
+
+  // Tracks whether the "Start Consultation" button is mid-flight.
+  const [isSubmittingSession, setIsSubmittingSession] = useState(false);
+  const hasRequestedRef = useRef(false);
+
   // --- Core States ---
   const [walletBalance, setWalletBalance] = useState<number>(0);
   const [userProfile, setUserProfile] = useState<any>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [chatError, setChatError] = useState<string | null>(null);
+
+  // Active Consultation tracking
+  const [activeSessionId, setActiveSessionId] = useState<string>('');
+
+  // Realtime hook replaces local messages state
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { messages, sessionStatus, kundliProfileId, send, sendImage, isSending, error: hookError, partnerTyping, setTyping } = useRealtimeConsultationChat(activeSessionId, 'user');
+  const displayError = chatError || hookError;
+
   const [inputText, setInputText] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const [isAttachmentOpen, setIsAttachmentOpen] = useState(false);
+  const typingTimeoutRef = useRef<number | null>(null);
+
+  const handleTyping = (text: string) => {
+    setInputText(text);
+    if (activeSessionId && text.trim()) {
+      setTyping(true);
+      if (typingTimeoutRef.current) {
+        window.clearTimeout(typingTimeoutRef.current);
+      }
+      typingTimeoutRef.current = window.setTimeout(() => {
+        setTyping(false);
+      }, 2000);
+    } else if (!text.trim()) {
+      setTyping(false);
+    }
+  };
   const [activeCall, setActiveCall] = useState<'voice' | 'video' | null>(null);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [startTimeString, setStartTimeString] = useState('');
-  
-  // Active Consultation tracking
-  const [activeSessionId, setActiveSessionId] = useState<string>('');
+
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [totalCharged, setTotalCharged] = useState(0);
-  
+
   // Low balance grace period state
   const [gracePeriodSeconds, setGracePeriodSeconds] = useState(30);
 
@@ -124,14 +131,22 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
   const [rating, setRating] = useState<number>(5);
   const [reviewText, setReviewText] = useState<string>('');
 
+  const [isProfileSheetOpen, setIsProfileSheetOpen] = useState(false);
+  const [optimisticProfileId, setOptimisticProfileId] = useState<string | null>(null);
+  
+  // Use the realtime session value as canonical, with only a temporary optimistic fallback
+  const currentKundliProfileId = optimisticProfileId || kundliProfileId;
+  
+  // Clear optimistic fallback when realtime catches up
+  useEffect(() => {
+    if (kundliProfileId && optimisticProfileId === kundliProfileId) {
+      setOptimisticProfileId(null);
+    }
+  }, [kundliProfileId, optimisticProfileId]);
+
   // Waiting Screen State
   const [waitingTimeoutSeconds, setWaitingTimeoutSeconds] = useState(60);
 
-  // File Upload Previews
-  const [selectedImageFile, setSelectedImageFile] = useState<string>('');
-  const [selectedImageName, setSelectedImageName] = useState<string>('');
-  const [isUploadingImage, setIsUploadingImage] = useState(false);
-  const [uploadFailed, setUploadFailed] = useState(false);
 
   // References
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -155,66 +170,79 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
   // -----------------------------------------------------------------
   useEffect(() => {
     async function loadInitialData() {
-      // 1. Fetch astrologer
-      const currentAstro = await astrologerService.getAstrologer(astrologerId);
-      if (currentAstro) setAstro(currentAstro);
+      if (!astrologerId && !readOnlySessionId) {
+        onNavigate('home');
+        return;
+      }
 
-      // 2. Load wallet balance
-      const balance = await walletService.getBalance();
-      setWalletBalance(balance);
+      setUserProfile(authenticatedProfile);
+      setKundliData(null);
 
-      // 3. Load user profile & Kundli details
-      const profile = await kundliService.getUserProfile('current-user');
-      setUserProfile(profile);
-      const kData = await kundliService.generateDemoKundli('current-user');
-      setKundliData(kData);
-
-      // 0. CHECK IF READ-ONLY SESSION IS REQUESTED
+      // READ-ONLY PATH — bypass Kundli selector entirely.
       if (readOnlySessionId) {
         try {
           const pastSession = await consultationRepository.getSession(readOnlySessionId);
-          const pastAstro = await astrologerService.getAstrologer(pastSession.astrologerId);
-          if (pastAstro) setAstro(pastAstro);
-          
+          setResolvedAstrologerId(pastSession.astrologerId);
+
           setActiveSessionId(pastSession.id);
           setElapsedSeconds(pastSession.elapsedSeconds || 0);
           setTotalCharged(pastSession.totalCharged || 0);
-          
-          // Load past messages
-          const chatMsgs = await chatService.getMessages(pastSession.id);
-          setMessages(chatMsgs);
-          
+
           const formattedStart = new Date(pastSession.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           setStartTimeString(formattedStart);
-          
-          // Set to ACTIVE so we render the chat loop but we are in read-only mode
+
           setCurrentState('ACTIVE');
           return;
         } catch (error) {
           console.error('Unable to load consultation transcript', error);
           setVerificationError('This consultation transcript could not be loaded.');
+          setCurrentState('CHECKING_WALLET');
           return;
         }
       }
 
-      await runWalletVerification();
+      // NEW SESSION PATH
+      if (!hasRequestedRef.current) {
+        hasRequestedRef.current = true;
+        void runWalletVerification();
+      }
     }
 
     loadInitialData();
-  }, [astrologerId]);
+  }, [astrologerId, readOnlySessionId]);
 
   // -----------------------------------------------------------------
   // 1. WALLET VERIFICATION FLOW
   // -----------------------------------------------------------------
+  /**
+   * runWalletVerification accepts the confirmed Kundli profile ID.
+   * It is always called after the customer has explicitly selected a profile.
+   * The profileId is preserved across retries so it is never re-asked.
+   */
   const runWalletVerification = async () => {
+    // We do not pass kundliProfileId from client anymore for auto-resolution.
     setCurrentState('CHECKING_WALLET');
     setVerificationError('');
+    setIsSubmittingSession(true);
+    
+    if (!astrologerId) return;
+    if (inflightSessionRequests.has(astrologerId)) return;
+    inflightSessionRequests.add(astrologerId);
+
     try {
       const result = await consultationRepository.createSession(astrologerId);
       setWalletBalance(result.balance);
       setRatePerMin(result.ratePerMinute);
       setMinimumMinutes(result.minimumMinutes);
-      setHeartbeatIntervalSeconds(result.heartbeatIntervalSeconds);
+
+      const safeInterval = result.heartbeatIntervalSeconds || BUSINESS_RULES.CONSULTATION.HEARTBEAT_INTERVAL_SECONDS_FALLBACK;
+      setHeartbeatIntervalSeconds(
+        Math.max(
+          BUSINESS_RULES.CONSULTATION.HEARTBEAT_INTERVAL_MIN,
+          Math.min(BUSINESS_RULES.CONSULTATION.HEARTBEAT_INTERVAL_MAX, safeInterval)
+        )
+      );
+
       setRequestTimeoutSeconds(result.requestTimeoutSeconds);
       setRechargeGraceSeconds(result.rechargeGraceSeconds);
 
@@ -235,7 +263,6 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
       if (['ACTIVE', 'LOW_BALANCE', 'RECHARGING'].includes(session.status)) {
         const heartbeat = await consultationRepository.heartbeat(session.id);
         hydrateBillingState(heartbeat.session, heartbeat.balance);
-        setMessages(await chatService.getMessages(session.id));
         return;
       }
 
@@ -244,7 +271,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
         return;
       }
 
-      runKundliPreparation(session.id, result.requestTimeoutSeconds);
+      runAstrologerReviewWait(session.id, result.requestTimeoutSeconds);
     } catch (error) {
       console.error('Consultation eligibility check failed', error);
       if (error instanceof ApiError) {
@@ -257,6 +284,9 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
       } else {
         setVerificationError('Secure consultation service could not be reached. Please retry.');
       }
+    } finally {
+      setIsSubmittingSession(false);
+      inflightSessionRequests.delete(astrologerId);
     }
   };
 
@@ -283,7 +313,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
   const runKundliPreparation = async (sessionId: string, timeoutSeconds: number) => {
     setCurrentState('PREPARING_KUNDLI');
     setKundliStepIdx(0);
-    
+
     // Step through indicators with distinct intervals
     for (let i = 0; i < KUNDLI_PREP_STEPS.length; i++) {
       await new Promise(resolve => setTimeout(resolve, 800));
@@ -303,73 +333,72 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
     setActiveSessionId(sessionId);
 
     // Start 60-second waiting timeout countdown
-    if (waitingTimerRef.current) clearInterval(waitingTimerRef.current);
+    if (waitingTimerRef.current) {
+      clearInterval(waitingTimerRef.current);
+      waitingTimerRef.current = null;
+    }
+    
     waitingTimerRef.current = setInterval(() => {
-      setWaitingTimeoutSeconds(prev => {
-        if (prev <= 1) {
-          clearInterval(waitingTimerRef.current!);
-          setCurrentState('EXPIRED');
-          consultationRepository.expireSession(sessionId).catch(() => undefined);
-          return 0;
-        }
-        return prev - 1;
-      });
+      setWaitingTimeoutSeconds(prev => (prev > 0 ? prev - 1 : 0));
     }, 1000);
   };
 
-  // Wait Simulation actions
-  const handleSimulateAccept = async () => {
-    if (waitingTimerRef.current) clearInterval(waitingTimerRef.current);
-    
-    // Set starting session details
-    const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    setStartTimeString(nowStr);
-    setElapsedSeconds(0);
-    setTotalCharged(0);
+  const refreshSession = async () => {
+    if (!activeSessionId) return;
+    const session = await consultationRepository.getSession(activeSessionId);
+    hydrateBillingState(session);
+    if (session.startedAt) setStartTimeString(new Date(session.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+  };
 
-    // Initialize chat messages
-    const initialMsgs: Message[] = [
-      {
-        id: 'welcome-system',
-        sender: 'system',
-        time: nowStr,
-        type: 'system'
-      },
-      {
-        id: 'astro-greet-1',
-        text: `Radhe Radhe! Pranam 🙏 Main ${astro?.name || 'Astro'} bol raha hoon. Janam Kundli ka vivechan safalta-purvak prarambh ho gaya hai.`,
-        sender: 'astrologer',
-        time: nowStr,
-        type: 'text'
-      },
-      {
-        id: 'astro-greet-2',
-        text: `Aapke vivah, career, aur dhan yog ke vishleshan hetu dasha chakra taiyaar hai. Kripya apna sawal puchhein. Main sahyog karne ke liye sachet hoon.`,
-        sender: 'astrologer',
-        time: nowStr,
-        type: 'text'
+  // Pure Expiration Trigger (avoids React Strict Mode double-fire bugs)
+  useEffect(() => {
+    if (currentState === 'WAITING_FOR_ASTROLOGER' && waitingTimeoutSeconds === 0 && activeSessionId) {
+      if (waitingTimerRef.current) {
+        clearInterval(waitingTimerRef.current);
+        waitingTimerRef.current = null;
       }
-    ];
+      
+      consultationRepository.expireSession(activeSessionId)
+        .then(result => {
+          if (result.session.status === 'EXPIRED') {
+            setCurrentState('EXPIRED');
+          } else {
+            hydrateBillingState(result.session, result.balance);
+          }
+        })
+        .catch(() => {
+          consultationRepository.getSession(activeSessionId)
+            .then(session => hydrateBillingState(session))
+            .catch(() => setCurrentState('EXPIRED'));
+        });
+    }
+  }, [waitingTimeoutSeconds, currentState, activeSessionId]);
 
-    setMessages(initialMsgs);
-    await chatService.saveMessages(activeSessionId, initialMsgs);
-    
-    // Mark ACTIVE
-    const result = await consultationRepository.transitionForDevelopment(activeSessionId, 'ACTIVE');
-    hydrateBillingState(result.session, result.balance);
-  };
+  useEffect(() => {
+    // If sessionStatus was updated via Realtime (from the hook), refresh session state
+    if (sessionStatus && !['ENDED', 'REJECTED', 'EXPIRED', 'CANCELLED'].includes(currentState)) {
+      if (sessionStatus !== currentState) {
+        void refreshSession();
+      }
+    }
+  }, [sessionStatus, currentState]);
 
-  const handleSimulateReject = async () => {
-    if (waitingTimerRef.current) clearInterval(waitingTimerRef.current);
-    const result = await consultationRepository.transitionForDevelopment(activeSessionId, 'REJECTED');
-    hydrateBillingState(result.session, result.balance);
-  };
-
-  const handleSimulateTimeout = async () => {
-    if (waitingTimerRef.current) clearInterval(waitingTimerRef.current);
-    const result = await consultationRepository.transitionForDevelopment(activeSessionId, 'EXPIRED');
-    hydrateBillingState(result.session, result.balance);
-  };
+  // Mandatory Timer Cleanup Guard
+  // Ensures ONLY ONE interval exists and is rigorously cleared on any state exit.
+  useEffect(() => {
+    if (currentState !== 'WAITING_FOR_ASTROLOGER' || !activeSessionId) {
+      if (waitingTimerRef.current) {
+        clearInterval(waitingTimerRef.current);
+        waitingTimerRef.current = null;
+      }
+    }
+    return () => {
+      if (waitingTimerRef.current) {
+        clearInterval(waitingTimerRef.current);
+        waitingTimerRef.current = null;
+      }
+    };
+  }, [currentState, activeSessionId]);
 
   // -----------------------------------------------------------------
   // 5. BILLING TIMER & RUNTIME ENG (ACTIVE / LOW_BALANCE / RECHARGING)
@@ -403,11 +432,16 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
       try {
         const result = await consultationRepository.heartbeat(activeSessionId);
         hydrateBillingState(result.session, result.balance);
+        setChatError(null);
         if (result.session.rechargeDeadlineAt) {
           const remaining = Math.max(0, Math.ceil((new Date(result.session.rechargeDeadlineAt).getTime() - Date.now()) / 1000));
           setGracePeriodSeconds(remaining);
         }
       } catch (error) {
+        console.error('HEARTBEAT ERROR CAUGHT:', error, (error as any)?.code);
+        if ((error as any)?.code === 'RATE_LIMITED') {
+          setChatError('Service is busy, please wait.');
+        }
         console.error('Consultation heartbeat failed', error);
       }
     };
@@ -458,138 +492,73 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
   };
 
   // -----------------------------------------------------------------
-  // 7. CHAT MESSAGE SENDING & MOCK SCHOLAR REPLY
+  // 7. CHAT MESSAGE SENDING
   // -----------------------------------------------------------------
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5242880) {
+      setChatError('Image exceeds the maximum allowed size of 5MB.');
+      return;
+    }
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setChatError('Unsupported format. Please use JPEG, PNG, or WebP.');
+      return;
+    }
+
+    setChatError(null);
+    setSelectedImage(file);
+    setImagePreviewUrl(URL.createObjectURL(file));
+  };
+
+  const clearImageSelection = () => {
+    setSelectedImage(null);
+    if (imagePreviewUrl) {
+      URL.revokeObjectURL(imagePreviewUrl);
+      setImagePreviewUrl(null);
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (currentState === 'RECHARGING') return; // block send in grace period
 
+    if (selectedImage) {
+      try {
+        await sendImage(selectedImage, inputText);
+        setInputText('');
+        clearImageSelection();
+      } catch (err) {
+        setChatError(err instanceof Error ? err.message : 'Failed to send image');
+      }
+      return;
+    }
+
     const textToSend = inputText.trim();
-    if (!textToSend && !selectedImageFile) return;
+    if (!textToSend) return;
 
     setInputText('');
+    setChatError(null);
 
-    let newMsg: Message;
-
-    if (selectedImageFile) {
-      // Send image message saved securely via IndexedDB
-      newMsg = await chatService.sendImageMessage(
-        activeSessionId, 
-        'user', 
-        selectedImageFile, 
-        selectedImageName || 'attachment.jpg'
-      );
-      // Clean selected image previews
-      setSelectedImageFile('');
-      setSelectedImageName('');
-    } else {
-      // Send text message
-      newMsg = await chatService.sendTextMessage(activeSessionId, 'user', textToSend);
-    }
-
-    setMessages(prev => [...prev, newMsg]);
-    triggerScholarReply(textToSend || "Sent image attachment");
-  };
-
-  const triggerScholarReply = async (userText: string) => {
-    setIsTyping(true);
-    const simulatedDelay = Math.random() * 1000 + 1200;
-    await new Promise(resolve => setTimeout(resolve, simulatedDelay));
-
-    let reply = "Hum aapke janam chakra ka grah dasha chakra dekh rahe hain. Shani ki dristi saptam bhav par hone ke karan karyon mein thoda vilamb avashya hai, parantu sanyam banae rakhein, 2026 ke ant tak samay kafi shubh prathit ho raha hai.";
-    const lower = userText.toLowerCase();
-
-    if (lower.includes('job') || lower.includes('career') || lower.includes('paisa') || lower.includes('money') || lower.includes('naukri')) {
-      reply = "Dasam bhav (career house) mein Budhaditya Yoga ka prabhav behad shubh hai. Agle teen mahinon mein padonnati (promotion) athwa naye shubh avsar prapt hone ki dridha sambhavna hai. Surya Dev ko jal arpit karein.";
-    } else if (lower.includes('shadi') || lower.includes('marriage') || lower.includes('love') || lower.includes('relationship') || lower.includes('vivah')) {
-      reply = "Saptam ghar mein Guru (Jupiter) ki kripa dristi hai. Vivah yog November 2026 se prarambh honge. Jeevansathi gyanwan aur parivaar ke prati samarpit hoga. Shubh parinam hetu Thursday ko chane ki daal daan karein.";
-    } else if (lower.includes('gem') || lower.includes('stone') || lower.includes('panna') || lower.includes('remedy') || lower.includes('upay')) {
-      reply = "Aapki rashi aur lagna ke anusaar, ek shubh Panna (Emerald) dharan karna labhdayak hoga. Budhwar ko niyamit roop se Vishnu Sahasranama ka paath karein athwa shri durga chalisa padein.";
-    }
-
-    const replyMsg = await chatService.sendTextMessage(activeSessionId, 'astrologer', reply);
-    setMessages(prev => [...prev, replyMsg]);
-    setIsTyping(false);
-  };
-
-  // Handle local file selection for uploading as images
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsUploadingImage(true);
-    setUploadFailed(false);
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        setSelectedImageFile(reader.result);
-        setSelectedImageName(file.name);
-        setIsUploadingImage(false);
+    try {
+      await send(textToSend);
+    } catch (caught) {
+      if ((caught as any)?.code === 'RATE_LIMITED') {
+        setChatError('Service is busy, please wait.');
       } else {
-        setUploadFailed(true);
-        setIsUploadingImage(false);
+        setChatError(caught instanceof Error ? caught.message : 'Message failed');
       }
-    };
-    reader.onerror = () => {
-      setUploadFailed(true);
-      setIsUploadingImage(false);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  // Reusable Dispatchers for Attachment Simulation (Rich Messages)
-  const sendMockPdf = async () => {
-    setIsAttachmentOpen(false);
-    const newMsg: Message = {
-      id: `user-pdf-${Date.now()}`,
-      sender: 'user',
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      type: 'pdf',
-      attachmentName: 'Birth_Report_Kundli_Nova.pdf',
-      attachmentSize: '2.4 MB',
-      status: 'sent'
-    };
-
-    const updated = [...messages, newMsg];
-    setMessages(updated);
-    await chatService.saveMessages(activeSessionId, updated);
-
-    setIsTyping(true);
-    setTimeout(async () => {
-      const reply = await chatService.sendTextMessage(activeSessionId, 'astrologer', "Dhanyawaad, maine janam patrika PDF kholi hai. Navamsa chakra ka vishleshan karne par aapka Bhagyesh ucha ka baitha hai.");
-      setMessages(prev => [...prev, reply]);
-      setIsTyping(false);
-    }, 1500);
-  };
-
-  const sendMockVoiceNote = async () => {
-    setIsAttachmentOpen(false);
-    const newMsg: Message = {
-      id: `user-voice-${Date.now()}`,
-      sender: 'user',
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      type: 'voice',
-      duration: '0:18',
-      status: 'sent'
-    };
-
-    const updated = [...messages, newMsg];
-    setMessages(updated);
-    await chatService.saveMessages(activeSessionId, updated);
-
-    setIsTyping(true);
-    setTimeout(async () => {
-      const reply = await chatService.sendTextMessage(activeSessionId, 'astrologer', "Main aapki aawaz sun pa raha hoon. Pareshan na hon, aapka grah dasha chakra bilkul anukool ho raha hai.");
-      setMessages(prev => [...prev, reply]);
-      setIsTyping(false);
-    }, 1500);
+    }
   };
 
   // Dynamic Scroll to Bottom on Messages List updates
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isTyping, selectedImageFile]);
+  }, [messages]);
 
   // Format Helper: Seconds to MM:SS
   const formatMMSS = (totalSecs: number) => {
@@ -606,124 +575,50 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
   };
 
   // Review submission
-  const handleReviewSubmit = () => {
-    // Demo submission of review
-    onNavigate('astrologers');
+  const handleReviewSubmit = async () => {
+    if (astro?.id && activeSessionId) {
+      try {
+        await consultationRepository.submitReview(
+          astro.id,
+          activeSessionId,
+          rating,
+          reviewText
+        );
+      } catch (err) {
+        console.error('Failed to submit review:', err);
+      }
+    }
+    onNavigate('home');
   };
 
   // -----------------------------------------------------------------
   // RENDER INDIVIDUAL MESSAGES
   // -----------------------------------------------------------------
   const renderMessageBubble = (msg: Message) => {
-    if (msg.type === 'system') {
-      return (
-        <div key={msg.id} className="w-full flex justify-center my-3 px-2">
-          {msg.id === 'welcome-system' ? (
-            /* Simple, elegant welcome system notification */
-            <div className="bg-neutral-50 border border-neutral-100 px-4 py-2.5 rounded-2xl flex items-center space-x-2 max-w-[95%] shadow-[0_1px_3px_rgba(0,0,0,0.01)]">
-              <span className="text-[8.5px] uppercase font-extrabold tracking-widest text-[#FF8A00] bg-[#FF8A00]/5 border border-[#FF8A00]/10 px-1.5 py-0.5 rounded-md">SYSTEM</span>
-              <span className="text-[11px] text-neutral-700 font-bold leading-relaxed">Paid consultation started with {astro?.name}. Real-time billing active.</span>
-            </div>
-          ) : (
-            /* Log systems for completion */
-            <div className="bg-neutral-50 border border-neutral-100 px-4 py-2.5 rounded-2xl flex items-center space-x-2 max-w-[95%] shadow-[0_1px_3px_rgba(0,0,0,0.01)]">
-              <span className="text-[8.5px] uppercase font-extrabold tracking-widest text-neutral-400 bg-white border border-neutral-200 px-1.5 py-0.5 rounded-md">LOG</span>
-              <span className="text-[11px] text-neutral-700 font-bold leading-relaxed">{msg.text}</span>
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    const isUser = msg.sender === 'user';
-    
-    return (
-      <div 
-        key={msg.id} 
-        className={`flex w-full ${isUser ? 'justify-end' : 'justify-start'} mb-3`}
-      >
-        <div 
-          className={`max-w-[85%] rounded-[20px] px-4 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.01)] flex flex-col ${
-            isUser 
-              ? 'bg-neutral-900 text-white rounded-tr-md' 
-              : 'bg-white border border-neutral-100 text-neutral-800 rounded-tl-md'
-          }`}
-        >
-          {/* Text Bubble */}
-          {msg.type === 'text' && (
-            <p className="text-[13.5px] font-medium leading-relaxed whitespace-pre-wrap">{msg.text}</p>
-          )}
-
-          {/* Reusable Image Message Component with IndexedDB loaders */}
-          {msg.type === 'image' && msg.attachmentUrl && (
-            <div className="space-y-2">
-              <div className="rounded-[14px] overflow-hidden border border-neutral-100/10 max-w-[240px]">
-                <IndexedDBImage 
-                  url={msg.attachmentUrl} 
-                  className="w-full h-auto max-h-[180px] object-cover" 
-                  alt={msg.attachmentName || "Uploaded Image"}
-                />
-              </div>
-              <div className="flex items-center space-x-1.5 text-xs opacity-80">
-                <ImageIcon size={13} className={isUser ? 'text-neutral-400' : 'text-[#FF8A00]'} />
-                <span className="font-semibold truncate max-w-[150px] text-[11px]">{msg.attachmentName}</span>
-              </div>
-            </div>
-          )}
-
-          {/* Reusable PDF Message Component */}
-          {msg.type === 'pdf' && (
-            <div className={`p-2.5 rounded-xl flex items-center space-x-3 max-w-[240px] ${isUser ? 'bg-neutral-800' : 'bg-neutral-50'}`}>
-              <div className="w-9 h-9 rounded-lg bg-red-500/10 flex items-center justify-center text-red-500 shrink-0">
-                <FileText size={18} />
-              </div>
-              <div className="flex-1 min-w-0 text-left">
-                <p className="text-xs font-bold truncate">{msg.attachmentName}</p>
-                <p className="text-[9.5px] text-neutral-400 font-semibold mt-0.5">{msg.attachmentSize}</p>
-              </div>
-            </div>
-          )}
-
-          {/* Reusable Voice Note Component */}
-          {msg.type === 'voice' && (
-            <div className="flex items-center space-x-2 py-0.5 max-w-[240px]">
-              <button className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${isUser ? 'bg-neutral-800 text-white' : 'bg-[#FF8A00]/10 text-[#FF8A00]'}`}>
-                <Play size={11} className="fill-current ml-0.5" />
-              </button>
-              
-              {/* Minimal waveform layout */}
-              <div className="flex items-end space-x-0.5 h-5 shrink-0">
-                {[2, 4, 3, 5, 2, 4, 6, 4, 3, 5, 2, 4, 2, 5, 3, 4].map((h, i) => (
-                  <span 
-                    key={i} 
-                    className={`w-0.5 rounded-full ${isUser ? 'bg-neutral-500' : 'bg-neutral-300'}`} 
-                    style={{ height: `${h * 15}%` }} 
-                  />
-                ))}
-              </div>
-              <span className="text-[9.5px] font-bold text-neutral-400">{msg.duration || '0:18'}</span>
-            </div>
-          )}
-
-          {/* Meta Information: Timestamp and Read receipts */}
-          <div className="flex items-center space-x-1.5 self-end mt-1.5">
-            <span className={`text-[9px] font-semibold tracking-wide ${isUser ? 'text-white/60' : 'text-neutral-400'}`}>
-              {msg.time}
-            </span>
-            {isUser && (
-              <span className="text-white/80 flex items-center">
-                <CheckCheck size={11} className="text-[#FF8A00]" />
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-    );
+    return <div key={msg.id}><ConsultationMessageBubble message={msg} ownSender="user" /></div>;
   };
 
   // -----------------------------------------------------------------
   // MAIN STATE MACHINE RENDERING CHANNELS
   // -----------------------------------------------------------------
+
+  // 0. SELECTING KUNDLI — shown for all new paid sessions (not readOnly).
+  if (currentState === 'SELECTING_KUNDLI') {
+    return (
+      <KundliProfileSelector
+        loadProfiles={() => kundliProfileRepository.getAllProfiles()}
+        ensureSelfProfile={() => kundliProfileRepository.ensureSelfProfile()}
+        isSubmitting={isSubmittingSession}
+        astrologerId={resolvedAstrologerId}
+        onConfirm={(profileId) => {
+          setSelectedKundliProfileId(profileId);
+          void runWalletVerification();
+        }}
+        onCancel={() => onNavigate('home')}
+        onNavigate={onNavigate}
+      />
+    );
+  }
 
   // 1. CHECKING WALLET SCREEN
   if (currentState === 'CHECKING_WALLET') {
@@ -739,10 +634,10 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
               <p className="text-neutral-500 text-xs font-semibold leading-relaxed">{verificationError}</p>
             </div>
             <div className="flex gap-3 justify-center">
-              <button onClick={() => onNavigate('astrologers')} className="h-11 px-5 rounded-xl bg-neutral-100 text-neutral-700 text-xs font-bold border-none">Go Back</button>
+              <button onClick={() => onNavigate('home')} className="h-11 px-5 rounded-xl bg-neutral-100 text-neutral-700 text-xs font-bold border-none">Go Back</button>
               <button onClick={() => void runWalletVerification()} className="h-11 px-5 rounded-xl bg-[#FF8A00] text-white text-xs font-black border-none flex items-center gap-2">
-                <RefreshCw size={13} />
-                Retry
+                <RefreshCw size={12} strokeWidth={3} className={isSubmittingSession ? "animate-spin" : ""} />
+                <span>Retry Request</span>
               </button>
             </div>
           </div>
@@ -765,7 +660,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
             </p>
           </div>
           <div className="h-1.5 w-32 bg-neutral-100 rounded-full overflow-hidden mx-auto">
-            <motion.div 
+            <motion.div
               initial={{ x: '-100%' }}
               animate={{ x: '100%' }}
               transition={{ repeat: Infinity, duration: 1.2, ease: 'easeInOut' }}
@@ -783,7 +678,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
     return (
       <div className="flex flex-col h-full w-full bg-neutral-50 font-sans select-none justify-between">
         <div className="px-6 py-4 sticky top-0 bg-white border-b border-neutral-100 flex items-center space-x-3">
-          <button onClick={() => onNavigate('astrologers')} className="p-1 -ml-1 text-neutral-800">
+          <button onClick={() => onNavigate('home')} className="p-1 -ml-1 text-neutral-800">
             <ArrowLeft size={22} strokeWidth={2.5} />
           </button>
           <h1 className="text-base font-extrabold text-neutral-900">Wallet Check</h1>
@@ -825,13 +720,13 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
         </div>
 
         <div className="p-6 bg-white border-t border-neutral-100 flex space-x-3">
-          <button 
-            onClick={() => onNavigate('astrologers')}
+          <button
+            onClick={() => onNavigate('home')}
             className="flex-1 h-12 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs font-bold transition-all border-none"
           >
             Cancel Request
           </button>
-          <button 
+          <button
             onClick={handleRechargeNavigation}
             className="flex-1 h-12 rounded-xl bg-[#FF8A00] hover:bg-[#E07A00] text-white text-xs font-black flex items-center justify-center space-x-1.5 shadow-md shadow-[#FF8A00]/10 transition-all border-none"
           >
@@ -857,7 +752,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
 
         {/* Pulsing Sacred geometry mandala placeholder */}
         <div className="relative flex items-center justify-center py-2">
-          <motion.div 
+          <motion.div
             animate={{ rotate: 360 }}
             transition={{ repeat: Infinity, duration: 12, ease: 'linear' }}
             className="w-24 h-24 border border-neutral-200/80 rounded-full flex items-center justify-center p-2 opacity-50"
@@ -878,7 +773,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
           <div className="border-b border-neutral-100 pb-2.5 space-y-1">
             <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Birth Profile</span>
             <span className="text-[13px] font-extrabold text-neutral-800 block">
-              {userProfile?.fullName || userProfile?.name || 'Rahul Kumar (Guest)'}
+              {userProfile?.name || 'Your profile'}
             </span>
           </div>
 
@@ -917,7 +812,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
   if (currentState === 'WAITING_FOR_ASTROLOGER') {
     return (
       <div className="flex flex-col h-full w-full bg-white font-sans px-6 justify-center py-6 space-y-6 text-center select-none relative">
-        
+
         {/* Header summary of profile */}
         <div className="space-y-3">
           <div className="relative inline-block mx-auto">
@@ -943,16 +838,16 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
               <BadgeCheck size={16} className="fill-[#FF8A00]/5" />
             </div>
             <div className="min-w-0">
-              <h4 className="text-xs font-black text-neutral-800 uppercase tracking-wider">Kundli Sent Successfully</h4>
+              <h4 className="text-xs font-black text-neutral-800 uppercase tracking-wider">Consultation Request Sent</h4>
               <p className="text-neutral-500 text-[10.5px] font-medium leading-relaxed mt-0.5">
-                {astro?.name} has received your planetary birth configurations and is actively reviewing them.
+                {astro?.name || 'The selected astrologer'} has received your request. The chat will open only after they accept it.
               </p>
             </div>
           </div>
 
           <div className="space-y-3 py-1">
             <p className="text-xs font-extrabold text-neutral-800">Astrologer is reviewing your Kundli...</p>
-            
+
             <div className="flex items-center justify-center space-x-1">
               <span className="w-1.5 h-1.5 rounded-full bg-[#FF8A00] animate-bounce" style={{ animationDelay: '0ms' }} />
               <span className="w-1.5 h-1.5 rounded-full bg-[#FF8A00] animate-bounce" style={{ animationDelay: '150ms' }} />
@@ -962,8 +857,8 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
             {/* Visual Countdown Progress Bar */}
             <div className="space-y-1.5 max-w-xs mx-auto">
               <div className="h-1.5 bg-neutral-100 rounded-full overflow-hidden w-full">
-                <div 
-                  className="h-full bg-[#FF8A00] transition-all duration-1000 rounded-full" 
+                <div
+                  className="h-full bg-[#FF8A00] transition-all duration-1000 rounded-full"
                   style={{ width: `${(waitingTimeoutSeconds / 60) * 100}%` }}
                 />
               </div>
@@ -977,20 +872,9 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
           </div>
         </div>
 
-        {/* Action button & Developer Simulator */}
+        {/* Customer action */}
         <div className="space-y-3 max-w-xs mx-auto w-full">
-          {(import.meta as any).env?.DEV === true && (
-            <div className="border border-neutral-100 rounded-xl p-3 bg-neutral-50">
-              <p className="text-[10px] font-extrabold text-neutral-400 uppercase tracking-wider mb-2">⚡ Developer Simulator sandbox</p>
-              <div className="flex space-x-2">
-                <button onClick={handleSimulateAccept} className="flex-1 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white font-extrabold text-[10px] border-none uppercase transition-colors">Accept</button>
-                <button onClick={handleSimulateReject} className="flex-1 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-extrabold text-[10px] border-none uppercase transition-colors">Reject</button>
-                <button onClick={handleSimulateTimeout} className="flex-1 py-1.5 rounded-lg bg-neutral-600 hover:bg-neutral-700 text-white font-extrabold text-[10px] border-none uppercase transition-colors">Timeout</button>
-              </div>
-            </div>
-          )}
-
-          <button 
+          <button
             onClick={() => {
               setShowCancelConfirm(true);
             }}
@@ -1004,7 +888,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
         <AnimatePresence>
           {showCancelConfirm && (
             <div className="absolute inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm">
-              <motion.div 
+              <motion.div
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
@@ -1020,17 +904,19 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
                   </p>
                 </div>
                 <div className="pt-2 flex space-x-3">
-                  <button 
+                  <button
                     onClick={() => setShowCancelConfirm(false)}
                     className="flex-1 h-11 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-bold rounded-xl text-xs transition-colors cursor-pointer border-none"
                   >
                     No, Wait
                   </button>
-                  <button 
+                  <button
                     onClick={async () => {
                       if (waitingTimerRef.current) clearInterval(waitingTimerRef.current);
-                      setCurrentState('INSUFFICIENT_BALANCE');
+                      const result = await consultationRepository.cancelSession(activeSessionId);
+                      hydrateBillingState(result.session, result.balance);
                       setShowCancelConfirm(false);
+                      onNavigate('home');
                     }}
                     className="flex-1 h-11 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer border-none"
                   >
@@ -1060,8 +946,8 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
               Unfortunately, {astro?.name} had to decline the invitation at this moment (might have stepped away or has in-person commitments). No charges were made from your wallet.
             </p>
           </div>
-          <button 
-            onClick={() => onNavigate('astrologers')}
+          <button
+            onClick={() => onNavigate('home')}
             className="h-11 px-6 rounded-xl bg-neutral-900 text-white text-xs font-bold"
           >
             Select Another Scholar
@@ -1086,13 +972,13 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
             </p>
           </div>
           <div className="flex space-x-3 justify-center">
-            <button 
-              onClick={() => onNavigate('astrologers')}
+            <button
+              onClick={() => onNavigate('home')}
               className="h-11 px-4 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs font-bold transition-all border-none"
             >
               Go Back
             </button>
-            <button 
+            <button
               onClick={() => void runWalletVerification()}
               className="h-11 px-4 rounded-xl bg-neutral-900 text-white text-xs font-bold flex items-center space-x-1.5"
             >
@@ -1106,7 +992,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
   }
 
   // ENDED STATE SUMMARY SCREEN
-  if (currentState === 'ENDED') {
+  if (currentState === 'ENDED' && !readOnlySessionId) {
     return (
       <div className="flex flex-col h-full w-full bg-neutral-50 font-sans select-none justify-between overflow-y-auto no-scrollbar pb-10">
         <div className="px-6 py-4 sticky top-0 bg-white border-b border-neutral-100 flex items-center justify-between">
@@ -1151,14 +1037,14 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
                 <p className="text-xs font-black text-neutral-800">Rate your experience</p>
                 <div className="flex items-center justify-center space-x-1.5 mt-2">
                   {[1, 2, 3, 4, 5].map(star => (
-                    <button 
-                      key={star} 
+                    <button
+                      key={star}
                       onClick={() => setRating(star)}
                       className="p-1 focus:outline-none bg-transparent border-none"
                     >
-                      <Star 
-                        size={22} 
-                        className={rating >= star ? 'fill-[#FF8A00] text-[#FF8A00]' : 'text-neutral-200'} 
+                      <Star
+                        size={22}
+                        className={rating >= star ? 'fill-[#FF8A00] text-[#FF8A00]' : 'text-neutral-200'}
                       />
                     </button>
                   ))}
@@ -1167,7 +1053,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
 
               <div className="space-y-1 text-left">
                 <label className="text-[10px] font-bold text-neutral-400 uppercase block">Write review details (Optional)</label>
-                <textarea 
+                <textarea
                   value={reviewText}
                   onChange={(e) => setReviewText(e.target.value)}
                   placeholder="Share how the astrological guidance helped you..."
@@ -1179,7 +1065,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
         </div>
 
         <div className="p-6 bg-white border-t border-neutral-100 max-w-md mx-auto w-full">
-          <button 
+          <button
             onClick={handleReviewSubmit}
             className="w-full h-12 bg-neutral-900 hover:bg-neutral-800 text-white font-black rounded-xl text-xs flex items-center justify-center space-x-1.5 transition-all"
           >
@@ -1198,11 +1084,11 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
   return (
     <div className="relative flex flex-col h-full w-full bg-[#FCFBF8] font-sans antialiased select-none">
       <CelestialChatBackground />
-      
+
       {/* Voice/Video Call Overlay modal */}
       <AnimatePresence>
         {activeCall && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -1240,7 +1126,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
                 <span className="text-xs font-bold text-neutral-300">Astrologer is joining...</span>
               </div>
 
-              <button 
+              <button
                 onClick={() => setActiveCall(null)}
                 className="w-16 h-16 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center text-white shadow-lg transition-colors cursor-pointer border-none"
               >
@@ -1255,7 +1141,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
       <AnimatePresence>
         {showEndConfirm && (
           <div className="absolute inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm">
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
@@ -1271,13 +1157,13 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
                 </p>
               </div>
               <div className="pt-2 flex space-x-3">
-                <button 
+                <button
                   onClick={() => setShowEndConfirm(false)}
                   className="flex-1 h-11 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-bold rounded-xl text-xs transition-colors cursor-pointer border-none"
                 >
                   Cancel
                 </button>
-                <button 
+                <button
                   onClick={handleFinalizeSessionEnd}
                   className="flex-1 h-11 bg-neutral-900 hover:bg-neutral-850 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer border-none"
                 >
@@ -1293,7 +1179,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
       <AnimatePresence>
         {currentState === 'RECHARGING' && (
           <div className="absolute inset-0 bg-black/60 z-40 flex items-end justify-center p-0 backdrop-blur-[2px]">
-            <motion.div 
+            <motion.div
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
@@ -1316,13 +1202,13 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
               </div>
 
               <div className="pt-2 flex space-x-3 max-w-xs mx-auto">
-                <button 
+                <button
                   onClick={handleFinalizeSessionEnd}
                   className="flex-1 h-12 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-bold rounded-xl text-xs transition-colors border-none cursor-pointer"
                 >
                   End Session
                 </button>
-                <button 
+                <button
                   onClick={handleRechargeNavigation}
                   className="flex-1 h-12 bg-[#FF8A00] hover:bg-[#E07A00] text-white font-black rounded-xl text-xs transition-colors flex items-center justify-center space-x-1 border-none cursor-pointer"
                 >
@@ -1339,7 +1225,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
       <AnimatePresence>
         {isKundliOpen && kundliData && (
           <div className="absolute inset-0 bg-black/50 z-45 flex justify-end">
-            <motion.div 
+            <motion.div
               initial={{ x: '100%' }}
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
@@ -1351,7 +1237,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
                   <Sparkles size={16} className="text-[#FF8A00]" />
                   <h3 className="text-base font-black text-neutral-900 tracking-tight">Active Janam Kundli</h3>
                 </div>
-                <button 
+                <button
                   onClick={() => setIsKundliOpen(false)}
                   className="p-1 rounded-full hover:bg-neutral-50 text-neutral-500"
                 >
@@ -1361,14 +1247,14 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
 
               {/* Drawer Content */}
               <div className="flex-1 overflow-y-auto p-5 space-y-6 no-scrollbar">
-                
+
                 {/* 1. Brief overview info */}
                 <div className="bg-neutral-50 border border-neutral-100 rounded-2xl p-4.5 space-y-3">
                   <div className="flex items-center space-x-2 text-neutral-400 text-[10px] font-bold uppercase tracking-wider border-b border-neutral-200/50 pb-2.5">
                     <User size={13} className="text-[#FF8A00]" />
                     <span>Calculated Coordinates</span>
                   </div>
-                  
+
                   <div className="grid grid-cols-2 gap-3 text-xs">
                     <div>
                       <span className="text-[9px] font-bold text-neutral-400 uppercase tracking-widest block">Lagna Sign</span>
@@ -1479,7 +1365,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
               </div>
 
               <div className="p-4 bg-neutral-50 border-t border-neutral-100 sticky bottom-0">
-                <button 
+                <button
                   onClick={() => setIsKundliOpen(false)}
                   className="w-full h-11 bg-neutral-900 hover:bg-neutral-800 text-white font-bold rounded-xl text-xs"
                 >
@@ -1494,14 +1380,14 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
       {/* STICKY HEADER (Updated Design according to guidelines) */}
       <div className="sticky top-0 bg-white/95 backdrop-blur-md z-30 border-b border-neutral-100 flex items-center justify-between px-4 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.01)]">
         <div className="flex items-center space-x-3 min-w-0">
-          <button 
+          <button
             onClick={() => {
               if (readOnlySessionId) {
                 onNavigate('chat-history');
               } else if (currentState !== 'ENDED') {
                 setShowEndConfirm(true);
               } else {
-                onNavigate('astrologers');
+                onNavigate('home');
               }
             }}
             className="p-1.5 -ml-1 rounded-full hover:bg-neutral-50 active:bg-neutral-100 transition-colors text-neutral-800 cursor-pointer"
@@ -1525,7 +1411,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
                 <h2 className="text-[14px] font-[900] text-neutral-900 truncate tracking-tight">{astro?.name}</h2>
                 <BadgeCheck size={14} className="text-[#FF8A00] fill-white shrink-0" />
               </div>
-              
+
               <div className="flex items-center space-x-1 text-[10.5px] text-neutral-400 font-bold leading-none mt-0.5">
                 <span className="flex items-center text-neutral-800 font-extrabold mr-1">
                   <Star size={9} className="fill-[#FF8A00] text-[#FF8A00] stroke-none mr-0.5" />
@@ -1537,25 +1423,6 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
             </div>
           </div>
         </div>
-
-        {/* Media call tools */}
-        {!readOnlySessionId && (
-          <div className="flex items-center space-x-1.5">
-            <button 
-              onClick={() => setActiveCall('voice')}
-              className="p-2 rounded-full border border-neutral-200 text-neutral-700 hover:bg-neutral-50 active:bg-neutral-100 transition-all cursor-pointer"
-            >
-              <Phone size={15} strokeWidth={2.5} />
-            </button>
-            
-            <button 
-              onClick={() => setActiveCall('video')}
-              className="p-2 rounded-full border border-neutral-200 text-neutral-700 hover:bg-neutral-50 active:bg-neutral-100 transition-all cursor-pointer"
-            >
-              <Video size={16} strokeWidth={2.5} />
-            </button>
-          </div>
-        )}
       </div>
 
       {/* ACTIVE SESSION CALM BAR */}
@@ -1576,7 +1443,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
           </div>
 
           <div className="flex items-center space-x-2 shrink-0">
-            <button 
+            <button
               onClick={() => setShowEndConfirm(true)}
               className="bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-all font-extrabold text-[10px] px-3 py-1 rounded-lg uppercase tracking-wider cursor-pointer"
             >
@@ -1586,26 +1453,11 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
         </div>
       )}
 
-      {/* Collapsible Developer Tools Panel (Only in development environment) */}
-      {(import.meta as any).env?.DEV === true && (
-        <details className="bg-neutral-50 border-b border-neutral-200/50 z-20">
-          <summary className="px-4 py-1.5 flex items-center justify-between text-[10px] text-neutral-500 font-bold uppercase tracking-wider cursor-pointer hover:bg-neutral-100 select-none">
-            <span>⚡ Developer Tools</span>
-            <span className="text-neutral-400 font-mono text-[9px] lowercase">click to toggle</span>
-          </summary>
-          <div className="px-4 pb-2 pt-1 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-[10px] text-neutral-500 font-semibold select-none border-t border-neutral-200/20">
-            <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
-              <span className="bg-neutral-200 text-neutral-600 font-extrabold px-1.5 py-0.5 rounded uppercase">Sandbox Mode</span>
-              <span className="bg-white border border-neutral-200 text-neutral-600 px-2 py-0.5 rounded font-extrabold">Server Billing</span>
-            </div>
-            <span className="text-neutral-400 font-medium truncate min-w-0">Full Session ID: <span className="font-mono text-[9.5px] select-all">{activeSessionId || '#RESTORED'}</span></span>
-          </div>
-        </details>
-      )}
+
 
       {/* Main Chat Scroll Frame */}
       <div className="flex-1 overflow-y-auto px-4 py-4 z-10 flex flex-col no-scrollbar bg-white/10">
-        
+
         {/* Paid consultation details summary header block */}
         {readOnlySessionId ? (
           <div className="mb-4 bg-neutral-50 border border-neutral-200/60 rounded-2xl p-4 shadow-[0_1px_4px_rgba(0,0,0,0.01)] text-left">
@@ -1645,12 +1497,12 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
                 </span>
               </div>
             </div>
-            
+
             <div className="flex items-center justify-between pt-3 mt-3 border-t border-neutral-200/40">
               <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">
                 Securely Archived
               </span>
-              <button 
+              <button
                 onClick={() => setIsKundliOpen(true)}
                 className="flex items-center space-x-1 text-xs font-black text-[#FF8A00] hover:text-[#E07A00] bg-transparent border-none cursor-pointer p-0"
               >
@@ -1662,7 +1514,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
           </div>
         ) : (
           <div className="mb-3 bg-white border border-neutral-200/60 rounded-2xl p-3.5 shadow-[0_1px_4px_rgba(0,0,0,0.01)] text-left">
-            <div 
+            <div
               onClick={() => setIsBillingCardCollapsed(!isBillingCardCollapsed)}
               className="flex items-center justify-between cursor-pointer select-none"
             >
@@ -1675,22 +1527,22 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
                   Session #{ (activeSessionId || '7849').slice(-4).toUpperCase() }
                 </span>
               </div>
-              
+
               <div className="flex items-center space-x-2 shrink-0 ml-1.5">
                 <div className="flex items-center space-x-1.5 bg-neutral-50 border border-neutral-200 text-neutral-600 px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider truncate min-w-0">
                   <span className="w-1 h-1 rounded-full bg-green-500 shrink-0"></span>
                   <span>Kundli Shared</span>
                 </div>
-                <ChevronDown 
-                  size={16} 
-                  className={`text-neutral-400 transition-transform duration-200 shrink-0 ${isBillingCardCollapsed ? '' : 'rotate-180'}`} 
+                <ChevronDown
+                  size={16}
+                  className={`text-neutral-400 transition-transform duration-200 shrink-0 ${isBillingCardCollapsed ? '' : 'rotate-180'}`}
                 />
               </div>
             </div>
 
             <AnimatePresence initial={false}>
               {!isBillingCardCollapsed && (
-                <motion.div 
+                <motion.div
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
@@ -1703,7 +1555,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
                     </div>
                     <div>
                       <span className="text-[9px] font-bold text-neutral-400 uppercase tracking-widest block truncate min-w-0">Rate</span>
-                      <span className="font-extrabold text-neutral-800 block mt-0.5 truncate min-w-0">₹25/min</span>
+                      <span className="font-extrabold text-neutral-800 block mt-0.5 truncate min-w-0">₹{ratePerMin}/min</span>
                     </div>
                     <div>
                       <span className="text-[9px] font-bold text-neutral-400 uppercase tracking-widest block truncate min-w-0">Wallet Balance</span>
@@ -1721,7 +1573,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
                       <span className="truncate min-w-0">Secure & encrypted</span>
                     </div>
 
-                    <button 
+                    <button
                       onClick={() => setIsKundliOpen(true)}
                       className="flex items-center space-x-1 text-xs font-black text-[#FF8A00] hover:text-[#E07A00] bg-transparent border-none cursor-pointer p-0 shrink-0"
                     >
@@ -1738,20 +1590,28 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
 
         {/* Messages Loop */}
         <div className="flex flex-col space-y-1">
-          {messages.map(renderMessageBubble)}
-          
-          {/* Typing Indicator */}
-          {isTyping && (
-            <div className="flex w-full justify-start mb-4">
-              <div className="bg-white border border-neutral-100 rounded-[20px] rounded-tl-md px-4 py-3 shadow-[0_1px_3px_rgba(0,0,0,0.01)] flex items-center space-x-1.5">
-                <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest mr-1">Scholar is reviewing charts</span>
-                <span className="w-1.5 h-1.5 bg-[#FF8A00] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-1.5 h-1.5 bg-[#FF8A00] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-1.5 h-1.5 bg-[#FF8A00] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-              </div>
+          {displayError && (
+            <div className="bg-red-50 text-red-600 px-3 py-2 text-[10px] font-bold rounded-lg mb-2 text-center border border-red-100">
+              {displayError}
             </div>
           )}
-          
+          {messages.map(renderMessageBubble)}
+
+          <AnimatePresence>
+            {partnerTyping && (
+              <motion.div
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="flex items-center gap-1.5 bg-white border border-neutral-100 shadow-sm rounded-2xl rounded-bl-none px-4 py-3 w-fit ml-2 mb-2"
+              >
+                <motion.div className="w-1.5 h-1.5 bg-[#FF8A00] rounded-full" animate={{ y: [0, -4, 0] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0 }} />
+                <motion.div className="w-1.5 h-1.5 bg-[#FF8A00] rounded-full" animate={{ y: [0, -4, 0] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0.2 }} />
+                <motion.div className="w-1.5 h-1.5 bg-[#FF8A00] rounded-full" animate={{ y: [0, -4, 0] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0.4 }} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <div ref={messagesEndRef} className="h-4" />
         </div>
 
@@ -1764,7 +1624,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
             <AlertTriangle size={14} className="text-amber-600 shrink-0 animate-bounce" />
             <span className="truncate">Low Balance warning — Recharge to continue consultation (₹{walletBalance.toFixed(0)} left)</span>
           </div>
-          <button 
+          <button
             onClick={handleRechargeNavigation}
             className="shrink-0 bg-amber-600 text-white font-extrabold text-[10px] px-2.5 py-1 rounded-lg uppercase tracking-wider transition-colors border-none cursor-pointer hover:bg-amber-700"
           >
@@ -1775,7 +1635,7 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
 
       {/* Message input field bar with real image loaders */}
       <div className="relative bg-white border-t border-neutral-100 px-4 py-3 pb-[max(16px,env(safe-area-inset-bottom))] z-20 shadow-[0_-4px_16px_rgba(0,0,0,0.01)]">
-        
+
         {readOnlySessionId ? (
           <div className="bg-neutral-50 rounded-2xl border border-neutral-150/60 p-4 text-center my-1">
             <p className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-2">This Consultation Has Ended</p>
@@ -1783,14 +1643,14 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
               The session with {astro?.name} is completed. You can view the history of messages, generated charts, and details here.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-2 mt-2">
-              <button 
+              <button
                 onClick={() => onNavigate('chat-history')}
                 className="w-full sm:w-auto inline-flex items-center justify-center space-x-1.5 h-10 px-4 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-extrabold text-[11px] rounded-xl transition-all cursor-pointer border-none"
               >
                 <span>Back to History</span>
               </button>
-              <button 
-                onClick={() => onNavigate('astrologers')}
+              <button
+                onClick={() => onNavigate('home')}
                 className="w-full sm:w-auto inline-flex items-center justify-center space-x-1.5 h-10 px-5 bg-[#FF8A00] hover:bg-[#E07A00] text-white font-extrabold text-[11px] rounded-xl transition-all cursor-pointer border-none shadow-sm shadow-[#FF8A00]/10"
               >
                 <span>Start New Consultation</span>
@@ -1799,119 +1659,80 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
           </div>
         ) : (
           <>
-            {/* Selected Image Preview with cross button to remove */}
-            {selectedImageFile && (
-              <div className="mb-3 p-2 bg-neutral-50 rounded-xl border border-neutral-100 flex items-center justify-between max-w-sm">
-                <div className="flex items-center space-x-2.5 min-w-0">
-                  <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 border border-neutral-200">
-                    <img src={selectedImageFile} alt="Selected preview" className="w-full h-full object-cover" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold truncate text-neutral-800">{selectedImageName}</p>
-                    <p className="text-[10px] text-green-600 font-semibold">Image selected for sending</p>
-                  </div>
+            {imagePreviewUrl && (
+              <div className="mb-3 flex items-start gap-3 rounded-xl border border-neutral-100 bg-neutral-50 p-2">
+                <div className="relative h-16 w-16 shrink-0 rounded-lg overflow-hidden border border-neutral-200">
+                  <img src={imagePreviewUrl} alt="Preview" className="h-full w-full object-cover" />
+                  <button
+                    onClick={clearImageSelection}
+                    className="absolute -right-1 -top-1 bg-white rounded-full p-0.5 shadow-sm border border-neutral-200 text-neutral-500 hover:text-red-500 cursor-pointer"
+                  >
+                    <X size={14} />
+                  </button>
                 </div>
-                <button 
-                  onClick={() => {
-                    setSelectedImageFile('');
-                    setSelectedImageName('');
-                  }}
-                  className="p-1.5 rounded-full hover:bg-neutral-200 text-neutral-500 border-none bg-transparent"
-                >
-                  <X size={15} />
-                </button>
+                <div className="flex flex-1 flex-col justify-center h-16 text-xs text-neutral-500">
+                  <span className="font-semibold text-neutral-700 truncate max-w-[200px]">{selectedImage?.name}</span>
+                  <span>{(selectedImage?.size ? (selectedImage.size / 1024 / 1024).toFixed(2) : 0)} MB</span>
+                </div>
               </div>
             )}
-
-            {/* Attachment menu toggles */}
-            <AnimatePresence>
-              {isAttachmentOpen && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 15 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  className="absolute bottom-[calc(100%+8px)] left-4 bg-white border border-neutral-100 rounded-2xl shadow-xl p-3.5 w-56 flex flex-col space-y-2 z-40"
-                >
-                  {/* Actual file selector styled nicely */}
-                  <label className="flex items-center space-x-3 p-2 rounded-xl hover:bg-neutral-50 text-left transition-colors cursor-pointer w-full">
-                    <div className="w-8 h-8 rounded-lg bg-[#FF8A00]/5 text-[#FF8A00] flex items-center justify-center shrink-0">
-                      <ImageIcon size={16} />
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-neutral-800">Upload Birth Chart</p>
-                      <p className="text-[10px] text-neutral-400 font-semibold">From your gallery</p>
-                    </div>
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      onChange={handleFileChange} 
-                      className="hidden" 
-                    />
-                  </label>
-
-                  <button 
-                    onClick={sendMockPdf}
-                    className="flex items-center space-x-3 p-2 rounded-xl hover:bg-neutral-50 text-left transition-colors cursor-pointer border-none bg-transparent w-full"
+            <div className="flex items-center space-x-2">
+              {['ACTIVE', 'LOW_BALANCE', 'RECHARGING'].includes(currentState) && (
+                <>
+                  <button
+                    type="button"
+                    aria-label="Open consultation profile"
+                    onClick={() => setIsProfileSheetOpen(true)}
+                    className="w-10 h-10 shrink-0 rounded-full bg-neutral-100 text-neutral-700 hover:bg-neutral-200 transition-colors flex items-center justify-center cursor-pointer border-none"
                   >
-                    <div className="w-8 h-8 rounded-lg bg-red-500/5 text-red-500 flex items-center justify-center shrink-0">
-                      <FileText size={16} />
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-neutral-800">Send Birth Patrika</p>
-                      <p className="text-[10px] text-neutral-400 font-semibold font-sans">Detailed PDF report</p>
-                    </div>
+                    <User size={18} strokeWidth={2.5} />
                   </button>
-
-                  <button 
-                    onClick={sendMockVoiceNote}
-                    className="flex items-center space-x-3 p-2 rounded-xl hover:bg-neutral-50 text-left transition-colors cursor-pointer border-none bg-transparent w-full"
+                  <button
+                    type="button"
+                    aria-label="Attach image"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={currentState === 'RECHARGING'}
+                    className="w-10 h-10 shrink-0 rounded-full bg-neutral-100 text-neutral-700 hover:bg-neutral-200 transition-colors flex items-center justify-center cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <div className="w-8 h-8 rounded-lg bg-[#16A34A]/5 text-[#16A34A] flex items-center justify-center shrink-0">
-                      <Volume2 size={16} />
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-neutral-800">Send Voice Note</p>
-                      <p className="text-[10px] text-neutral-400 font-semibold">Audio recording</p>
-                    </div>
+                    <ImagePlus size={18} strokeWidth={2.5} />
                   </button>
-                </motion.div>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleImageSelect}
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                  />
+                </>
               )}
-            </AnimatePresence>
-
-            {/* Input bar */}
-            <div className="flex items-center space-x-3">
-              
-              <button 
-                onClick={() => setIsAttachmentOpen(!isAttachmentOpen)}
-                className="w-[40px] h-[40px] flex items-center justify-center rounded-full border border-neutral-100 hover:bg-neutral-50 active:bg-neutral-100 transition-colors text-neutral-400 shrink-0 cursor-pointer"
-              >
-                <Paperclip size={18} strokeWidth={2.5} />
-              </button>
-              
               <form onSubmit={handleSendMessage} className="flex-1 flex items-center bg-neutral-50 border border-neutral-100 rounded-2xl pr-1.5 pl-4 py-1">
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
+                  onChange={(e) => handleTyping(e.target.value)}
                   disabled={currentState === 'RECHARGING'}
                   placeholder={
-                    currentState === 'RECHARGING' 
-                      ? "Recharge required to send message." 
-                      : "Ask regarding career, marriage, remedies..."
-                  } 
+                    currentState === 'RECHARGING'
+                      ? "Recharge required to send message."
+                      : selectedImage ? "Add a caption (optional)..." : "Ask regarding career, marriage, remedies..."
+                  }
                   className="flex-1 bg-transparent border-none focus:outline-none text-[13.5px] font-semibold text-neutral-800 placeholder:text-neutral-400 h-10 disabled:cursor-not-allowed"
                 />
-                
-                <button 
+
+                <button
                   type="submit"
-                  disabled={(!inputText.trim() && !selectedImageFile) || currentState === 'RECHARGING'}
+                  disabled={(!inputText.trim() && !selectedImage) || currentState === 'RECHARGING' || isSending}
                   className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all ${
-                    (inputText.trim() || selectedImageFile) && currentState !== 'RECHARGING'
-                      ? 'bg-neutral-900 text-white shadow-md active:scale-95 cursor-pointer' 
+                    (inputText.trim() || selectedImage) && currentState !== 'RECHARGING' && !isSending
+                      ? 'bg-neutral-900 text-white shadow-md active:scale-95 cursor-pointer'
                       : 'bg-neutral-100 text-neutral-400 cursor-not-allowed'
                   }`}
                 >
-                  <Send size={14} strokeWidth={2.5} className="ml-0.5 text-[#FF8A00]" />
+                  {isSending ? (
+                    <Loader2 size={14} className="animate-spin text-neutral-400" />
+                  ) : (
+                    <Send size={14} strokeWidth={2.5} className="ml-0.5 text-[#FF8A00]" />
+                  )}
                 </button>
               </form>
 
@@ -1919,6 +1740,14 @@ export default function ConsultationChatScreen({ astrologerId = '11111111-1111-1
           </>
         )}
       </div>
+
+      <ConsultationProfileSheet
+        isOpen={isProfileSheetOpen}
+        onClose={() => setIsProfileSheetOpen(false)}
+        sessionId={activeSessionId}
+        currentProfileId={optimisticProfileId ?? kundliProfileId}
+        onProfileSwitched={(newProfileId) => setOptimisticProfileId(newProfileId)}
+      />
     </div>
   );
 }
