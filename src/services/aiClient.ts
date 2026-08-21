@@ -7,12 +7,24 @@ export async function postAiRequest<T>(path: '/api/chat' | '/api/explain', body:
   const maxRetries = 2;
   let attempt = 0;
 
+  const configuredApiBase = (import.meta as any).env.VITE_API_BASE_URL as string | undefined;
+  let baseUrl = '';
+  if (configuredApiBase) {
+    try {
+      baseUrl = new URL(configuredApiBase).origin;
+    } catch {
+      baseUrl = configuredApiBase.replace(/\/api\/v1\/?$/, '');
+    }
+  }
+
+  const finalUrl = `${baseUrl}${path}`;
+
   while (attempt <= maxRetries) {
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 45_000);
 
     try {
-      const response = await fetch(path, {
+      const response = await fetch(finalUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
